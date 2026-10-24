@@ -13,7 +13,9 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const shot = (n, p = page) => SHOTS && p.screenshot({ path: path.join(SHOTS, n + '.png') });
-  await page.route(/openfoodfacts|upcitemdb|googleapis|openlibrary/, (r) => r.fulfill({ status: 404, body: '{}' }));
+  let lookups = 0;
+  await page.route(/openfoodfacts/, (r) => { lookups++; return r.fulfill({ contentType: 'application/json', body: JSON.stringify(r.request().url().includes('3017620422003') ? { status: 1, product: { product_name: 'Nutella', brands: 'Ferrero', quantity: '400 g' } } : { status: 0 }) }); });
+  await page.route(/upcitemdb|googleapis|openlibrary/, (r) => r.fulfill({ status: 404, body: '{}' }));
 
   await page.goto(BASE + '?nosw#/');
   await page.waitForSelector('[data-gq]');
@@ -96,6 +98,72 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   await page.evaluate(async () => (await import('./js/core/store.js')).patch('books', 'b1', { lentTo: '', lentDate: '' }));
   await page.waitForFunction(() => document.querySelectorAll('.rem').length === 1);
   check(true, 'returning the book removes its reminder live');
+
+  // ---- Pantry ----
+  await page.goto(BASE + '?nosw#/pantry/add');
+  await page.fill('[data-manual] input', '3017620422003');
+  await page.press('[data-manual] input', 'Enter');
+  await page.waitForSelector('.sheet [name=name]');
+  check((await page.inputValue('.sheet [name=name]')) === 'Nutella 400 g' && (await page.inputValue('.sheet [name=brand]')) === 'Ferrero', 'barcode looked up with Inventory’s food lookup');
+  await page.click('.sheet [data-days="7"]');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForSelector('.toast >> text=Added Nutella 400 g');
+  // Same product again: filled in from memory, no lookup, usual date suggested
+  const before = lookups;
+  await page.waitForTimeout(3100); // same-code repeat guard
+  await page.fill('[data-manual] input', '3017620422003');
+  await page.press('[data-manual] input', 'Enter');
+  await page.waitForSelector('.sheet [name=name]');
+  const remembered = await page.evaluate(() => ({ name: document.querySelector('.sheet [name=name]').value, exp: document.querySelector('.sheet [name=expiry]').value, note: document.querySelector('.sheet').textContent }));
+  check(lookups === before && remembered.name === 'Nutella 400 g' && remembered.exp && remembered.note.includes('usually lasts 7 days') && remembered.note.includes('You already have 1'), 'known product fills in instantly with its usual date (no internet needed)');
+  await page.click('.sheet [data-close]');
+  await page.click('[data-nocode]');
+  await page.fill('.sheet [name=name]', 'Milk');
+  await page.click('.sheet [data-st="fridge"]');
+  await page.click('.sheet [data-days="3"]');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForSelector('.toast >> text=Added Milk');
+  await page.evaluate(async () => {
+    const s = await import('./js/core/store.js');
+    const d = new Date(Date.now() - 86400000);
+    await s.put('pantry', { id: 'ham', name: 'Ham', storage: 'fridge', quantity: 1, expiry: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, addedAt: Date.now() });
+  });
+  await page.goto(BASE + '?nosw#/pantry');
+  await page.waitForSelector('.pantry-group');
+  const pg = await page.$$eval('.pantry-group', (els) => els.map((e) => e.querySelector('.section-title').textContent.replace(/\s+\d+$/, '').trim() + ': ' + [...e.querySelectorAll('.row-title')].map((t) => t.textContent.trim()).join(',')));
+  check(pg.join(' | ') === 'Past its date: Ham | Use in the next 3 days: Milk | This week: Nutella 400 g', `grouped by date: ${pg.join(' | ')}`);
+  await shot('hub-pantry');
+  await page.click('.pantry-row:has(.row-title:text-is("Milk")) [data-use]');
+  await page.click('.toast button:has-text("Add to shopping list")');
+  await page.waitForSelector('.toast >> text=Milk added to the shopping list');
+  check(!(await page.$('.row-title:text-is("Milk")')), 'used the last milk: gone from the pantry, on the shopping list');
+  await page.click('[data-filter="fridge"]');
+  check((await page.$$('.pantry-row')).length === 1, 'filter by fridge');
+  await page.click('[data-filter="all"]');
+  await page.goto(BASE + '?nosw#/pantry/shopping');
+  await page.fill('[data-add] input', 'Eggs');
+  await page.press('[data-add] input', 'Enter');
+  await page.waitForSelector('.shop-item:has-text("Eggs")');
+  check((await page.$$eval('.shop-item', (els) => els.map((e) => e.textContent.trim()))).join(',').replace(/\s+/g, '') === 'Eggs,Milk', 'shopping list: Eggs and Milk');
+  await page.check('.shop-item:has-text("Eggs") input');
+  await page.click('[data-putaway]');
+  await page.click('.sheet [data-ok]');
+  await page.waitForFunction(() => document.querySelectorAll('.shop-item').length === 1);
+  check(await page.evaluate(async () => (await import('./js/core/store.js')).all('pantry').some((f) => f.name === 'Eggs')), 'ticked Eggs put into the pantry and taken off the list');
+  // Buying milk again takes it off the list automatically
+  await page.goto(BASE + '?nosw#/pantry/add');
+  await page.click('[data-nocode]');
+  await page.fill('.sheet [name=name]', 'milk');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForSelector('.toast >> text=Added milk');
+  check(await page.evaluate(async () => (await import('./js/core/store.js')).all('shopping').length === 0), 'scanning milk into the pantry ticks it off the shopping list');
+  await page.goto(BASE + '?nosw#/');
+  await page.waitForSelector('.rem-card');
+  check((await page.textContent('.rem-card')).includes('Ham'), 'out-of-date ham shows on the start menu reminders');
+  await page.fill('[data-gq]', 'nutella');
+  await page.waitForSelector('.gs-group:has-text("Pantry") .gs-hit');
+  check(true, 'pantry is searchable from the start menu');
+  await page.fill('[data-gq]', '');
 
   check(!errors.length, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

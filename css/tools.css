@@ -221,3 +221,17 @@ body:has(.undo-bar) #toasts { bottom: calc(84px + var(--safe-b)) !important; }
 .calib-steps span { width: 14px; height: 14px; border-radius: 50%; background: var(--border); }
 .calib-steps span.done { background: var(--ok); }
 .rows .row.hl { outline: 2px solid var(--tool); outline-offset: -2px; }
+/* pantry */
+.pantry-thumb { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; background: var(--surface-2); flex: none; display: grid; place-items: center; font-size: 1.5rem; }
+.pantry-thumb.big { width: 72px; height: 72px; }
+.pantry-main { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
+.pantry-row { align-items: center; }
+.pantry-row .qty, .shop-item .qty { color: var(--muted); font-weight: 600; }
+.ex-expired { color: var(--danger); font-weight: 700; }
+.ex-soon { color: var(--warn); font-weight: 700; }
+.food-top { display: flex; gap: 12px; align-items: flex-end; }
+.quick-dates { margin: -4px 0 6px; }
+.shop-item { gap: 12px; cursor: pointer; }
+.shop-item input { width: 22px; height: 22px; accent-color: var(--tool); }
+.shop-item.done .grow { text-decoration: line-through; color: var(--muted); }
+.shop-add { margin-bottom: 14px; }
