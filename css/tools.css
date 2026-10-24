@@ -185,3 +185,18 @@ body:has(.undo-bar) #toasts { bottom: calc(84px + var(--safe-b)) !important; }
 .v-stage { place-items: stretch; }
 .v-stage figure { width: 100%; }
 .v-stage img { width: 100%; height: calc(100dvh - 170px); max-height: none; object-fit: contain; }
+
+/* ---------- Golf ---------- */
+.golf-status { display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 16px; background: var(--surface); border: 2px solid var(--border); margin-bottom: 14px; font-size: 1.05rem; }
+.gs-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--border); flex: none; }
+.golf-status.warn { border-color: var(--warn); } .golf-status.warn .gs-dot { background: var(--warn); animation: pulse 1s infinite; }
+.golf-status.ok { border-color: var(--ok); background: var(--ok-soft); } .golf-status.ok .gs-dot { background: var(--ok); }
+.golf-status.danger { border-color: var(--danger); background: var(--danger-soft); }
+@keyframes pulse { 50% { opacity: .3; } }
+.golf-ready { min-height: 88px; font-size: 1.5rem; margin-top: 8px; }
+.golf-live { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 14px; color: var(--muted); }
+.golf-live b { font: 800 3rem var(--mono); color: var(--text); }
+.golf-metrics .gm-tempo { text-align: center; margin: 6px 0 14px; }
+.golf-metrics .gm-tempo b { display: block; font: 800 4.2rem/1 var(--mono); color: var(--tool); }
+.golf-metrics .gm-tempo b small { font-size: .45em; color: var(--muted); }
+.golf-metrics .gm-tempo span { color: var(--muted); font-size: .9rem; }
