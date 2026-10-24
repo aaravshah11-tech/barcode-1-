@@ -256,3 +256,26 @@ export async function keepAwake() {
 }
 
 export const isPhone = () => /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) || matchMedia('(max-width: 700px)').matches;
+
+/**
+ * Draw a long list in batches as you scroll, so thousands of items don't freeze the page.
+ * container gets `<div class="wrapClass">…</div>` + an invisible sentinel; more items are added
+ * when the sentinel scrolls near the screen. `atLeast` keeps the same number showing after a redraw.
+ * Returns { shown(), dispose() }.
+ */
+export function renderChunked(container, items, html, { wrapClass = '', first = 120, step = 240, atLeast = 0 } = {}) {
+  let shown = Math.min(items.length, Math.max(first, atLeast));
+  container.innerHTML = `<div class="${wrapClass}">${items.slice(0, shown).map(html).join('')}</div>${shown < items.length ? '<div data-sentinel class="sentinel" aria-hidden="true"></div>' : ''}`;
+  const wrap = container.firstElementChild;
+  const sentinel = container.querySelector('[data-sentinel]');
+  if (!sentinel) return { shown: () => shown, dispose() {} };
+  const more = () => {
+    const next = Math.min(items.length, shown + step);
+    wrap.insertAdjacentHTML('beforeend', items.slice(shown, next).map(html).join(''));
+    shown = next;
+    if (shown >= items.length) { io?.disconnect(); sentinel.remove(); }
+  };
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) more(); }, { rootMargin: '1200px 0px' }) : null;
+  if (io) io.observe(sentinel); else while (shown < items.length) more();
+  return { shown: () => shown, dispose() { io?.disconnect(); } };
+}

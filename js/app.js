@@ -41,7 +41,7 @@ function renderNav(t, mod, routeName, subpath = '') {
   tabbar.innerHTML = (parent ? `<a href="#/${parent.id}" class="tab-back">${icon('back')}<span>${esc(parent.name)}</span></a>` : '') +
     nav.map((n) => {
       const active = n.match ? n.match.includes(routeName) || n.match.some((x) => x.includes('/') && subpath.startsWith(x)) : n.route.includes('/') ? subpath.startsWith(n.route) : routeName === n.route;
-      return `<a href="${n.href || `#/${t.id}${n.route ? '/' + n.route : ''}`}" class="${active ? 'active' : ''} ${n.primary ? 'tab-primary' : ''}">${n.emoji ? `<span class="nav-emoji" aria-hidden="true">${n.emoji}</span>` : icon(n.icon)}<span>${esc(n.label)}</span></a>`;
+      return `<a href="${n.href || `#/${t.id}${n.route ? '/' + n.route : ''}`}" class="${active ? 'active' : ''} ${n.primary ? 'tab-primary' : ''}"${active ? ' aria-current="page"' : ''}>${n.emoji ? `<span class="nav-emoji" aria-hidden="true">${n.emoji}</span>` : icon(n.icon)}<span>${esc(n.label)}</span></a>`;
     }).join('');
 }
 

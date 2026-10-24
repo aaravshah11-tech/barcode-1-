@@ -10,9 +10,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ALL = ['library', 'inventory', 'sports', 'photo', 'golf', 'core', 'offline', 'supabase'];
+const ALL = ['library', 'inventory', 'sports', 'photo', 'golf', 'core', 'offline', 'supabase', 'a11y', 'perf'];
 const only = process.argv.slice(2);
-const tests = (only.length ? ALL.filter((t) => only.includes(t)) : ALL).map((t) => (t === 'supabase' ? 'supabase-e2e.cjs' : `e2e-${t}.cjs`));
+const tests = (only.length ? ALL.filter((t) => only.includes(t)) : ALL).map((t) => (t === 'supabase' ? 'supabase-e2e.cjs' : t === 'a11y' || t === 'perf' ? `${t}.cjs` : `e2e-${t}.cjs`));
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8' };
 

@@ -1,7 +1,7 @@
 // Library: grid / list of books with search, filters and sorting.
 import * as store from './data.js';
 import { link } from './data.js';
-import { esc, icon, coverHtml, openSheet, debounce, plural } from '../../core/ui.js';
+import { esc, icon, coverHtml, openSheet, debounce, plural, renderChunked } from '../../core/ui.js';
 
 const PREFS_KEY = 'shelf.libraryPrefs';
 const DEFAULT_PREFS = { view: 'grid', sort: 'added', filters: {} };
@@ -119,6 +119,7 @@ export function render(root) {
       : '';
   }
 
+  let chunk = null, keepShown = false;
   function renderResults() {
     const all = store.allBooks();
     const f = prefs.filters;
@@ -142,9 +143,12 @@ export function render(root) {
       $('[data-results]').innerHTML = `<div class="empty"><div class="art">🔎</div><p class="muted">No books match.</p><button class="btn" data-reset>Clear search & filters</button></div>`;
       return;
     }
-    $('[data-results]').innerHTML = prefs.view === 'grid'
-      ? `<div class="grid">${books.map(tileHtml).join('')}</div>`
-      : `<div class="rows">${books.map((b) => rowHtml(b)).join('')}</div>`;
+    // Draw in batches as you scroll; keep the same amount showing when something changes.
+    const flashAt = flashId ? books.findIndex((b) => b.id === flashId) : -1;
+    const keep = keepShown ? chunk?.shown() || 0 : 0;
+    chunk?.dispose();
+    chunk = renderChunked($('[data-results]'), books, prefs.view === 'grid' ? tileHtml : (b) => rowHtml(b), { wrapClass: prefs.view === 'grid' ? 'grid' : 'rows', atLeast: Math.max(keep, flashAt + 40) });
+    keepShown = false;
     if (flashId) {
       root.querySelector('.flash')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       setTimeout(() => { flashId = null; }, 1700);
@@ -165,9 +169,12 @@ export function render(root) {
 
   renderLinkBanner();
   renderResults();
-  const off1 = store.onChange(debounce(renderResults, 80));
+  // Only redraw for changes that affect the list (not device-only settings or other tools' data).
+  const RELEVANT = new Set(['books', 'locations', 'rooms', 'settings']);
+  const redraw = debounce(() => { keepShown = true; renderResults(); }, 80);
+  const off1 = store.onChange(({ changes }) => { if (changes.some((c) => RELEVANT.has(c.c))) redraw(); });
   const off2 = link.onState(renderLinkBanner);
-  return () => { off1(); off2(); };
+  return () => { off1(); off2(); chunk?.dispose(); };
 }
 
 function openFilters(prefs, onApply) {

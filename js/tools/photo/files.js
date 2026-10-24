@@ -152,30 +152,46 @@ export function fullUrl(id, file) {
   return p;
 }
 
-/** Try to read the phone-clock QR code from a photo. Returns the decoded text or null. */
+/** Try to read the phone-clock QR code from a photo. Returns the decoded text or null.
+ *  QR readers occasionally miss a code at one size, so it tries a few sizes and a centre crop. */
 export async function decodeQr(file) {
-  let bmp;
-  try { bmp = await createImageBitmap(file, { resizeWidth: 1600, resizeQuality: 'high' }); } catch {
-    try { const u = await (await exifr()).thumbnailUrl(file); if (!u) return null; bmp = await createImageBitmap(await (await fetch(u)).blob()); } catch { return null; }
+  let src;
+  try { src = await createImageBitmap(file); } catch {
+    try { const u = await (await exifr()).thumbnailUrl(file); if (!u) return null; src = await createImageBitmap(await (await fetch(u)).blob()); } catch { return null; }
   }
-  if ('BarcodeDetector' in window) {
+  const variant = (w, crop = 1) => {
+    const sw = src.width * crop, sh = src.height * crop;
+    const scale = Math.min(1, w / sw);
+    const c = document.createElement('canvas');
+    c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+    const g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+    return c;
+  };
+  const attempts = [[1600, 1], [1000, 1], [1400, 0.6], [2400, 1]];
+  try {
+    if ('BarcodeDetector' in window) {
+      try {
+        const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+        for (const [w, crop] of attempts) { const r = await det.detect(variant(w, crop)); if (r[0]?.rawValue) return r[0].rawValue; }
+      } catch { /* fall back to ZXing */ }
+    }
+    await loadScript('vendor/html5-qrcode.min.js');
+    const lib = window.__Html5QrcodeLibrary__;
+    const el = document.createElement('div');
+    el.id = `qr-scratch-${Math.random().toString(36).slice(2)}`;
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    const h = new lib.Html5Qrcode(el.id, { formatsToSupport: [lib.Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
     try {
-      const r = await new window.BarcodeDetector({ formats: ['qr_code'] }).detect(bmp);
-      if (r[0]?.rawValue) return r[0].rawValue;
-    } catch { /* fall back to ZXing */ }
-  }
-  await loadScript('vendor/html5-qrcode.min.js');
-  const lib = window.__Html5QrcodeLibrary__;
-  const c = document.createElement('canvas');
-  c.width = bmp.width; c.height = bmp.height;
-  c.getContext('2d').drawImage(bmp, 0, 0);
-  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
-  const el = document.createElement('div');
-  el.id = `qr-scratch-${Math.random().toString(36).slice(2)}`;
-  el.style.display = 'none';
-  document.body.appendChild(el);
-  const h = new lib.Html5Qrcode(el.id, { formatsToSupport: [lib.Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
-  try { return await h.scanFile(new File([blob], 'clock.jpg', { type: 'image/jpeg' }), false); } catch { return null; } finally { try { h.clear(); } catch { /* ignore */ } el.remove(); }
+      for (const [w, crop] of attempts) {
+        const blob = await new Promise((r) => variant(w, crop).toBlob(r, 'image/png'));
+        try { return await h.scanFile(new File([blob], 'clock.png', { type: 'image/png' }), false); } catch { /* try the next size */ }
+      }
+      return null;
+    } finally { try { h.clear(); } catch { /* ignore */ } el.remove(); }
+  } finally { src.close?.(); }
 }
 
 /** Write a file into a directory handle (creating sub-folders). */

@@ -3,7 +3,7 @@ import * as store from '../../core/store.js';
 import { players, numberIn, team, playerLabel } from '../../core/people.js';
 import { feedback, unlockAudio } from '../../core/feedback.js';
 import { esc, icon, openSheet, toast, confirmDialog, fmtClock, keepAwake } from '../../core/ui.js';
-import { SPORT_INFO, match, eventsOf, sideName, sideColor, refLabel, clockMs, periodMs, matchTime, minuteOf, startClock, pauseClock, nextPeriod, setClock, logEvent, squadOf, lineupOf, TEAM_SIZE } from './common.js';
+import { SPORT_INFO, match, eventsOf, sideName, sideColor, inkOn, refLabel, clockMs, periodMs, matchTime, minuteOf, startClock, pauseClock, nextPeriod, setClock, logEvent, squadOf, lineupOf, TEAM_SIZE } from './common.js';
 import { defaultStarters, wholeMinutes } from './lineup.js';
 import { RUGBY_EVENTS, RUGBY_GROUPS, rugbyDef, lastKicker } from './rugby.js';
 import { HOCKEY_EVENTS, HOCKEY_GROUPS, hockeyDef } from './hockey.js';
@@ -171,8 +171,8 @@ export function renderLive(root, [id], ctx) {
           : `<button class="lineup-row need" data-starters><span>👥 <b>Choose your starting line-up</b></span><span class="small">for minutes played ›</span></button>`;
       })()}
       <div class="side-toggle" role="group" aria-label="Which team?">
-        <button data-side="us" aria-pressed="${side === 'us'}" style="--sc:${esc(sideColor(m, 'us'))}">${esc(sideName(m, 'us'))}</button>
-        <button data-side="them" aria-pressed="${side === 'them'}" style="--sc:${esc(sideColor(m, 'them'))}">${esc(sideName(m, 'them'))}</button>
+        <button data-side="us" aria-pressed="${side === 'us'}" style="--sc:${esc(sideColor(m, 'us'))};--sc-ink:${esc(inkOn(sideColor(m, 'us')))}">${esc(sideName(m, 'us'))}</button>
+        <button data-side="them" aria-pressed="${side === 'them'}" style="--sc:${esc(sideColor(m, 'them'))};--sc-ink:${esc(inkOn(sideColor(m, 'them')))}">${esc(sideName(m, 'them'))}</button>
       </div>
       ${cfg.groups.map((g) => `<div class="pad-group"><div class="section-title">${esc(g)}</div><div class="pad">
         ${cfg.list.filter((e) => e.group === g).map((e) => `<button class="pad-btn ${e.big ? 'big' : ''} ${e.card ? 'card-' + e.card : ''} ${e.pts ? 'score' : ''}" data-ev="${e.type}">${esc(e.label)}${e.pts ? `<small>+${e.pts}</small>` : ''}</button>`).join('')}

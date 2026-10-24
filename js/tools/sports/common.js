@@ -17,6 +17,15 @@ export function sideName(m, side) {
   if (side === 'us') return teamName(m.teamId, 'Us');
   return (m.oppTeamId && teamName(m.oppTeamId, '')) || m.oppName || 'Opposition';
 }
+/** Readable text colour on a team colour: dark text on light colours, white on dark ones. */
+export function inkOn(colour) {
+  const h = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour || '');
+  if (!h) return 'var(--on-tool)';
+  const x = h[1].length === 3 ? h[1].replace(/./g, '$&$&') : h[1];
+  const lin = (i) => { const c = parseInt(x.slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
+  return (L + 0.05) / 0.05 > 1.05 / (L + 0.05) ? '#111' : '#fff';
+}
 export const sideColor = (m, side) => (side === 'us' ? team(m.teamId)?.colour : team(m.oppTeamId)?.colour) || (side === 'us' ? 'var(--c1)' : 'var(--c2)');
 
 /** Player references: a player id, or "opp#7" for an opposition shirt number. */
