@@ -48,4 +48,31 @@ save('IMG_0103.JPG', try_t + timedelta(seconds=1), (40, 110, 180), 'try celebrat
 save('IMG_0201.JPG', kick_t + timedelta(seconds=2), (150, 60, 40), 'kick')
 save('IMG_0301.JPG', DAY + timedelta(hours=15, minutes=20), (60, 60, 60), 'random')
 save('NO_EXIF.JPG', None, (90, 40, 120), 'no exif', exif=False)
+# A "RAW" file: a real TIFF (with EXIF time) followed by a small thumbnail JPEG and a big preview JPEG,
+# like cameras embed. The extractor must pick the big one.
+import io
+def jpeg_bytes(size, colour, label):
+    im = Image.new('RGB', size, colour); ImageDraw.Draw(im).text((20, 20), label, fill='white')
+    b = io.BytesIO(); im.save(b, 'JPEG', quality=70); return b.getvalue()
+raw_t = kick_t + timedelta(seconds=5)
+tif = io.BytesIO()
+ex = Image.Exif(); ex[0x010F] = 'Nikon'; ex[0x0110] = 'Z6'
+ex[0x0132] = (raw_t + OFFSET).strftime('%Y:%m:%d %H:%M:%S')  # DateTime in IFD0 (Pillow can't write the EXIF sub-IFD into a TIFF)
+ex.get_ifd(0x8769)[0x9003] = (raw_t + OFFSET).strftime('%Y:%m:%d %H:%M:%S')
+Image.new('RGB', (16, 16), (50, 50, 50)).save(tif, 'TIFF', exif=ex)
+with open(os.path.join(OUT, 'RAW_0401.NEF'), 'wb') as f:
+    f.write(tif.getvalue() + b'\x00' * 512 + jpeg_bytes((160, 107), (90, 90, 90), 'thumb') + b'\x00' * 256 + jpeg_bytes((1200, 800), (150, 70, 30), 'RAW PREVIEW 1200x800'))
+
+# A HEIC photo (iPhone style) a couple of seconds after the try.
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    heic_t = try_t + timedelta(seconds=2)
+    im = Image.new('RGB', (1200, 800), (20, 120, 90)); ImageDraw.Draw(im).text((40, 40), 'HEIC photo', fill='white')
+    ex = Image.Exif(); ex[0x010F] = 'Apple'; ex[0x0110] = 'iPhone'
+    ex.get_ifd(0x8769)[0x9003] = (heic_t + OFFSET).strftime('%Y:%m:%d %H:%M:%S')
+    im.save(os.path.join(OUT, 'IMG_0501.HEIC'), format='HEIF', exif=ex.tobytes(), quality=60)
+except ImportError:
+    print('pillow-heif not installed: skipping the HEIC sample')
+
 print(json.dumps({'shownMs': shown_ms, 'tryMs': int((try_t - datetime(1970, 1, 1)).total_seconds() * 1000), 'kickMs': int((kick_t - datetime(1970, 1, 1)).total_seconds() * 1000)}))

@@ -204,3 +204,9 @@ body:has(.undo-bar) #toasts { bottom: calc(84px + var(--safe-b)) !important; }
 .lineup-row.need { border-color: var(--warn); background: var(--warn-soft); }
 .pick.on { background: var(--tool); color: #fff; border-color: var(--tool); }
 .pick.on span { color: rgba(255,255,255,.85); }
+/* Burst compare: 2 side by side, 3–4 in a 2×2 grid, 5–6 in 3×2 */
+.v-stage.n2 { grid-template-columns: 1fr 1fr; gap: 10px; }
+.v-stage.n3, .v-stage.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
+.v-stage.n5, .v-stage.n6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
+.v-stage.n3 img, .v-stage.n4 img, .v-stage.n5 img, .v-stage.n6 img { height: calc((100dvh - 200px) / 2); }
+.v-stage figure { cursor: pointer; }

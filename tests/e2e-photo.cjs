@@ -39,15 +39,15 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   const clockText = await page.textContent('#view');
   check(/1m 2[34]s fast/.test(clockText) && clockText.includes('IMG_0001.JPG'), 'clock photo found automatically; camera 1m 23.5s fast');
   const groups = await page.$$eval('.list .list-item', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
-  check(groups.some((g) => /Try – #11 – 15:10:00\s*3$/.test(g)), 'try burst + celebration (3 photos) sorted into “Try – #11 – 15:10:00”');
-  check(groups.some((g) => /Kick – #10 – 15:12:30\s*1$/.test(g)), 'kick photo sorted');
+  check(groups.some((g) => /Try – #11 – 15:10:00\s*4$/.test(g)), 'try burst + celebration + iPhone HEIC (4 photos) sorted into “Try – #11 – 15:10:00”');
+  check(groups.some((g) => /Kick – #10 – 15:12:30\s*2$/.test(g)), 'kick JPEG + Nikon RAW (NEF) sorted');
   check(groups.some((g) => /Not near any moment\s*2$/.test(g)) && groups.some((g) => /No time info.*\s*1$/.test(g)), 'clock + random photo unsorted; no-EXIF photo flagged');
   await shot(page, 'photo-import');
 
   // Window change re-sorts
   await page.$eval('[data-window]', (el) => { el.value = '2'; el.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.waitForFunction(() => [...document.querySelectorAll('.list .list-item')].some((e) => /Try – #11 – 15:10:00\s*1$/.test(e.textContent.replace(/\s+/g, ' ').trim())));
-  check(true, 'narrower ±2 s window leaves only the celebration photo (burst was 2.7–3 s early)');
+  await page.waitForFunction(() => [...document.querySelectorAll('.list .list-item')].some((e) => /Try – #11 – 15:10:00\s*2$/.test(e.textContent.replace(/\s+/g, ' ').trim())));
+  check(true, 'narrower ±2 s window leaves only the celebration + HEIC photos (burst was 2.7–3 s early)');
   await page.$eval('[data-window]', (el) => { el.value = '15'; el.dispatchEvent(new Event('change', { bubbles: true })); });
 
   // ---- Cull ----
@@ -55,7 +55,9 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   await page.waitForSelector('.cull-groups');
   await page.click('.cull-groups button:has-text("Try")');
   await page.waitForSelector('.cull-tile img[src]');
-  check((await page.$$('.cull-tile')).length === 3, 'try group shows 3 thumbnails');
+  check((await page.$$('.cull-tile')).length === 4, 'try group shows 4 thumbnails');
+  const heicThumb = await page.waitForFunction(() => { const t = [...document.querySelectorAll('.cull-tile')].find((x) => x.textContent.includes('IMG_0501')); const i = t?.querySelector('img'); return i && i.complete && i.naturalWidth > 0; }, null, { timeout: 30000 }).then(() => true, () => false);
+  check(heicThumb, 'HEIC thumbnail decoded in Chrome');
   await page.click('.cull-tile >> nth=0');
   await page.waitForSelector('.viewer img[src]');
   await page.keyboard.press('4');
@@ -63,13 +65,31 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   await page.keyboard.press('x');   // reject 2nd
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('c');   // compare this photo with the next one
-  await page.waitForSelector('.v-stage.two');
+  await page.waitForSelector('.v-stage:not(.n1)');
+  check((await page.$$('.v-stage img')).length >= 2, 'compare shows the burst side by side');
   await shot(page, 'photo-viewer');
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(300);
+  check(await page.$('.viewer .v-stage.n1') != null, 'Esc leaves compare first (viewer stays open)');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.viewer', { state: 'detached' });
   const st = await page.evaluate(async () => { const s = await import('./js/core/store.js'); return Object.fromEntries(s.all('photos').map((p) => [p.name, [p.rating, p.flag, p.momentType]])); });
   check(JSON.stringify(st['IMG_0101.JPG']) === '[4,"pick","try"]' && st['IMG_0102.JPG'][1] === 'reject', 'keyboard: 4★ + pick on first, reject on second');
   await shot(page, 'photo-cull');
+
+  // Full-size previews: HEIC (decoded in the browser) and RAW (embedded camera preview)
+  const fullSize = async (group, name) => {
+    await page.click(`.cull-groups button:has-text("${group}")`);
+    await page.waitForSelector('.cull-tile');
+    await page.click(`.cull-tile:has-text("${name}")`);
+    const w = await page.waitForFunction(() => { const i = document.querySelector('.viewer .v-stage img'); return i && i.complete && i.naturalWidth > 0 && i.naturalWidth; }, null, { timeout: 30000 }).then((h) => h.jsonValue(), () => 0);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.viewer', { state: 'detached' }).catch(() => {});
+    return w;
+  };
+  const heicW = await fullSize('Try', 'IMG_0501');
+  check(heicW >= 600, `HEIC opens full size in the viewer (${heicW}px wide)`);
+  const rawW = await fullSize('Kick', 'RAW_0401');
+  check(rawW === 1200, `RAW opens its full 1200px camera preview, not the tiny thumbnail (${rawW}px)`);
 
   // ---- Export (into the browser's private folder instead of a real picker) ----
   await page.goto(BASE + '?nosw#/photo/export/m1');
@@ -91,6 +111,13 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   check(tree.out.includes('2026-10-24 Frontage 1st XV v Riverside RFC/01 Try - #11 - 15-10-00/IMG_0101.JPG'), 'pick copied into “01 Try - #11 - 15-10-00” folder');
   check(/xmp:Rating="4"/.test(tree.xmp) && tree.xmp.includes('<rdf:li>#11</rdf:li>') && tree.xmp.includes('Jo Brown') === false, 'XMP sidecar with rating + keywords');
   check(tree.csv.includes('Frontage 1st XV v Riverside RFC – Try by #11'), 'captions.csv written');
+
+  // ZIP download (what browsers without folder access get)
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click('[data-zip]')]);
+  const zipPath = path.join(require('os').tmpdir(), 'homebase-picks.zip');
+  await dl.saveAs(zipPath);
+  const names = require('child_process').execFileSync('python3', ['-c', 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print("\\n".join(z.namelist()))', zipPath]).toString();
+  check(names.includes('01 Try - #11 - 15-10-00/IMG_0101.JPG') && names.includes('/captions.csv') && names.includes('IMG_0101.xmp'), 'ZIP download has the moment folders, sidecars and captions.csv (and passes a checksum test)');
 
   // ---- Phone: clock screen, then "photograph" it and read it back ----
   const phone = await ctx.newPage(); // same browser profile, so it sees the match

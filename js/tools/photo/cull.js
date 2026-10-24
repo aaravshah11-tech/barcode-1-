@@ -10,7 +10,7 @@ const KEYS = '← → move · 1–5 stars · 0 clear · P pick · X reject · U 
 
 export function renderCull(root, [id], ctx) {
   const m = match(id);
-  const st = { group: 'all', flag: 'all', minRating: 0, number: '', viewer: null, compare: false, focus: 0 };
+  const st = { group: 'all', flag: 'all', minRating: 0, number: '', viewer: null, compare: false, focus: 0, set: [] };
   let list = [];
 
   const groups = () => {
@@ -58,41 +58,76 @@ export function renderCull(root, [id], ctx) {
 
   // ---------- viewer ----------
   let viewerEl = null;
-  const openViewer = (i) => { st.viewer = i; st.focus = 0; drawViewer(); };
-  const closeViewer = () => { st.viewer = null; st.compare = false; viewerEl?.remove(); viewerEl = null; saving.then(draw); };
-  const burstMates = (p) => list.filter((x) => x.burst != null && x.burst === p.burst);
+  let shownKey = '';
+  const openViewer = (i) => { st.viewer = i; st.compare = false; drawViewer(); };
+  const closeViewer = () => { st.viewer = null; st.compare = false; shownKey = ''; viewerEl?.remove(); viewerEl = null; saving.then(draw); };
 
-  async function drawViewer() {
-    const p = list[st.viewer];
+  /** Compare set: the whole burst around the current photo (max 6), or the photo next to it. */
+  function compareSet(i) {
+    const p = list[i];
+    let idx = p.burst != null ? list.map((x, k) => (x.burst === p.burst ? k : -1)).filter((k) => k >= 0) : [];
+    if (idx.length > 6) { const at = idx.indexOf(i); const from = Math.max(0, Math.min(idx.length - 6, at - 2)); idx = idx.slice(from, from + 6); }
+    if (idx.length < 2) idx = i < list.length - 1 ? [i, i + 1] : i > 0 ? [i - 1, i] : [i];
+    return idx;
+  }
+  const current = () => (st.compare ? st.set[st.focus] : st.viewer);
+  const caption = (x) => `${esc(x.name)} · ${'★'.repeat(x.rating || 0)}${'☆'.repeat(5 - (x.rating || 0))} ${x.flag === 'pick' ? '· <b class="pk">PICK</b>' : x.flag === 'reject' ? '· <b class="rj">REJECT</b>' : ''}`;
+
+  function drawViewer() {
+    const idx = st.compare ? st.set : [st.viewer];
+    const p = list[current()];
     if (!p) return closeViewer();
-    if (!viewerEl) { viewerEl = document.createElement('div'); viewerEl.className = 'viewer'; document.body.appendChild(viewerEl); }
-    const shown = st.compare ? [p, list[st.viewer + 1]].filter(Boolean) : [p];
+    if (!viewerEl) {
+      viewerEl = document.createElement('div');
+      viewerEl.className = 'viewer';
+      viewerEl.setAttribute('role', 'dialog');
+      viewerEl.setAttribute('aria-modal', 'true');
+      viewerEl.setAttribute('aria-label', 'Photo viewer');
+      document.body.appendChild(viewerEl);
+    }
+    const shown = idx.map((k) => list[k]);
+    const key = shown.map((x) => x.id).join('|');
     const mo = momentsOf(id).find((x) => x.id === p.momentId);
-    viewerEl.innerHTML = `<div class="v-top"><b>${st.viewer + 1}/${list.length}</b><span>${esc(mo?.name || (p.cameraMs == null ? 'No time info' : 'Not near a moment'))}</span><span class="spacer"></span>
-        <button class="btn btn-sm" data-v="compare">${st.compare ? 'Single' : 'Compare (C)'}</button><button class="btn btn-sm" data-v="close">Close (Esc)</button></div>
-      <div class="v-stage ${shown.length > 1 ? 'two' : ''}">${shown.map((x, k) => `<figure class="${st.compare && k === st.focus ? 'focus' : ''}" data-fig="${k}"><img data-full="${esc(x.id)}" alt=""><figcaption>${esc(x.name)} · ${'★'.repeat(x.rating || 0)}${'☆'.repeat(5 - (x.rating || 0))} ${x.flag === 'pick' ? '· <b class="pk">PICK</b>' : x.flag === 'reject' ? '· <b class="rj">REJECT</b>' : ''}</figcaption></figure>`).join('')}</div>
-      <div class="v-bar"><button class="btn" data-v="prev">←</button>${[1, 2, 3, 4, 5].map((r) => `<button class="btn" data-v="r${r}">${r}★</button>`).join('')}
-        <button class="btn btn-ok" data-v="pick">Pick (P)</button><button class="btn btn-danger" data-v="reject">Reject (X)</button><button class="btn" data-v="next">→</button></div>`;
+    const top = `<b>${current() + 1}/${list.length}</b><span>${esc(mo?.name || (p.cameraMs == null ? 'No time info' : 'Not near a moment'))}</span>${st.compare ? `<span class="tag">${shown.length} in this burst</span>` : ''}<span class="spacer"></span>
+      <button class="btn btn-sm" data-v="compare">${st.compare ? 'Single (C)' : 'Compare burst (C)'}</button><button class="btn btn-sm" data-v="close">Close (Esc)</button>`;
+    if (key === shownKey) {
+      // Same photos on screen: only update captions and highlight (no image reload, no flicker).
+      viewerEl.querySelector('.v-top').innerHTML = top;
+      viewerEl.querySelectorAll('figure').forEach((fig, k) => { fig.classList.toggle('focus', st.compare && k === st.focus); fig.querySelector('figcaption').innerHTML = caption(shown[k]); });
+      return;
+    }
+    shownKey = key;
+    viewerEl.innerHTML = `<div class="v-top">${top}</div>
+      <div class="v-stage n${shown.length}">${shown.map((x, k) => `<figure class="${st.compare && k === st.focus ? 'focus' : ''}" data-fig="${k}"><img data-full="${esc(x.id)}" alt="${esc(x.name)}"><figcaption>${caption(x)}</figcaption></figure>`).join('')}</div>
+      <div class="v-bar"><button class="btn" data-v="prev" aria-label="Previous">←</button>${[1, 2, 3, 4, 5].map((r) => `<button class="btn" data-v="r${r}" aria-label="${r} stars">${r}★</button>`).join('')}
+        <button class="btn btn-ok" data-v="pick">Pick (P)</button><button class="btn btn-danger" data-v="reject">Reject (X)</button><button class="btn" data-v="next" aria-label="Next">→</button></div>`;
     for (const img of viewerEl.querySelectorAll('img[data-full]')) {
       const f = sessionFiles.get(img.dataset.full);
-      if (f) fullUrl(img.dataset.full, f).then((u) => { if (u) img.src = u; });
+      if (f) fullUrl(img.dataset.full, f).then((u) => { if (u && img.isConnected) img.src = u; });
     }
-    // Pre-load the next one for speed.
-    const nx = list[st.viewer + 1];
+    // Pre-load the next photo so moving on is instant.
+    const nx = list[(st.compare ? st.set.at(-1) : st.viewer) + 1];
     if (nx && sessionFiles.get(nx.id)) fullUrl(nx.id, sessionFiles.get(nx.id));
-    void burstMates;
   }
 
   let saving = Promise.resolve();
-  async function act(a) {
-    const target = list[st.viewer + (st.compare ? st.focus : 0)];
+  function act(a) {
+    const target = list[current()];
     if (!target) return;
-    if (a === 'next') { st.viewer = Math.min(list.length - 1, st.viewer + 1); return drawViewer(); }
-    if (a === 'prev') { st.viewer = Math.max(0, st.viewer - 1); return drawViewer(); }
-    if (a === 'close') return closeViewer();
-    if (a === 'compare') { st.compare = !st.compare; st.focus = 0; return drawViewer(); }
+    if (a === 'next' || a === 'prev') {
+      const d = a === 'next' ? 1 : -1;
+      if (st.compare) st.focus = (st.focus + d + st.set.length) % st.set.length; // move within the burst
+      else st.viewer = Math.max(0, Math.min(list.length - 1, st.viewer + d));
+      return drawViewer();
+    }
+    if (a === 'close') { if (st.compare) { st.viewer = current(); st.compare = false; return drawViewer(); } return closeViewer(); }
+    if (a === 'compare') {
+      if (st.compare) { st.viewer = current(); st.compare = false; }
+      else { st.set = compareSet(st.viewer); st.focus = st.set.indexOf(st.viewer); st.compare = true; }
+      return drawViewer();
+    }
     let patch = null;
-    if (/^r[0-5]$/.test(a)) patch = { rating: +a[1] === target.rating ? 0 : +a[1] };
+    if (/^r[1-5]$/.test(a)) patch = { rating: +a[1] === target.rating ? 0 : +a[1] };
     if (a === 'r0') patch = { rating: 0 };
     if (a === 'pick') patch = { flag: target.flag === 'pick' ? '' : 'pick' };
     if (a === 'reject') patch = { flag: target.flag === 'reject' ? '' : 'reject' };
@@ -102,8 +137,11 @@ export function renderCull(root, [id], ctx) {
       // always apply to the photo you're looking at.
       list = list.map((x) => (x.id === target.id ? { ...x, ...patch } : x));
       saving = saving.then(() => store.patch('photos', target.id, patch));
-      // Picking/rejecting moves on automatically (like Lightroom's auto-advance).
-      if ((a === 'pick' || a === 'reject') && !st.compare && st.viewer < list.length - 1) st.viewer++;
+      // Picking/rejecting moves on automatically (within the burst when comparing).
+      if (a === 'pick' || a === 'reject') {
+        if (st.compare) st.focus = Math.min(st.set.length - 1, st.focus + 1);
+        else if (st.viewer < list.length - 1) st.viewer++;
+      }
       drawViewer();
     }
   }
@@ -112,14 +150,14 @@ export function renderCull(root, [id], ctx) {
     if (st.viewer == null || e.target.closest?.('input,select,textarea')) return;
     const k = e.key.toLowerCase();
     const map = { arrowright: 'next', arrowleft: 'prev', escape: 'close', p: 'pick', x: 'reject', u: 'unflag', c: 'compare', 0: 'r0', 1: 'r1', 2: 'r2', 3: 'r3', 4: 'r4', 5: 'r5' };
-    if (k === 'tab' && st.compare) { e.preventDefault(); st.focus = st.focus ? 0 : 1; drawViewer(); return; }
+    if (k === 'tab' && st.compare) { e.preventDefault(); act(e.shiftKey ? 'prev' : 'next'); return; }
     if (map[k]) { e.preventDefault(); act(map[k]); }
   };
   document.addEventListener('keydown', onKey);
   const onViewerClick = (e) => {
     if (!viewerEl?.contains(e.target)) return;
     const b = e.target.closest('[data-v]');
-    if (b) act(b.dataset.v);
+    if (b) { act(b.dataset.v); return; }
     const fig = e.target.closest('[data-fig]');
     if (fig && st.compare) { st.focus = +fig.dataset.fig; drawViewer(); }
   };
