@@ -16,6 +16,7 @@ export const TOOLS = [
   // Match Photography is opened from the Sports menu (hidden from the start menu).
   { id: 'photo', name: 'Match Photography', emoji: '📸', color: '#a8324a', dark: '#ef7f95', desc: 'Touchline assistant for your camera', parent: 'sports', hidden: true, load: () => import('./tools/photo/index.js') },
   { id: 'golf', name: 'Golf Swing', emoji: '⛳', color: '#6b4fa8', dark: '#a98ce6', desc: 'Record and analyse swings with motion sensors', load: () => import('./tools/golf/index.js'), hooks: () => import('./tools/golf/hooks.js') },
+  { id: 'reminders', name: 'Reminders', emoji: '🔔', color: '#8a5300', dark: '#f0b45a', desc: 'Lent-out things, warranties, food dates, upcoming matches', load: () => import('./tools/reminders/index.js') },
   { id: 'settings', name: 'Settings', emoji: '⚙️', color: '#5a5550', dark: '#b7afa5', desc: 'Locations, teams, pairing, backup', load: () => import('./settings/index.js') },
 ];
 

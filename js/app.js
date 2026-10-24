@@ -128,6 +128,7 @@ function renderMenu(root) {
             <span class="tile-desc">${esc(t.desc)}</span>
           </a>`).join('')}
       </div>
+      <div data-rem-card>${remCard}</div>
       <a class="card sync-card" href="#/settings/pair">
         <span class="sync-dot ${linked ? 'ok' : st.mode === 'off' ? '' : 'warn'}"></span>
         <div class="grow"><b>${linked ? 'Phone & computer in sync' : st.mode === 'off' ? 'Pair your phone and computer' : 'Sync: ' + esc(st.message || st.state)}</b>
@@ -135,6 +136,22 @@ function renderMenu(root) {
             : st.mode === 'off' ? 'Scan on your phone, see it live on your computer' : 'Tap for details'}</div></div>
         ${icon('chev', 'chev')}
       </a>`;
+  };
+
+  // Reminders summary under the tools (filled in once the tools' hooks have loaded).
+  let remCard = '';
+  let remId = 0;
+  const refreshReminders = async () => {
+    const id = ++remId;
+    let list = [];
+    try { list = await (await import('./tools/reminders/collect.js')).collectReminders(); } catch (e) { console.error(e); }
+    if (id !== remId) return;
+    const urgent = list.filter((r) => r.level !== 'info');
+    remCard = list.length ? `<a class="card rem-card ${urgent.length ? 'warn' : ''}" href="#/reminders"><span class="rem-bell" aria-hidden="true">🔔</span>
+      <div class="grow"><b>${plural(list.length, 'reminder')}${urgent.length ? ` · ${urgent.length} need${urgent.length === 1 ? 's' : ''} attention` : ''}</b>
+      <div class="small muted">${list.slice(0, 2).map((r) => esc(`${r.title} (${r.sub})`)).join(' · ')}${list.length > 2 ? ' …' : ''}</div></div>${icon('chev', 'chev')}</a>` : '';
+    const slot = $('[data-rem-card]');
+    if (slot && slot.innerHTML !== remCard) slot.innerHTML = remCard;
   };
 
   let searchId = 0;
@@ -179,12 +196,15 @@ function renderMenu(root) {
   document.addEventListener('keydown', slash);
 
   drawBody();
+  refreshReminders();
   if (lastQuery) runSearch();
   const offSync = sync.onState(drawBody);
+  const refreshRemindersSoon = debounce(refreshReminders, 300);
   const refreshGreeting = debounce(() => { const g = $('[data-greeting]'); if (g) g.textContent = greeting(); }, 300);
   const offStore = store.onChange(({ changes }) => {
     if (!changes.some((c) => c.c !== '_local')) return;
     refreshGreeting();
+    refreshRemindersSoon();
     if (input.value.trim()) onInput();
   });
   return () => { offSync(); offStore(); document.removeEventListener('keydown', slash); };

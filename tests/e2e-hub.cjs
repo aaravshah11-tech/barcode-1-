@@ -74,6 +74,29 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   check(true, 'results update live when something new arrives');
   await page.fill('[data-gq]', '');
 
+  // ---- Reminders ----
+  await page.goto(BASE + '?nosw#/');
+  await page.waitForSelector('.rem-card');
+  const card = (await page.textContent('.rem-card')).replace(/\s+/g, ' ');
+  check(/2 reminders · 1 needs attention/.test(card) && card.includes('The Hobbit — lent to Sam'), `start menu reminder card: ${card.trim()}`);
+  await page.click('.rem-card');
+  await page.waitForSelector('.rem');
+  const rems = await page.$$eval('.rem .row-title', (els) => els.map((e) => e.textContent));
+  check(rems.length === 2 && rems[0].includes('The Hobbit') && rems[1].includes('Frontage RFC v Riverside'), `reminders screen: ${rems.join(' | ')}`);
+  check((await page.textContent('.rem >> nth=0')).includes('45 days ago'), 'lent 45 days ago');
+  check((await page.textContent('.rem >> nth=1')).includes('in 2 days · Home ground'), 'match in 2 days at Home ground');
+  await shot('hub-reminders');
+  await page.click('[data-snooze^="lent:book:b1"]');
+  await page.waitForFunction(() => document.querySelectorAll('.rem').length === 1);
+  check(true, 'hide for 7 days');
+  await page.click('.toast button:has-text("Undo")');
+  await page.waitForFunction(() => document.querySelectorAll('.rem').length === 2);
+  check(true, 'undo brings it back');
+  // Giving the book back clears the reminder everywhere
+  await page.evaluate(async () => (await import('./js/core/store.js')).patch('books', 'b1', { lentTo: '', lentDate: '' }));
+  await page.waitForFunction(() => document.querySelectorAll('.rem').length === 1);
+  check(true, 'returning the book removes its reminder live');
+
   check(!errors.length, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
   console.log(failures ? `\n${failures} FAILED` : '\nAll hub checks passed');

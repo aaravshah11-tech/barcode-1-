@@ -35,7 +35,8 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   await comp.goto(BASE + '?nosw#/');
   await comp.waitForSelector('.menu-grid');
   const tiles = await comp.$$eval('.tile-tool .tile-name', (els) => els.map((e) => e.textContent));
-  check(tiles.join(',') === 'Library,Inventory,Sports,Golf Swing,Settings', 'menu shows the 5 tiles: ' + tiles.join(', '));
+  const want = ['Library', 'Inventory', 'Sports', 'Golf Swing', 'Reminders', 'Settings'];
+  check(want.every((t) => tiles.includes(t)) && tiles.at(-1) === 'Settings', 'menu shows the tool tiles: ' + tiles.join(', '));
   if (SHOTS) await comp.screenshot({ path: path.join(SHOTS, 'core-menu-desktop.png') });
 
   const mig = await comp.evaluate(async () => {

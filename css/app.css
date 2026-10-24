@@ -417,3 +417,13 @@ body.nav-hidden #toasts { bottom: calc(16px + var(--safe-b)); }
 .gs-group .section-title span[aria-hidden] { font-size: 1.1em; }
 .gs-hit mark { background: color-mix(in srgb, var(--tool, var(--accent)) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 .gs-count { margin: 0 0 8px; }
+/* reminders */
+.rem-card { display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--text); margin-top: 16px; }
+.rem-card.warn { border-color: var(--warn); background: var(--warn-soft); }
+.rem-bell { font-size: 1.6rem; }
+.rem { gap: 12px; transition: opacity .2s; border-left: 4px solid transparent; }
+.rem-icon { font-size: 1.4rem; width: 32px; text-align: center; }
+.rem-link { color: var(--text); text-decoration: none; min-width: 0; }
+.rem-danger { border-left: 4px solid var(--danger); }
+.rem-warn { border-left: 4px solid var(--warn); }
+.rem-gone { opacity: .35; pointer-events: none; }
