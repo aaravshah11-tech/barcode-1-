@@ -144,3 +144,47 @@ test('lineup: on field, substitutions, red cards, minutes played', async () => {
   assert.deepEqual(s.sentOff, ['c']);
   assert.deepEqual(defaultStarters(['p3', 'p1', 'p2', 'p9'], (r) => ({ p1: 1, p2: 2, p3: 3, p9: 16 })[r], 3), ['p1', 'p2', 'p3']);
 });
+
+test('cricket: run out off a no-ball, stumped off a wide', () => {
+  const base = { type: 'ball', innings: 1, bowler: 'X' };
+  const inn = replayInnings([
+    { ...base, striker: 'A', nonStriker: 'B', kind: 'nb', runs: 1, wicket: { how: 'run out', out: 'B', fielder: 'F' } },
+    { ...base, striker: 'B2', nonStriker: 'A', kind: 'wd', runs: 0, wicket: { how: 'stumped', out: 'B2', fielder: 'K' } },
+  ], { overs: 20 });
+  assert.equal(inn.runs, 3);            // nb (1+1) + wide (1)
+  assert.equal(inn.wickets, 2);
+  assert.equal(inn.legal, 0);           // neither ball counts towards the over
+  const bat = Object.fromEntries(inn.batting.map((b) => [b.ref, b]));
+  assert.equal(bat.A.balls, 1);         // a no-ball is faced
+  assert.equal(bat.A.runs, 1);
+  assert.equal(bat.B.how, 'run out (F)');
+  assert.equal(bat.B2.balls, 0);        // a wide isn't faced
+  assert.equal(bat.B2.how, 'st K b X');
+  const X = inn.bowling[0];
+  assert.equal(X.wickets, 1);           // stumping credited, run out not
+  assert.equal(X.runs, 3);
+  assert.deepEqual([X.wides, X.noBalls], [1, 1]);
+});
+
+test('cricket: retired hurt can come back, retired out is a wicket', () => {
+  const b = (striker, nonStriker, runs, extra = {}) => ({ type: 'ball', innings: 1, bowler: 'X', striker, nonStriker, kind: 'normal', runs, ...extra });
+  let inn = replayInnings([
+    b('A', 'B', 4), b('A', 'B', 2),
+    { type: 'retire', innings: 1, batter: 'A', how: 'retired hurt' },
+  ], { overs: 20 });
+  assert.equal(inn.wickets, 0);
+  assert.equal(inn.striker, null);
+  assert.equal(inn.batting.find((x) => x.ref === 'A').how, 'retired hurt');
+  inn = replayInnings([
+    b('A', 'B', 4), b('A', 'B', 2),
+    { type: 'retire', innings: 1, batter: 'A', how: 'retired hurt' },
+    b('C', 'B', 1), b('B', 'C', 0, { wicket: { how: 'bowled', out: 'B' } }),
+    b('A', 'C', 3), // A returns
+  ], { overs: 20 });
+  const A = inn.batting.find((x) => x.ref === 'A');
+  assert.deepEqual([A.runs, A.balls, A.out, A.how], [9, 3, false, '']);
+  assert.equal(inn.wickets, 1);
+  inn = replayInnings([b('A', 'B', 1), { type: 'retire', innings: 1, batter: 'B', how: 'retired out' }], { overs: 20, wicketsAvailable: 10 });
+  assert.equal(inn.wickets, 1);
+  assert.equal(inn.fow[0].batter, 'B');
+});

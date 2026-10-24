@@ -143,6 +143,41 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   await phone.click('[data-finish]');
   await phone.waitForSelector('.big-score');
 
+  // ---------- Cricket: retired hurt, stumped off a wide, batter returns ----------
+  await phone.goto(BASE + '?nosw#/sports/new/cricket');
+  await phone.waitForSelector('[data-form]');
+  await phone.fill('[name=oppName]', 'Retire XI');
+  await phone.selectOption('[name=fmt]', 'custom');
+  await phone.fill('[name=overs]', '2');
+  await phone.fill('[name=playersPerSide]', '4');
+  await phone.click('[data-form] button.btn-primary');
+  await phone.waitForSelector('.cricket .pad-runs');
+  const rId = phone.url().split('/').pop();
+  await phone.click('[data-runs="1"]');
+  await pick(phone, 1); await pick(phone, 2); await pick(phone, 7);   // after 1 run, #2 is on strike
+  await phone.click('[data-retire]');
+  await phone.click('.choice-grid button:has-text("(striker)")');
+  await phone.click('.choice-grid button:has-text("Retired hurt")');
+  await phone.waitForSelector('.sheet .pick');
+  const newBat1 = await phone.$$eval('.sheet .pick b', (els) => els.map((e) => e.textContent).join(','));
+  await pick(phone, 3);
+  await phone.click('[data-wicket]'); await phone.click('.choice-grid button:has-text("Stumped")');
+  await phone.click('.choice-grid button:has-text("Wide")');
+  await pick(phone, 9); // keeper
+  await phone.waitForSelector('.sheet .pick');
+  const newBat2 = await phone.$$eval('.sheet .pick', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()).join(','));
+  await pick(phone, 2); // #2 comes back
+  const r = await phone.evaluate(async (id) => {
+    const m = await import('./js/tools/sports/summary.js'); const c = await import('./js/tools/sports/common.js');
+    const inn = m.summarize(c.match(id)).innings[0];
+    const by = Object.fromEntries(inn.batting.map((b) => [b.ref, b.how]));
+    return { runs: inn.runs, wkts: inn.wickets, legal: inn.legal, wd: inn.extras.wd, bowlerW: inn.bowling[0].wickets, hows: Object.values(by) };
+  }, rId);
+  check(newBat1 === '2,3,4' && newBat2 === '2returns,4Shah',
+    `batter lists skip players out/at the crease and offer the retired-hurt batter (${newBat1} | ${newBat2})`);
+  check(r.runs === 2 && r.wkts === 1 && r.legal === 1 && r.wd === 1 && r.bowlerW === 1 && r.hows.includes('st #9 b #7'),
+    `stumped off a wide: 2/1 after 0.1 overs, wide counted, bowler credited (${JSON.stringify(r)})`);
+
   // ---------- Hockey ----------
   await phone.goto(BASE + '?nosw#/sports/new/hockey');
   await phone.waitForSelector('[data-form]');

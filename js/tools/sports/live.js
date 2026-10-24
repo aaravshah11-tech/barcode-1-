@@ -17,7 +17,7 @@ export const SPORT_EVENTS = {
 export const eventLabel = (m, e) => SPORT_EVENTS[m.sport]?.def(e.type)?.label || e.type;
 
 /** Players we can pick for a side: our match squad, or the opponent's players / shirt numbers. */
-export function pickPlayer(m, side, title, { only = null, note = null, empty = 'Nobody to choose.' } = {}) {
+export function pickPlayer(m, side, title, { only = null, exclude = [], note = null, empty = 'Nobody to choose.' } = {}) {
   return new Promise((resolve) => {
     let result = null;
     let opts;
@@ -30,6 +30,7 @@ export function pickPlayer(m, side, title, { only = null, note = null, empty = '
       opts = ps.length ? ps.map((p) => ({ ref: p.id, num: numberIn(p, m.oppTeamId) ?? '', name: p.name.split(' ').slice(-1)[0] }))
         : Array.from({ length: 23 }, (_, i) => ({ ref: `opp#${i + 1}`, num: i + 1, name: '' }));
     }
+    if (exclude.length) opts = opts.filter((o) => !exclude.includes(o.ref));
     const s = openSheet(`${opts.length ? '' : `<p class="muted">${esc(empty)}</p>`}<div class="pick-grid">${opts.map((o, i) => `<button class="pick" data-i="${i}" aria-label="${esc(`${o.num} ${o.name}`.trim())}"><b>${esc(o.num)}</b><span>${esc(note ? note(o.ref) : o.name)}</span></button>`).join('')}</div>
       <button class="btn btn-lg btn-block" data-skip style="margin-top:10px">Not sure / skip</button>`, { title, onClose: () => resolve(result) });
     s.body.addEventListener('click', (e) => {

@@ -3,12 +3,13 @@ import * as store from '../../core/store.js';
 import { feedback, unlockAudio } from '../../core/feedback.js';
 import { esc, icon, openSheet, toast, choose, confirmDialog, keepAwake } from '../../core/ui.js';
 import { match, eventsOf, sideName, refLabel } from './common.js';
-import { summarizeCricket, WICKET_KINDS, oversText } from './cricket.js';
+import { summarizeCricket, WICKET_KINDS, WICKET_ON_EXTRA, oversText } from './cricket.js';
 import { pickPlayer } from './live.js';
 
 const ballText = (b) => {
-  if (b.type !== 'ball') return '';
-  if (b.wicket) return 'W';
+  if (b.type !== 'ball' && b.type !== 'retire') return '';
+  if (b.type === 'retire') return b.how === 'retired out' ? 'RO' : 'RH';
+  if (b.wicket) return b.kind === 'wd' ? 'W+wd' : b.kind === 'nb' ? 'W+nb' : 'W';
   const r = b.runs || 0;
   return { wd: `${r ? r + 1 : ''}wd`, nb: `${r || ''}nb`, b: `${r}b`, lb: `${r}lb` }[b.kind] || (r ? String(r) : '•');
 };
@@ -65,7 +66,7 @@ export function renderCricketLive(root, [id], ctx) {
         <button class="pad-btn" data-extra="b">Bye</button><button class="pad-btn" data-extra="lb">Leg bye</button>
         <button class="pad-btn card-red big" data-wicket>WICKET</button>
       </div>
-      <div class="btn-row" style="margin-top:10px"><button class="btn" data-swap>⇄ Swap strike</button><button class="btn" data-end-innings>End innings</button></div>`}
+      <div class="btn-row" style="margin-top:10px"><button class="btn" data-swap>⇄ Swap strike</button><button class="btn" data-retire>🩹 Retire batter</button><button class="btn" data-end-innings>End innings</button></div>`}
       ${n === 1 && inn.closed ? `<div class="banner">${icon('info')}<div class="grow">Innings over: ${esc(sideName(m, st.batting))} ${inn.runs}/${inn.wickets}. ${esc(sideName(m, st.bowling))} need ${inn.runs + 1}.</div></div>` : ''}
       <div class="live-links"><a class="btn btn-ghost" href="#/sports/match/${esc(id)}">${icon('chart')} Full scorecard</a></div>
       <div class="undo-bar" data-undo-bar>${balls.length || n === 2 ? `<div class="grow"><b>Last: ${esc(ballText(eventsOf(id).filter((e) => e.type === 'ball').at(-1) || {}) || '—')}</b></div><button class="btn btn-danger" data-undo>${icon('undo')} Undo</button>` : '<div class="grow muted">Choose the batters and bowler, then tap each ball.</div>'}</div>
@@ -75,12 +76,20 @@ export function renderCricketLive(root, [id], ctx) {
   async function pickFor(slot, st) {
     const side = slot === 'bowler' ? st.bowling : st.batting;
     const title = slot === 'bowler' ? 'Who’s bowling?' : slot === 'striker' ? 'Batter on strike' : 'Non-striker';
-    const ref = await pickPlayer(st.m, side, title);
-    if (ref === null) return false;
-    if (slot === 'bowler' && ref && ref === st.inn.lastBowler && st.inn.legal % (st.m.format?.ballsPerOver || 6) === 0) {
-      toast('That bowler bowled the last over — choose someone else.', { kind: 'warn' });
-      return pickFor(slot, st);
+    let opts;
+    if (slot === 'bowler') {
+      // Nobody bowls two overs in a row.
+      const newOver = st.inn.legal % (st.m.format?.ballsPerOver || 6) === 0;
+      opts = { exclude: newOver && st.inn.lastBowler ? [st.inn.lastBowler] : [] };
+    } else {
+      // Batters: not someone already out or at the crease; retired-hurt batters can come back.
+      const out = st.inn.batting.filter((x) => x.out).map((x) => x.ref);
+      const crease = [st.striker, st.nonStriker].filter(Boolean);
+      const hurt = new Set(st.inn.batting.filter((x) => x.retired && !x.out).map((x) => x.ref));
+      opts = { exclude: [...out, ...crease], note: hurt.size ? (r) => (hurt.has(r) ? 'returns' : refLabel(st.m, r, { short: true }).replace(/^#\d+ /, '')) : null };
     }
+    const ref = await pickPlayer(st.m, side, title, opts);
+    if (ref === null) return false;
     sel[slot] = ref || (slot === 'bowler' ? 'opp#?' : `${side === 'them' ? 'opp#' : 'name:'}Batter ${st.inn.batting.length + 1}`);
     return true;
   }
@@ -131,18 +140,43 @@ export function renderCricketLive(root, [id], ctx) {
       if (!how) return;
       const ready = await ensureCrease();
       if (!ready) return;
+      // Run outs, stumpings and hit wicket can happen off a wide; run outs off a no-ball too.
+      let kind = 'normal';
+      if (WICKET_ON_EXTRA.wd.includes(how)) {
+        const kinds = [{ label: 'Normal ball', value: 'normal' }, { label: 'Wide', value: 'wd' }];
+        if (WICKET_ON_EXTRA.nb.includes(how)) kinds.push({ label: 'No ball', value: 'nb' });
+        kind = await choose('Which ball was it?', kinds, { columns: kinds.length });
+        if (!kind) return;
+      }
       let out = ready.striker, runs = 0, fielder = '';
       if (how === 'run out') {
         out = await choose('Who is out?', [{ label: `${refLabel(ready.m, ready.striker)} (striker)`, value: ready.striker }, { label: `${refLabel(ready.m, ready.nonStriker)} (non-striker)`, value: ready.nonStriker }]);
         if (!out) return;
-        runs = await choose('Runs completed before the run out?', [0, 1, 2, 3].map((r) => ({ label: String(r), value: r })), { columns: 4 });
+        runs = await choose(kind === 'wd' ? 'Extra runs completed (on top of the wide)?' : 'Runs completed before the run out?', [0, 1, 2, 3].map((r) => ({ label: String(r), value: r })), { columns: 4 });
         if (runs === null) return;
       }
       if (['caught', 'run out', 'stumped'].includes(how)) {
         fielder = await pickPlayer(ready.m, ready.bowling, how === 'caught' ? 'Caught by?' : how === 'stumped' ? 'Wicket-keeper?' : 'Fielder?');
         if (fielder === null) fielder = '';
       }
-      record({ kind: 'normal', runs, wicket: { how, out, fielder } });
+      record({ kind, runs, wicket: { how, out, fielder } });
+    } else if ('retire' in d) {
+      const ready = await ensureCrease();
+      if (!ready) return;
+      const who = await choose('Who is retiring?', [{ label: `${refLabel(ready.m, ready.striker)} (striker)`, value: ready.striker }, { label: `${refLabel(ready.m, ready.nonStriker)} (non-striker)`, value: ready.nonStriker }]);
+      if (!who) return;
+      const how = await choose('How?', [{ label: 'Retired hurt — can bat again later', value: 'retired hurt' }, { label: 'Retired out — counts as a wicket', value: 'retired out' }]);
+      if (!how) return;
+      busy = true;
+      try {
+        await store.put('events', { matchId: id, sport: 'cricket', type: 'retire', innings: ready.n, batter: who, how, t: Date.now() });
+        sel = { striker: null, nonStriker: null, bowler: sel.bowler };
+        feedback('dup');
+        toast(`${refLabel(ready.m, who)} ${how}`);
+        draw();
+        if (!state().inn.closed) await ensureCrease();
+      } finally { busy = false; }
+      draw();
     } else if (d.pick) { await pickFor(d.pick, st); draw(); }
     else if ('swap' in d) { sel = { ...sel, striker: st.nonStriker, nonStriker: st.striker }; draw(); }
     else if ('endInnings' in d) {
@@ -151,7 +185,7 @@ export function renderCricketLive(root, [id], ctx) {
         sel = { striker: null, nonStriker: null, bowler: null };
       }
     } else if ('undo' in d) {
-      const last = eventsOf(id).filter((x) => x.type === 'ball' || x.type === 'innings_end').at(-1);
+      const last = eventsOf(id).filter((x) => x.type === 'ball' || x.type === 'innings_end' || x.type === 'retire').at(-1);
       if (last) { await store.remove('events', last.id); sel = { striker: null, nonStriker: null, bowler: null }; feedback('dup'); toast('Last ball undone'); }
     } else if ('finish' in d) {
       await store.put('matches', { ...match(id), status: 'done' });

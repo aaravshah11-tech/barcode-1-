@@ -7,7 +7,9 @@
 //   wicket?: { how, out: <ref>, fielder? }  // how: bowled|caught|lbw|run out|stumped|hit wicket|retired|other
 // }
 // runs = runs off the bat (normal, nb) or extra runs ran/scored (wd beyond the 1 penalty, b, lb).
-// Other events: { type: 'innings_end', innings }.
+// Other events: { type: 'innings_end', innings }
+//               { type: 'retire', innings, batter, how: 'retired hurt' | 'retired out' }
+// A batter who retired hurt can bat again later; retired out counts as a wicket.
 
 export const FORMATS = {
   t20: { label: 'T20', overs: 20 },
@@ -15,7 +17,9 @@ export const FORMATS = {
   fifty: { label: '50 overs', overs: 50 },
   custom: { label: 'Custom' },
 };
-export const WICKET_KINDS = ['bowled', 'caught', 'lbw', 'run out', 'stumped', 'hit wicket', 'retired', 'other'];
+export const WICKET_KINDS = ['bowled', 'caught', 'lbw', 'run out', 'stumped', 'hit wicket', 'other'];
+/** Dismissals that can happen off a wide / no-ball. */
+export const WICKET_ON_EXTRA = { wd: ['run out', 'stumped', 'hit wicket'], nb: ['run out'] };
 const BOWLER_CREDIT = new Set(['bowled', 'caught', 'lbw', 'stumped', 'hit wicket']);
 
 /** Runs added to the total by one ball. */
@@ -44,6 +48,8 @@ function howOutText(w, label) {
     case 'hit wicket': return `hit wicket b ${b}`;
     case 'run out': return `run out${f ? ` (${f})` : ''}`;
     case 'retired': return 'retired';
+    case 'retired hurt': return 'retired hurt';
+    case 'retired out': return 'retired out';
     default: return w.how || 'out';
   }
 }
@@ -70,11 +76,29 @@ export function replayInnings(balls, opts = {}) {
 
   for (const ball of balls) {
     if (ball.type === 'innings_end') { inn.closed = true; break; }
+    if (ball.type === 'retire') {
+      const x = B(ball.batter);
+      x.retired = true;
+      x.how = ball.how || 'retired hurt';
+      if (x.how === 'retired out') {
+        x.out = true;
+        inn.wickets++;
+        inn.fow.push({ wicket: inn.wickets, runs: inn.runs, batter: ball.batter, over: oversText(inn.legal, perOver) });
+      }
+      if (inn.striker === ball.batter) inn.striker = null;
+      else if (inn.nonStriker === ball.batter) inn.nonStriker = null;
+      part = null;
+      if (inn.wickets >= maxWkts) { inn.closed = true; break; }
+      continue;
+    }
     if (ball.type !== 'ball') continue;
     // Batters at the crease for this ball (taken from the ball itself).
     inn.striker = ball.striker; inn.nonStriker = ball.nonStriker; inn.bowler = ball.bowler;
-    if (ball.striker) B(ball.striker);
-    if (ball.nonStriker) B(ball.nonStriker);
+    for (const r of [ball.striker, ball.nonStriker]) {
+      if (!r) continue;
+      const x = B(r);
+      if (x.retired && !x.out) { x.retired = false; x.how = ''; } // retired hurt, now back in
+    }
     if (!part || !samePair(part, ball.striker, ball.nonStriker)) startPartnership(ball.striker, ball.nonStriker);
 
     const total = ballTotal(ball);
@@ -156,7 +180,7 @@ const samePair = (p, a, b) => (p.a === a && p.b === b) || (p.a === b && p.b === 
 export function summarizeCricket(m, events, label) {
   const f = m.format || {};
   const opts = { overs: f.overs, ballsPerOver: f.ballsPerOver || 6, wicketsAvailable: (f.playersPerSide || 11) - 1, label };
-  const evs = events.filter((e) => e.type === 'ball' || e.type === 'innings_end');
+  const evs = events.filter((e) => e.type === 'ball' || e.type === 'innings_end' || e.type === 'retire');
   const inn1 = replayInnings(evs.filter((e) => (e.innings || 1) === 1), opts);
   const inn2Events = evs.filter((e) => e.innings === 2);
   const target = inn1.closed || inn2Events.length ? inn1.runs + 1 : null;
