@@ -1,8 +1,8 @@
 // HomeBase entry point: boot, router, start menu, header.
 import * as store from './core/store.js';
 import * as sync from './sync/manager.js';
-import { TOOLS, toolById, loadTool } from './tools.js';
-import { toast, closeAllSheets, esc, icon, plural } from './core/ui.js';
+import { TOOLS, toolById, loadTool, loadHooks } from './tools.js';
+import { toast, closeAllSheets, esc, icon, plural, debounce } from './core/ui.js';
 import { seedIfEmpty } from './core/locations.js';
 import { migrateFromShelf } from './core/migrate.js';
 
@@ -98,15 +98,28 @@ async function route() {
 }
 
 // ---------- start menu ----------
+let lastQuery = ''; // kept while the app is open, so Back returns to your results
+
 function renderMenu(root) {
-  const draw = () => {
+  root.innerHTML = `
+    <div class="menu-head">
+      <h1>HomeBase</h1>
+      <p class="muted" data-greeting></p>
+    </div>
+    <div class="global-search" role="search">
+      <label class="search">${icon('search')}<span class="sr-only">Search everything</span>
+        <input type="search" data-gq placeholder="Search books, items, matches, places…" value="${esc(lastQuery)}" autocomplete="off" enterkeyhint="search" aria-controls="gs-results"></label>
+    </div>
+    <div id="gs-results" data-results aria-live="polite"></div>
+    <div data-menu-body></div>`;
+  const $ = (sel) => root.querySelector(sel);
+  const input = $('[data-gq]');
+
+  const drawBody = () => {
     const st = sync.getState();
     const linked = st.state === 'connected';
-    root.innerHTML = `
-      <div class="menu-head">
-        <h1>HomeBase</h1>
-        <p class="muted">${greeting()}</p>
-      </div>
+    $('[data-greeting]').textContent = greeting();
+    $('[data-menu-body]').innerHTML = `
       <div class="menu-grid">
         ${TOOLS.filter((t) => !t.hidden).map((t) => `
           <a class="tile-tool" href="#/${t.id}" style="--tl:${t.color};--td:${t.dark}">
@@ -123,8 +136,74 @@ function renderMenu(root) {
         ${icon('chev', 'chev')}
       </a>`;
   };
-  draw();
-  return sync.onState(draw);
+
+  let searchId = 0;
+  const runSearch = async () => {
+    const q = input.value.trim();
+    lastQuery = q;
+    const id = ++searchId;
+    const box = $('[data-results]');
+    $('[data-menu-body]').hidden = !!q;
+    if (!q) { box.innerHTML = ''; return; }
+    const hooks = await loadHooks();
+    if (id !== searchId) return; // a newer search started while loading
+    const groups = hooks.filter((h) => h.search).map((h) => {
+      let res = [];
+      try { res = h.search(q); } catch (e) { console.error(e); }
+      return { tool: h.tool, res };
+    }).filter((g) => g.res.length).sort((a, b) => b.res[0].score - a.res[0].score);
+    const total = groups.reduce((n, g) => n + g.res.length, 0);
+    box.innerHTML = total ? `<p class="small muted gs-count">${plural(total, 'result')}</p>${groups.map((g) => `
+      <section class="gs-group" style="--tl:${g.tool.color};--td:${g.tool.dark}"><h2 class="section-title"><span aria-hidden="true">${g.tool.emoji}</span> ${esc(g.tool.name)} <span class="muted">${g.res.length > 6 ? `top 6 of ${g.res.length}` : ''}</span></h2>
+        <div class="list">${g.res.slice(0, 6).map((r) => `<a class="list-item gs-hit" href="${esc(r.href)}"><div class="grow"><div class="row-title">${hl(r.title, q)}</div>${r.sub ? `<div class="small muted">${hl(r.sub, q)}</div>` : ''}</div>${icon('chev', 'chev')}</a>`).join('')}</div>
+      </section>`).join('')}`
+      : `<div class="empty"><div class="art">🔎</div><p class="muted">Nothing found for “${esc(q)}”.</p></div>`;
+  };
+  const onInput = debounce(runSearch, 90);
+  input.addEventListener('input', onInput);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { input.value = ''; runSearch(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); root.querySelector('.gs-hit')?.focus(); }
+    if (e.key === 'Enter') { const first = root.querySelector('.gs-hit'); if (first) location.hash = first.getAttribute('href'); }
+  });
+  $('[data-results]').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const hits = [...root.querySelectorAll('.gs-hit')];
+    const i = hits.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    if (e.key === 'ArrowUp' && i === 0) input.focus(); else hits[Math.max(0, Math.min(hits.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
+  });
+  // "/" jumps to search from anywhere on the menu.
+  const slash = (e) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); input.focus(); } };
+  document.addEventListener('keydown', slash);
+
+  drawBody();
+  if (lastQuery) runSearch();
+  const offSync = sync.onState(drawBody);
+  const refreshGreeting = debounce(() => { const g = $('[data-greeting]'); if (g) g.textContent = greeting(); }, 300);
+  const offStore = store.onChange(({ changes }) => {
+    if (!changes.some((c) => c.c !== '_local')) return;
+    refreshGreeting();
+    if (input.value.trim()) onInput();
+  });
+  return () => { offSync(); offStore(); document.removeEventListener('keydown', slash); };
+}
+
+/** Bold the matching words (matched on the plain text, then made safe for HTML). */
+function hl(text, q) {
+  const t = String(text ?? '');
+  const lower = t.toLowerCase();
+  const marks = new Array(t.length).fill(false);
+  for (const w of q.toLowerCase().split(/\s+/).filter((x) => x.length > 1)) {
+    for (let i = lower.indexOf(w); i >= 0; i = lower.indexOf(w, i + w.length)) marks.fill(true, i, i + w.length);
+  }
+  let out = '', open = false;
+  for (let i = 0; i < t.length; i++) {
+    if (marks[i] !== open) { out += marks[i] ? '<mark>' : '</mark>'; open = marks[i]; }
+    out += esc(t[i]);
+  }
+  return out + (open ? '</mark>' : '');
 }
 
 function greeting() {

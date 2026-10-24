@@ -1,6 +1,6 @@
 // HomeBase service worker: whole app available offline + cached cover/product images.
 // The file list and VERSION are updated by: npm run sw
-const VERSION = 'homebase-b9542ca07096';
+const VERSION = 'homebase-0ca6bd128fba';
 const SHELL = [
   './',
   'index.html',
@@ -15,7 +15,9 @@ const SHELL = [
   'js/core/locations.js',
   'js/core/migrate.js',
   'js/core/people.js',
+  'js/core/reminders.js',
   'js/core/scanner.js',
+  'js/core/search.js',
   'js/core/store.js',
   'js/core/ui.js',
   'js/settings/backup.js',
@@ -28,6 +30,7 @@ const SHELL = [
   'js/sync/supabase.js',
   'js/tools/golf/analysis.js',
   'js/tools/golf/golfers.js',
+  'js/tools/golf/hooks.js',
   'js/tools/golf/index.js',
   'js/tools/golf/record.js',
   'js/tools/golf/sensors.js',
@@ -35,6 +38,7 @@ const SHELL = [
   'js/tools/inventory/add.js',
   'js/tools/inventory/data.js',
   'js/tools/inventory/form.js',
+  'js/tools/inventory/hooks.js',
   'js/tools/inventory/index.js',
   'js/tools/inventory/labels.js',
   'js/tools/inventory/lookup.js',
@@ -42,6 +46,7 @@ const SHELL = [
   'js/tools/library/book-form.js',
   'js/tools/library/book.js',
   'js/tools/library/data.js',
+  'js/tools/library/hooks.js',
   'js/tools/library/index.js',
   'js/tools/library/isbn.js',
   'js/tools/library/library.js',
@@ -66,6 +71,7 @@ const SHELL = [
   'js/tools/sports/dashboard.js',
   'js/tools/sports/export.js',
   'js/tools/sports/hockey.js',
+  'js/tools/sports/hooks.js',
   'js/tools/sports/index.js',
   'js/tools/sports/lineup.js',
   'js/tools/sports/live.js',

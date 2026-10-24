@@ -410,3 +410,10 @@ body.nav-hidden #toasts { bottom: calc(16px + var(--safe-b)); }
 .skip-link { position: absolute; left: 8px; top: -60px; z-index: 1000; padding: 10px 16px; border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); font-weight: 700; }
 .skip-link:focus { top: 8px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+/* start menu search */
+.global-search { margin: 4px 0 16px; }
+.global-search .search { max-width: 640px; }
+.gs-group { margin-bottom: 14px; }
+.gs-group .section-title span[aria-hidden] { font-size: 1.1em; }
+.gs-hit mark { background: color-mix(in srgb, var(--tool, var(--accent)) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.gs-count { margin: 0 0 8px; }
