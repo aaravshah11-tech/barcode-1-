@@ -1,22 +1,52 @@
 {
-  "name": "Shelf — home library",
-  "short_name": "Shelf",
-  "description": "Catalogue the books in your house by scanning their barcodes.",
+  "name": "HomeBase",
+  "short_name": "HomeBase",
+  "description": "Your home toolkit: library, inventory, sports stats, match photography and golf swing analysis.",
   "start_url": "./#/",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#f6f3ee",
   "theme_color": "#b4532a",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
   ],
   "shortcuts": [
-    { "name": "Scan a book", "url": "./#/scan" },
-    { "name": "Batch scan", "url": "./#/scan/batch" },
-    { "name": "Where is it?", "url": "./#/scan/where" }
+    {
+      "name": "Scan a book",
+      "url": "./#/library/scan"
+    },
+    {
+      "name": "Inventory: add / scan",
+      "url": "./#/inventory/add"
+    },
+    {
+      "name": "Sports",
+      "url": "./#/sports"
+    },
+    {
+      "name": "Record a golf swing",
+      "url": "./#/golf"
+    }
   ]
 }

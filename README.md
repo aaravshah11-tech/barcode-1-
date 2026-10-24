@@ -1,196 +1,160 @@
-# 📚 Shelf: your home library
+# 🏠 HomeBase
 
-Shelf catalogues the books in your house. **Scan a book's barcode with your phone and it shows up on your computer straight away.** Your phone becomes a barcode reader for your computer.
+One app, several tools, on your **phone** (scanning, tapping, motion) and your **computer** (big dashboards, stats, editing, photos). Anything you do on one shows up live on the other.
 
-- Works on phones, tablets and computers in the browser. Install it to your home screen like an app.
-- Works offline. Your library is stored on each device; nothing goes to a paid service.
-- Free to host on GitHub Pages or Netlify.
+| Tool | Phone | Computer |
+|---|---|---|
+| 📚 **Library** | Scan book barcodes, batch-scan a shelf, “Where is it?” | Cover grid/list, search, filters, stats |
+| 📦 **Inventory** | Scan product barcodes or snap a photo, scan box QR labels | Search, filters, places, print QR labels |
+| 🏆 **Sports** — Rugby, Cricket, Hockey | Big one-tap logging pad, match clock, undo | Live dashboard, scorecards, season stats, leaderboards, charts |
+| 📸 **Match Photography** | Camera-clock sync screen, moment tagging, shot checklist, where-to-stand tips, settings card + sunset | Import a folder, auto-sort photos by moment, cull with the keyboard, export picks with captions + Lightroom XMP |
+| ⛳ **Golf Swing** | Record swings with the motion sensors | Motion graphs, compare two swings, trends by club/result |
+| ⚙️ **Settings** | Pair devices | House locations, teams & players, backup, CSV exports |
 
----
-
-## What it does
-
-| | |
-|---|---|
-| **Scan** | Point your phone's camera at the barcode on the back of a book (EAN-13 / ISBN-13, or type an ISBN-10/13). |
-| **Auto-fill** | Looks the book up on **Open Library**, with **Google Books** filling any gaps: title, subtitle, authors, cover, publisher, year, pages, genres, description and language. |
-| **Location** | Room → Bookcase/Area → Shelf, e.g. *Living room › Tall bookcase › Shelf 3*. It remembers the last place you used. |
-| **Where is it?** | Scan a book, or search by title or author, and Shelf shows where it should be (and warns you if it's lent out). |
-| **Duplicate check** | Scan a book you already have and Shelf shows where it lives instead of adding it again. |
-| **Your copy** | Owner (family member), read / reading / unread, 1–5 stars, notes, date added, lent to (name + date), favourite. |
-| **Library** | Cover grid or list. Search, filter (room, author, genre, status, owner, lent out, favourites) and sort (title, author, date added, rating, location). |
-| **Batch mode** | Set the location once, then scan book after book. Each one saves instantly with a beep (and a buzz on Android). |
-| **Stats** | Total books and pages, books per room and bookcase, top authors and genres, read vs unread. |
-| **Backup** | Export JSON (full backup) and CSV (spreadsheet). Import a JSON backup. |
-| **Phone ↔ computer** | Link a phone to a computer with a QR code. Changes on either device appear on the other live. |
-
-If a book isn't found online, Shelf opens a form so you can type it in and take a photo of the cover. If you're offline, you can still save the book; Shelf fills in the details when you're back online.
+Your old **Shelf** books, rooms and pairing are moved into HomeBase automatically the first time it opens.
 
 ---
 
-## 1. Put it online for free (GitHub Pages)
+## 1. Put it online (free)
 
-Phones only allow the camera on **https://** websites, so the app needs to be online. GitHub Pages is free and gives you https automatically.
+Phones only allow the camera and motion sensors on **https://** sites, so HomeBase must be online.
 
-1. **Get the code onto your default branch.** The code is on the branch `claude/elegant-keller-rv8z5c`. On GitHub, open the repository, click **Pull requests → New pull request**, choose that branch, then **Create pull request → Merge**. Or skip this and pick that branch in step 3.
-2. On GitHub, open your repository and click **Settings** (top right of the repo).
-3. In the left menu click **Pages**. Under **Build and deployment**:
-   - **Source:** *Deploy from a branch*
-   - **Branch:** `main` (or the branch above), folder **`/ (root)`**, then **Save**.
-4. Wait 1–2 minutes, then refresh the page. A box appears saying **"Your site is live at …"**. For this repo it will be:
-   **`https://aaravshah11-tech.github.io/barcode-1-/`**
-5. Open that link on your phone and your computer. Done!
+**GitHub Pages** (this repo is already set up for it):
+1. On GitHub open **aaravshah11-tech/barcode-1-** › **Settings** › **Pages**.
+2. **Source:** *Deploy from a branch*. **Branch:** `claude/elegant-keller-rv8z5c` (or `main` once merged), folder **/ (root)** › **Save**.
+3. After 1–2 minutes it’s live at **https://aaravshah11-tech.github.io/barcode-1-/**
 
-> **Private repo?** GitHub Pages on a private repository needs a paid GitHub plan. Either make the repo public (your *library data* is never stored in the repo, only the app code), or use Netlify below.
+**Or Netlify** (drag and drop): download the repo as a ZIP (**Code › Download ZIP**), unzip, go to **https://app.netlify.com/drop** and drag the folder in. You get an `https://….netlify.app` address.
 
-### Alternative: Netlify (drag and drop)
-
-1. Download the code: on GitHub click **Code → Download ZIP**, then unzip it.
-2. Go to **https://app.netlify.com/drop** and sign up for free.
-3. Drag the unzipped folder (the one containing `index.html`) onto the page.
-4. Netlify gives you an https link like `https://something.netlify.app`. Rename it under **Site configuration → Change site name**.
-
-### Updating later
-
-Push or merge changes to the branch and GitHub Pages redeploys in about a minute. Open the app twice to get the new version, or tap **Update** when Shelf says a new version is ready. When you change app files, also bump `VERSION` at the top of `sw.js` so phones notice the update quickly.
-
----
+**Updating:** push to the branch; the site updates in a minute. On your phone, close and reopen HomeBase (tap **Update** if asked).
 
 ## 2. Install it on your phone
 
-**iPhone / iPad (Safari):**
-1. Open your Shelf link in **Safari**.
-2. Tap the **Share** button (square with an arrow), then **Add to Home Screen**, then **Add**.
-3. Open Shelf from the home screen icon. The first time you scan, tap **Allow** for the camera.
+- **iPhone (Safari):** open the link › **Share** › **Add to Home Screen** › **Add**.
+- **Android (Chrome):** open the link › **⋮** › **Install app**.
+- **Computer (Chrome/Edge):** click the install icon in the address bar (optional).
 
-**Android (Chrome):**
-1. Open your Shelf link in **Chrome**.
-2. Tap **⋮** (top right), then **Install app** (or **Add to Home screen**).
-3. Open it from your home screen and allow the camera when asked.
+## 3. Pair your phone and computer
 
-**Computer (Chrome / Edge):** click the install icon at the right of the address bar to get Shelf in its own window. This is optional.
+There are two ways. You can start with Quick link and switch to Cloud sync later.
 
----
+### Option A — Quick link (no setup, works today)
+1. **Computer:** HomeBase › **Settings** › **Pairing** › **Quick link (no setup)**. A QR code appears.
+2. **Phone:** point the normal Camera app at the QR code and tap the link (or Settings › Pairing › *This is my phone*).
+3. Both show **Linked**.
 
-## 3. Use your phone as the scanner for your computer
+Works while **both devices have HomeBase open**. Data travels through free public relays, encrypted with your pairing code.
 
-1. On the **computer**, open Shelf and go to **Settings → Link phone & computer → "This is my computer"**. A QR code and a 10-character code appear.
-2. On the **phone**, scan that QR code with the normal camera app and open the link. Or, in Shelf: **Settings → Link phone & computer → "This is my phone"**, then scan the code or type it.
-3. Both screens now say **Linked**. Scan books on the phone (normal or **Batch** mode) and they pop up on the computer with a notification.
+### Option B — Cloud sync with Supabase (recommended: works any time, anywhere)
+Supabase is a free online database. About 5 minutes, done once, on your computer:
 
-Once linked, **the phone becomes a scanner only**: it shows just the scan screen (Add, Where is it?, Batch) with a **Scanner** badge at the top. The library, stats and settings live on the computer. To use the full app on the phone too, tap the **Scanner** badge, then **Use the full app on this phone**. Switch it back in **Settings → Scanner-only mode**.
+1. Go to **https://supabase.com** › **Start your project** › sign up (free) › **New project**. Pick any name and a database password (save it somewhere), choose the region closest to you, free plan › **Create**. Wait ~2 minutes.
+2. In the left menu open **SQL Editor** › **New query**. Open the file **`supabase/schema.sql`** from this repo (on GitHub: click it › **Raw** › select all › copy), paste it in, press **Run**. You should see “Success”.
+3. Left menu › **Authentication** › **Sign In / Providers** (may be called *Providers*) › turn on **Allow anonymous sign-ins** › **Save**.
+4. Left menu › **Project Settings** (cog) › **API** (or *Data API*). Copy the **Project URL** and the **anon public** key. *(Never use the `service_role` key.)*
+5. **Computer:** HomeBase › **Settings** › **Pairing** › **Cloud sync** › paste both › **Connect & create my household**.
+6. A QR code appears. **Phone:** scan it with the Camera app and open the link. Done — the badge says **Synced**.
 
-Good to know:
-- **Each device keeps a full copy** of the library. Edits on the computer (moving a book, marking it read) go to the phone too.
-- They sync **while both are open**. If the computer is off, the phone keeps everything and catches up automatically next time both are open. Keep Shelf open on the computer while you scan.
-- Messages go through three free public relays at once (EMQX, HiveMQ and Mosquitto), so linking keeps working if one is down. Everything is **encrypted on your device with a key made from your pairing code**, so the relays only see scrambled data. Nothing is stored on them.
-- It works whether the phone and computer are on the same Wi-Fi or not (even on mobile data).
-- It reconnects by itself after a reload, a sleep or a Wi-Fi drop. To stop linking: **Settings → Link phone & computer → Unlink**.
-- Anyone with your pairing code could join, so don't share it. Press **New code** to change it (then pair again).
+- Works on any network, even when the other device is switched off.
+- Each device also keeps its own copy, so everything works **offline**; changes upload when you’re back online.
+- The QR code is effectively a password for your data — don’t share it. **New code** makes old QR codes stop working.
+- To add another device (a tablet, a family member’s phone): show the QR again in Settings › Pairing.
 
----
+## 4. Before a match: camera clock sync (Match Photography)
 
-## 3b. No linking needed: use your iPhone as your Mac's camera
+Your camera’s clock is never exactly right. HomeBase measures how far off it is so photos can be matched to the moments you tag.
 
-Macs can use an iPhone as a webcam (Apple's **Continuity Camera**, macOS 13+ and iOS 16+). Shelf runs on the Mac and reads barcodes through the iPhone's camera, so books go straight into the Mac's library with nothing to link.
+1. **Phone:** Sports › 📸 Match Photography › **Clock sync** (or the ⏱️ tile on the match page). A big clock and a changing QR code appear.
+2. **Camera:** take **one photo of the phone screen**, filling most of the frame, in focus. (Do it before kick-off; once per camera per match.)
+3. That’s it. When you import the photos on the computer, HomeBase finds that photo, reads the exact time from the QR code, compares it to the photo’s EXIF time and works out the offset (e.g. “Camera 1m 24s fast”).
+   - If the QR can’t be read (blurry), use **Enter it by hand**: tap the clock photo and type the time shown (e.g. `14:32:07`).
 
-1. Make sure the iPhone and Mac are signed in to the **same Apple ID**, with **Wi-Fi and Bluetooth on** on both. Plugging the iPhone into the Mac with a cable makes it more reliable.
-2. On the iPhone: **Settings › General › AirPlay & Continuity** (older iOS: **AirPlay & Handoff**) › turn on **Continuity Camera**.
-3. Rest the iPhone **on its side (landscape), screen locked, back camera facing you**, on a stand or propped against something.
-4. On the Mac, open Shelf in **Safari or Chrome** and click **Scan**. Allow the camera.
-5. Shelf picks the iPhone automatically. If it shows the Mac's own camera instead, click the **⟳ switch-camera button** at the top right of the camera view and choose the iPhone.
-6. Hold each book's barcode in front of the iPhone, about 20 cm away.
+**During the match (phone):**
+- Open the match › **Tag moments**. Tap a shirt number (optional), then a moment: Try, Kick, Lineout, Scrum, Big tackle, Line break, Celebration, Team photo, Handshakes, Other.
+- If you’re also logging stats on the Rugby pad, those events (tries, kicks, lineouts…) count as tags automatically.
+- **Shot checklist** shows what you still haven’t got; **Where to stand** has tips per moment and an “I’m here” button.
+- **Camera settings** has starting settings for action/blur/team photos, an ISO guide for sun/cloud/floodlights, and the sunset time for the venue.
 
----
+**After the match (computer, Chrome or Edge):**
+1. Match › **Import & auto-sort** › **Choose folder** (your card or the folder you copied the photos to). Photos are read on your computer — nothing is uploaded; only file names, times, tags and ratings are saved.
+2. Check the clock result, adjust the **match window** (e.g. ±15 s) if needed. Photos are grouped like **“Try – #11 – 34:12”**.
+3. **Cull:** click a photo, then use the keyboard: **← →** move · **1–5** stars · **P** pick · **X** reject · **U** unflag · **C** compare (burst) · **Esc** close. Picks/rejects auto-advance.
+4. **Export picks:** choose a folder; HomeBase copies your picks into folders named by match and moment, writes **captions.csv**, and (optional) **XMP sidecars** with stars, keywords and caption for Lightroom (Lightroom reads sidecars for RAW files).
+5. **Photo stats:** keeper %, moments you keep missing, best standing spots.
 
-## 4. Run it on your own computer (optional, for tinkering)
+Photos with no EXIF time go in “No time info”. Safari/Firefox can import and cull but can’t write export folders (captions download still works).
 
-You need a small local web server, because opening `index.html` directly from disk won't work. Pick one:
+## 5. Using the other tools
 
-```bash
-# Python (already on Mac/Linux)
-python3 -m http.server 8080
+- **Library:** Scan (single), **Batch** (set the shelf once, then scan book after book), **Where is it?** (scan or search). Books not found online open a form where you can photograph the cover.
+- **Inventory:** **Add / scan** a product barcode (Open Food Facts, UPCitemdb) or add with a photo + name. **Labels** prints QR labels for boxes/cupboards — scan one with your phone camera to see what’s inside.
+- **House locations** (Settings): Room › Area (bookcase, cupboard, boxes…) › Shelf/Box. Shared by Library and Inventory; the last place you used is remembered.
+- **Sports:** set up teams and players once in **Settings › Teams & players** (paste a squad as “11 Jo Brown” lines; a player can be in several teams). Then Sports › Rugby/Cricket/Hockey › **New match**.
+  - **Rugby:** kick-off starts the clock; tap events, pick the player; yellow cards start a 10-minute sin-bin countdown; **Undo** removes the last event. Lengths are editable (2×40 down to 2×20 juniors).
+  - **Cricket:** choose striker, non-striker and bowler, then tap each ball (0–6, wide, no ball, bye, leg bye, wicket). Strike changes automatically; new batter/bowler prompts appear when needed; target and required rate show in the chase.
+  - **Hockey:** 4×15 by default; green (2 min) / yellow (5 min) suspensions count down.
+  - Open the match on the computer for the **live dashboard**; **Season stats** has records, form, leaderboards and charts.
+- **Golf Swing:** hold the phone in your glove/against the back of your hand or strap it to your forearm. Pick the club, tap **Ready** (iPhone asks to allow Motion — tap Allow), hold still until it says *Ready*, then swing. Tag the result (good/slice/hook/thin/fat/topped). Tempo, swing times, peak rotation and hand speed are **estimates** — great for comparing your own swings. On the computer: graphs, **Compare**, **Trends**.
 
-# or Node.js
-npx serve -l 8080 .
-```
+**Outdoor mode:** tap the ◐ button (top right) for black-and-white high contrast and bigger text — handy in sun or rain.
 
-Then open **http://localhost:8080** in your browser. The camera works on `localhost` on your computer. To scan with a phone, use the online (https) version from step 1.
+## 6. Backup & export
 
----
+Settings › **Backup**: one JSON file with everything (import it on any device; old Shelf backups work too), plus CSV spreadsheets per tool (books, inventory, matches, rugby/hockey events, cricket ball-by-ball, photo ratings and tags, golf swings).
 
-## Tips
-
-- **Fast shelf-by-shelf cataloguing:** Scan → **Batch** → choose the room, bookcase and shelf → scan every book on that shelf → tap **Change** → next shelf.
-- **Dark shelves?** Tap the torch button on the camera view (Android Chrome).
-- **Rooms, bookcases and family members** can be added on the fly with the **+** chips, or managed in **Settings**. Deleting a room never deletes books; they just become "No location".
-- **Back up** now and then: **Settings → Backup (JSON)**. Clearing your browser's website data deletes the library on that device.
-
-## Troubleshooting
+## 7. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| "Camera needs a secure (https) link" | Use the `https://…github.io/…` link, not a `http://` or local file. |
-| "Camera permission is off" | iPhone: **Settings → Safari → Camera → Allow**, or in Safari tap **aA → Website Settings → Camera**. Android: tap the 🔒 next to the address → **Permissions → Camera**. |
-| Barcode won't scan | Hold the book 15–25 cm away, fill the box with the barcode, and avoid glare. Or type the 13 digits under the camera. |
-| "Not found online" | Some books (old, local or self-published) aren't in either database. Fill in the form; a cover photo makes it look nice. |
-| Phone says "Waiting for your computer" | Open Shelf on the computer. It connects by itself within a few seconds. Both need internet. |
-| "Lost connection to the relays" | Check the internet connection. Shelf keeps retrying. Your scans are saved on the phone meanwhile. |
-| Book info is missing on books added offline | Go online and it fills in automatically, or tap **Settings → Fetch details**. |
+| Camera or motion doesn’t work | Use the **https://** link. iPhone: Settings › Safari › Camera / Motion & Orientation Access › Allow. Android: tap 🔒 by the address › Permissions. |
+| “Anonymous sign-ins are turned off” | Supabase › Authentication › Sign In / Providers › allow anonymous sign-ins. |
+| “The database isn’t set up yet” | Run `supabase/schema.sql` in Supabase’s SQL Editor (step 3B.2). |
+| “Pairing code not valid” | On the computer show a fresh QR (Settings › Pairing) and scan again. |
+| Badge says “Offline · saved here” | Fine — changes upload automatically when you’re back online. |
+| Photos all in “Not near a moment” | Check the camera clock offset (shoot the clock next time, or enter it by hand) and widen the match window. |
+| Photo folder “needs reconnecting” | Click **Reconnect folder** (Chrome asks for permission again after a restart). |
+| Golf: “No motion sensors found” | Use your phone, not a laptop. Try **demo swing** to see how it works. |
+
+## 8. Privacy
+
+- Everything is stored on your devices (IndexedDB). With Cloud sync it’s also in **your own** Supabase project; only your paired devices can read it (row-level security).
+- Match photos never leave your computer — only tags, ratings and file names are stored.
+- Lookups go to Open Library, Google Books, Open Food Facts, UPCitemdb and Open-Meteo (sunset); no account or key needed.
 
 ---
 
-## How it's built
+## For developers
 
-Plain HTML, CSS and JavaScript with ES modules. No build step and no frameworks.
+Plain HTML/CSS/JavaScript ES modules — **no build step**. Run locally with `npx serve -l 8080 .` or `python3 -m http.server 8080` and open http://localhost:8080.
 
 ```
-index.html              App shell (header, bottom tabs / desktop sidebar)
-manifest.webmanifest    PWA manifest (name, icons, home-screen shortcuts)
-sw.js                   Service worker: offline app + cover image cache
-css/app.css             All styles, light + dark theme
-js/
-  app.js                Boot, hash router, header status, service worker registration
-  store.js              ★ Data layer: the only code that touches the database
-  db.js                 IndexedDB wrapper (used only by store.js)
-  isbn.js               ISBN-10/13 validation and conversion
-  lookup.js             Open Library + Google Books lookup and merging
-  pending.js            Fills in books saved offline once you're online
-  scanner.js            Camera scanning (html5-qrcode / ZXing / native BarcodeDetector)
-  feedback.js           Beep + vibration
-  backup.js             JSON / CSV export, JSON import
-  ui.js                 Toasts, sheets, dialogs, covers, icons
-  sync/relay-link.js    Phone ↔ computer link (encrypted, via public MQTT relays)
-  components/           Location picker, book form, owner/status/rating pickers
-  views/                library, scan, book, stats, settings, link
-vendor/                 html5-qrcode 2.3.8, MQTT.js 5.10.4, qrcode-generator 1.4.4 (bundled for offline use)
-icons/                  App icons
-tests/                  Unit tests + browser end-to-end tests
+index.html · manifest.webmanifest · sw.js (offline) · netlify.toml
+css/app.css            design system (light/dark/outdoor contrast)    css/tools.css  tool layouts
+js/app.js              boot, router, start menu, header
+js/tools.js            ★ tool registry — add a tool here
+js/core/               store (generic synced records), db, ui, scanner, locations, people, charts, csv, migrate
+js/sync/               manager · supabase (cloud) · relay (quick link)
+js/settings/           locations, teams, pairing, backup
+js/tools/<tool>/       library · inventory · sports · photo · golf
+supabase/schema.sql    tables, row-level security, newest-wins trigger, realtime
+scripts/update-sw.mjs  refreshes the offline file list (npm run sw)
+tests/                 unit tests (*.test.mjs) + browser tests (e2e-*.cjs)
 ```
 
-### Data model
+**Adding a tool:** create `js/tools/mytool/index.js` exporting `{ routes: { '': render, … }, nav: […], exports: [CSV exports] }`, add one line to `js/tools.js`, run `npm run sw`. Save data with `store.put('mycollection', {...})` — it syncs and backs up automatically.
 
-Each book is one record in IndexedDB (`books` store). Rooms, with their bookcases inside, are in `rooms`, and settings are in `meta`. Every synced record carries `updatedAt` and `updatedBy`. Deletes leave a small "tombstone" so they sync too. Merging is "last write wins".
+**Data model:** every record lives in a named collection with `updatedAt`/`updatedBy`; deletes are tombstones; merging is newest-wins (same rule enforced by the Supabase trigger).
 
-### Adding cloud sync later (e.g. Supabase)
-
-The data layer was built for this. A sync module only needs these `store.js` functions, which the phone↔computer link (`relay-link.js`) already uses:
-
-- `store.onChange(fn)`: get every local change and push it up.
-- `store.mergeRecords(data)`: apply records downloaded from the cloud (newer wins).
-- `store.manifest()` / `store.recordsNewerThan(m)`: work out what the other side is missing.
-
-A Supabase version would have tables `books`, `rooms` and `meta` (columns: `id`, `data jsonb`, `updated_at`, `library_id`). It would upsert on `onChange`, use Supabase Realtime to receive changes and pass them to `mergeRecords`, and add a sign-in so the family shares one `library_id`. You would create it as `js/sync/supabase.js` next to `relay-link.js`; nothing else needs to change.
-
-### Tests
-
+**Tests:**
 ```bash
-npm test                       # ISBN maths + lookup parsing with recorded API responses
-npm run test:live              # real lookups for 9780747532699 and 9780141439518 (needs internet)
-
-# Browser tests (Playwright + Chromium): serve the app on :8080 first
-node tests/e2e.cjs             # add / duplicate / not-found / batch / where / library / stats / backup
-node tests/link-e2e.cjs x.y4m  # two-device link test (needs local MQTT relays, see file header)
+npm install            # only needed for the database schema test (PGlite)
+npm test               # unit tests: ISBN, lookups, scoring engines, photo matching, golf analysis, Supabase schema
+npm run test:live      # real ISBN lookups (needs internet)
+# Browser tests (Playwright): serve on :8080 first; sports/core tests also need MQTT test relays on :8888/:8889
+node tests/e2e-library.cjs   node tests/e2e-inventory.cjs   node tests/e2e-sports.cjs
+node tests/e2e-photo.cjs     node tests/e2e-golf.cjs        node tests/e2e-core.cjs
+node tests/supabase-e2e.cjs  node tests/e2e-offline.cjs
+python3 tests/make-photo-fixtures.py   # regenerates the sample JPEGs with EXIF times
 ```
 
-Credits: book data from [Open Library](https://openlibrary.org) and [Google Books](https://books.google.com). Barcode reading by [html5-qrcode](https://github.com/mebjas/html5-qrcode) (ZXing). Device linking by [MQTT.js](https://github.com/mqttjs/MQTT.js) over the free public brokers from EMQX, HiveMQ and Eclipse Mosquitto.
+Credits: Open Library, Google Books, Open Food Facts, UPCitemdb, Open-Meteo, html5-qrcode (ZXing), qrcode-generator, MQTT.js, supabase-js, exifr.

@@ -1,7 +1,7 @@
 // Live check against the real Open Library / Google Books APIs.
 // Run:  node tests/live-lookup.mjs  [isbn ...]
-import { lookupIsbn } from '../js/lookup.js';
-import { toIsbn13 } from '../js/isbn.js';
+import { lookupIsbn } from '../js/tools/library/lookup.js';
+import { toIsbn13 } from '../js/tools/library/isbn.js';
 
 const isbns = process.argv.slice(2).length ? process.argv.slice(2) : ['9780747532699', '9780141439518'];
 for (const raw of isbns) {

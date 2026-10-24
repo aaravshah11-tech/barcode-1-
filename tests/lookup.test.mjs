@@ -2,7 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { lookupIsbn, parseOpenLibrary, parseGoogle, cleanSubjects, languageName } from '../js/lookup.js';
+import { lookupIsbn, parseOpenLibrary, parseGoogle, cleanSubjects, languageName } from '../js/tools/library/lookup.js';
 
 const fx = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8'));
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });

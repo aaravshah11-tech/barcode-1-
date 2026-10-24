@@ -61,8 +61,8 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   await page.keyboard.press('4');
   await page.keyboard.press('p');   // pick + auto-advance
   await page.keyboard.press('x');   // reject 2nd
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('c');   // compare mode
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('c');   // compare this photo with the next one
   await page.waitForSelector('.v-stage.two');
   await shot(page, 'photo-viewer');
   await page.keyboard.press('Escape');
