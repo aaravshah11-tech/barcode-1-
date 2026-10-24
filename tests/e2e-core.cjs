@@ -85,8 +85,9 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   await phone.goto(BASE + '?nosw#/');
   await phone.waitForSelector('.menu-grid');
   await phone.waitForFunction(() => document.querySelector('#sync-pill')?.textContent.includes('Linked'), null, { timeout: 15000 });
-  const phoneHas = await phone.evaluate(async () => (await import('./js/core/store.js')).all('players').length);
-  check(phoneHas === 3, 'phone received the 3 players from the computer');
+  // "Linked" shows the moment the devices meet; the data swap follows a moment later.
+  const phoneHas = await phone.waitForFunction(async () => (await import('./js/core/store.js')).all('players').length === 3, null, { timeout: 10000 }).then(() => 3, async () => phone.evaluate(async () => (await import('./js/core/store.js')).all('players').length));
+  check(phoneHas === 3, `phone received the 3 players from the computer (${phoneHas})`);
   if (SHOTS) await phone.screenshot({ path: path.join(SHOTS, 'core-menu-phone.png') });
   await phone.evaluate(async () => (await import('./js/core/store.js')).put('items', { name: 'Tent' }));
   await comp.waitForSelector('.toast >> text=Tent', { timeout: 10000 });
