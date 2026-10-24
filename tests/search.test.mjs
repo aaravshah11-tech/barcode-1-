@@ -17,13 +17,16 @@ test('search: accents, every word must match, better matches rank higher', () =>
   assert.ok(!sameCode('', ''));
 });
 
-test('search: 5,000 records in well under 50 ms', () => {
-  const list = Array.from({ length: 5000 }, (_, i) => ({ title: `Book number ${i} about rivers and stones`, author: `Author ${i % 50}` }));
+test('search: 5,000 records, well under 40 ms per keystroke', () => {
+  const list = Array.from({ length: 5000 }, (_, i) => ({ title: `Book number ${i} about rivers and stones${i % 7 ? '' : ' café'}`, author: `Author ${i % 50}` }));
+  const map = (b) => ({ fields: [[b.title, 3], [b.author, 2]] });
+  // Time searches the way you'd type them (the first one includes warming up).
   const t = performance.now();
-  const r = searchList(list, 'river author 7', (b) => ({ fields: [[b.title, 3], [b.author, 2]] }));
-  const ms = performance.now() - t;
+  let r;
+  for (const q of ['r', 'ri', 'riv', 'river', 'river author 7']) r = searchList(list, q, map);
+  const ms = (performance.now() - t) / 5;
   assert.ok(r.length > 0);
-  assert.ok(ms < 50, `${ms} ms`);
+  assert.ok(ms < 40, `${ms.toFixed(1)} ms per keystroke`);
 });
 
 test('reminders: lent out over 30 days, old records without a date', () => {

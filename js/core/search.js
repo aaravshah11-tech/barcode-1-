@@ -1,8 +1,20 @@
 // Global search: every tool can offer results through its hooks.js `search(q)`.
 // The scoring here is pure (no DOM, no storage) and unit tested.
 
-/** Lower-case, accents removed, so "Café" matches "cafe". */
-export const norm = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+/** Lower-case, accents removed, so "Café" matches "cafe". Plain-ASCII text (most of it) takes a fast path;
+ *  other results are cached because the same titles are searched again on every keystroke. */
+const normCache = new Map();
+export function norm(s) {
+  const str = String(s ?? '');
+  if (/^[\x00-\x7f]*$/.test(str)) return str.toLowerCase();
+  let v = normCache.get(str);
+  if (v === undefined) {
+    v = str.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+    if (normCache.size > 20000) normCache.clear();
+    normCache.set(str, v);
+  }
+  return v;
+}
 export const tokens = (q) => norm(q).split(/[\s,]+/).filter(Boolean);
 
 /**
