@@ -79,6 +79,19 @@ export function renderList(root) {
   return store.onChange(debounce(draw, 80));
 }
 
+/** Warranties, receipts and manuals linked to this item (from the Warranties tool). */
+function docsHtml(i) {
+  const docs = store.all('docs').filter((d) => d.itemId === i.id);
+  const now = Date.now();
+  const line = (d) => {
+    const left = d.expiry ? Math.round((new Date(d.expiry + 'T00:00').getTime() - now) / 86400000) : null;
+    return `<a class="list-item" href="#/warranties/doc/${esc(d.id)}"><div class="grow"><b>${esc(d.title)}</b><div class="small muted">${d.expiry ? (left < 0 ? `Ended ${esc(formatDate(d.expiry))}` : `Until ${esc(formatDate(d.expiry))}`) : 'No end date'}</div></div>${icon('chev', 'chev')}</a>`;
+  };
+  return `<div class="section"><div class="section-title">Warranty & documents</div>
+    ${docs.length ? `<div class="list">${docs.map(line).join('')}</div>` : ''}
+    <a class="btn btn-sm" href="#/warranties/add/${esc(i.id)}" style="margin-top:8px">${icon('plus')} Add warranty or receipt</a></div>`;
+}
+
 export function renderItem(root, [id]) {
   const draw = () => {
     const i = D.item(id);
@@ -95,6 +108,7 @@ export function renderItem(root, [id]) {
       <div class="section"><div class="section-title">Lent out</div><div class="card">${i.lentTo
         ? `<div style="display:flex;align-items:center;gap:12px"><div style="flex:1"><b>${esc(i.lentTo)}</b><div class="muted small">since ${esc(formatDate(i.lentDate))}</div></div><button class="btn btn-sm btn-primary" data-returned>Got it back</button></div>`
         : `<form data-lend style="display:flex;gap:8px"><input name="who" placeholder="Lent to (name)" autocomplete="off"><button class="btn">Lend</button></form>`}</div></div>
+      ${docsHtml(i)}
       <div class="section"><div class="section-title">Details</div><dl class="card details">
         <dt>Condition</dt><dd>${esc(D.CONDITIONS.find((c) => c.id === i.condition)?.label || '')}</dd>
         ${i.owner ? `<dt>Owner</dt><dd>${esc(i.owner)}</dd>` : ''}${i.barcode ? `<dt>Barcode</dt><dd>${esc(i.barcode)}</dd>` : ''}
@@ -124,7 +138,7 @@ export function renderItem(root, [id]) {
     }
   });
   draw();
-  return store.onChange(({ changes }) => { if (changes.some((c) => c.c === 'items' && c.record.id === id) && !root.contains(document.activeElement)) draw(); });
+  return store.onChange(({ changes }) => { if (changes.some((c) => (c.c === 'items' && c.record.id === id) || (c.c === 'docs' && (c.record.itemId === id || c.prev?.itemId === id))) && !root.contains(document.activeElement)) draw(); });
 }
 
 /** "What's inside?" for a room / area / box — opened from a QR label. */

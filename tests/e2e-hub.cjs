@@ -165,6 +165,64 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   check(true, 'pantry is searchable from the start menu');
   await page.fill('[data-gq]', '');
 
+  // ---- Warranties & documents ----
+  await page.goto(BASE + '?nosw#/inventory/item/i1');
+  await page.click('a:has-text("Add warranty or receipt")');
+  await page.waitForSelector('.doc-form');
+  check((await page.inputValue('.doc-form [name=title]')) === 'Cordless drill' && (await page.inputValue('.doc-form [name=itemId]')) === 'i1', 'started from the item: title and link filled in');
+  check(await page.isVisible('.doc-form [data-box] [data-spot="bx"][aria-pressed="true"]'), 'box location starts at where the item lives (Garage › Metal shelving › Box 4)');
+  const bought = iso(Date.now() - 710 * DAY);
+  await page.fill('.doc-form [name=purchaseDate]', bought);
+  await page.click('.doc-form [data-months="24"]');
+  const ends = await page.inputValue('.doc-form [name=expiry]');
+  check(ends > iso(Date.now()) && ends < iso(Date.now() + 30 * DAY), `“2 years from purchase” sets the end date (${ends})`);
+  await page.fill('.doc-form [name=seller]', 'Toolstation');
+  await page.setInputFiles('.doc-form [data-photo][multiple]', [path.join(__dirname, 'fixtures/photos/IMG_0101.JPG'), path.join(__dirname, 'fixtures/photos/IMG_0102.JPG')]);
+  await page.waitForFunction(() => document.querySelectorAll('.doc-form .doc-img').length === 2);
+  await page.click('.doc-form button.btn-primary');
+  await page.waitForSelector('.doc-status');
+  const docText = await page.textContent('#view');
+  check(docText.includes('left') && docText.includes('Cordless drill') && docText.includes('Garage') && docText.includes('Box 4') && docText.includes('Toolstation'), 'document page: time left, linked item, where the box is, shop');
+  const img = await page.evaluate(async () => { const s = await import('./js/core/store.js'); const i = s.all('docImages'); return { n: i.length, kb: Math.round(Math.max(...i.map((x) => x.data.length)) / 1024) }; });
+  check(img.n === 2 && img.kb < 400, `2 receipt photos saved separately, small enough to sync (${img.kb} KB)`);
+  await page.click('.doc-img >> nth=0');
+  await page.waitForSelector('.sheet .doc-full');
+  check(true, 'photo opens full size');
+  await shot('hub-warranty');
+  await page.keyboard.press('Escape');
+  await page.click('.sheet [data-close]').catch(() => {});
+  await page.goto(BASE + '?nosw#/inventory/item/i1');
+  await page.waitForSelector('.list-item:has-text("Cordless drill")');
+  check((await page.textContent('#view')).includes('Until'), 'the item page shows its warranty');
+  await page.goto(BASE + '?nosw#/warranties');
+  await page.waitForSelector('.doc-group');
+  check((await page.textContent('.doc-group.g-soon')).includes('Cordless drill'), 'listed under “Running out soon”');
+  // Edit: remove one photo
+  await page.click('.doc-group .row');
+  await page.click('a:has-text("Edit")');
+  await page.waitForSelector('.doc-form .doc-img');
+  await page.click('.doc-form [data-rm="1"]');
+  await page.click('.doc-form button.btn-primary');
+  await page.waitForSelector('.doc-status');
+  check(await page.evaluate(async () => (await import('./js/core/store.js')).all('docImages').length === 1), 'removing a photo while editing deletes it');
+  // Delete + undo brings photos back too
+  await page.click('[data-del]');
+  await page.click('.sheet [data-ok]');
+  await page.waitForSelector('.toast button:has-text("Undo")');
+  await page.click('.toast button:has-text("Undo")');
+  await page.waitForFunction(async () => { const s = await import('./js/core/store.js'); return s.all('docs').length === 1 && s.all('docImages').length === 1; });
+  check(true, 'delete → undo restores the document and its photo');
+  await page.goto(BASE + '?nosw#/');
+  await page.waitForSelector('.rem-card');
+  await page.click('.rem-card');
+  await page.waitForSelector('.rem');
+  check((await page.textContent('#view')).includes('Cordless drill') && (await page.textContent('#view')).includes('Runs out'), 'warranty running out shows in Reminders');
+  await page.goto(BASE + '?nosw#/');
+  await page.fill('[data-gq]', 'toolstation');
+  await page.waitForSelector('.gs-group:has-text("Warranties") .gs-hit');
+  check(true, 'documents searchable by shop');
+  await page.fill('[data-gq]', '');
+
   check(!errors.length, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
   console.log(failures ? `\n${failures} FAILED` : '\nAll hub checks passed');

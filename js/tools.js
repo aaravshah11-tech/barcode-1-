@@ -13,6 +13,7 @@ export const TOOLS = [
   { id: 'library', name: 'Library', emoji: '📚', color: '#b4532a', dark: '#e3804f', desc: 'Scan and find books in the house', load: () => import('./tools/library/index.js'), hooks: () => import('./tools/library/hooks.js') },
   { id: 'inventory', name: 'Inventory', emoji: '📦', color: '#2f6f8f', dark: '#5fb0d6', desc: 'Track stuff, boxes and cupboards', load: () => import('./tools/inventory/index.js'), hooks: () => import('./tools/inventory/hooks.js') },
   { id: 'pantry', name: 'Pantry', emoji: '🥫', color: '#5b7a1f', dark: '#a7cf5b', desc: 'Food, use-by dates and the shopping list', load: () => import('./tools/pantry/index.js'), hooks: () => import('./tools/pantry/hooks.js') },
+  { id: 'warranties', name: 'Warranties & documents', emoji: '🧾', color: '#46578a', dark: '#9fb2e8', desc: 'Receipts, warranty end dates, manuals and where the box is', load: () => import('./tools/warranties/index.js'), hooks: () => import('./tools/warranties/hooks.js') },
   { id: 'sports', name: 'Sports', emoji: '🏆', color: '#2e7d4f', dark: '#5cc489', desc: 'Rugby, cricket, hockey stats & match photography', load: () => import('./tools/sports/index.js'), hooks: () => import('./tools/sports/hooks.js') },
   // Match Photography is opened from the Sports menu (hidden from the start menu).
   { id: 'photo', name: 'Match Photography', emoji: '📸', color: '#a8324a', dark: '#ef7f95', desc: 'Touchline assistant for your camera', parent: 'sports', hidden: true, load: () => import('./tools/photo/index.js') },

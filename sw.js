@@ -1,6 +1,6 @@
 // HomeBase service worker: whole app available offline + cached cover/product images.
 // The file list and VERSION are updated by: npm run sw
-const VERSION = 'homebase-4604bbb06285';
+const VERSION = 'homebase-1b63f75c2825';
 const SHELL = [
   './',
   'index.html',
@@ -85,6 +85,10 @@ const SHELL = [
   'js/tools/sports/season.js',
   'js/tools/sports/setup.js',
   'js/tools/sports/summary.js',
+  'js/tools/warranties/data.js',
+  'js/tools/warranties/hooks.js',
+  'js/tools/warranties/index.js',
+  'js/tools/warranties/logic.js',
   'js/tools.js',
   'vendor/exifr.umd.js',
   'vendor/html5-qrcode.min.js',

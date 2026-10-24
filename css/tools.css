@@ -235,3 +235,18 @@ body:has(.undo-bar) #toasts { bottom: calc(84px + var(--safe-b)) !important; }
 .shop-item input { width: 22px; height: 22px; accent-color: var(--tool); }
 .shop-item.done .grow { text-decoration: line-through; color: var(--muted); }
 .shop-add { margin-bottom: 14px; }
+/* warranties & documents */
+.doc-thumb { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: var(--surface-2); flex: none; display: grid; place-items: center; font-size: 1.5rem; }
+.doc-status { display: flex; gap: 14px; align-items: center; }
+.doc-status.st-soon { border-color: var(--warn); background: var(--warn-soft); }
+.doc-status.st-expired { border-color: var(--danger); background: var(--danger-soft); }
+.doc-big { font-size: 2rem; }
+.doc-images { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+.doc-img { position: relative; width: 120px; height: 160px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); padding: 0; }
+.doc-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.doc-images.edit .doc-img { width: 96px; height: 128px; }
+.doc-x { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); color: #fff; width: 32px; height: 32px; }
+.doc-full { width: 100%; height: auto; border-radius: 8px; }
+.ex-active { color: var(--ok); }
+.ex-none { color: var(--muted); }
+a.loc-card { text-decoration: none; color: var(--text); display: flex; align-items: center; gap: 12px; }
