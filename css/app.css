@@ -427,3 +427,18 @@ body.nav-hidden #toasts { bottom: calc(16px + var(--safe-b)); }
 .rem-danger { border-left: 4px solid var(--danger); }
 .rem-warn { border-left: 4px solid var(--warn); }
 .rem-gone { opacity: .35; pointer-events: none; }
+/* updates */
+.cl-items { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+.cl-items li { margin: 2px 0; }
+.cl-new { border-left: 4px solid var(--tool, var(--accent)); }
+.upd-card { display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--text); margin-top: 16px; border-color: var(--tool, var(--accent)); }
+/* top-bar "Pair phone" button + QR pop-up */
+.pair-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: 600 .88rem var(--font); cursor: pointer; }
+.pair-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.pair-btn:hover { border-color: var(--tool, var(--accent)); }
+.pair-btn[hidden] { display: none; }
+.pair-sheet .qr { width: min(300px, 72vw); }
+.pair-lead { margin-top: 0; }
+.pair-status { margin-top: 10px; min-height: 1.4em; }
+.ok-text { color: var(--ok); }
+.ok-text svg, .pair-status svg { width: 16px; height: 16px; vertical-align: -3px; }

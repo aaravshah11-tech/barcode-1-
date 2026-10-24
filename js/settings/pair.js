@@ -5,7 +5,7 @@ import { esc, icon, loadScript, confirmDialog, toast, isPhone } from '../core/ui
 
 const { sb, relay } = sync;
 
-async function qrSvg(text) {
+export async function qrSvg(text) {
   await loadScript('vendor/qrcode.js');
   const qr = window.qrcode(0, 'L');
   qr.addData(text);

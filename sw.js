@@ -1,10 +1,11 @@
 // HomeBase service worker: whole app available offline + cached cover/product images.
 // The file list and VERSION are updated by: npm run sw
-const VERSION = 'homebase-0c032bf9a210';
+const VERSION = 'homebase-c6c1a45b0ae0';
 const SHELL = [
   './',
   'index.html',
   'manifest.webmanifest',
+  'changelog.json',
   'css/app.css',
   'css/tools.css',
   'js/app.js',
@@ -20,12 +21,15 @@ const SHELL = [
   'js/core/search.js',
   'js/core/store.js',
   'js/core/ui.js',
+  'js/core/updates.js',
   'js/settings/account.js',
   'js/settings/backup.js',
   'js/settings/index.js',
   'js/settings/locations.js',
+  'js/settings/pair-sheet.js',
   'js/settings/pair.js',
   'js/settings/teams.js',
+  'js/settings/updates.js',
   'js/sync/manager.js',
   'js/sync/relay.js',
   'js/sync/supabase.js',
@@ -91,6 +95,7 @@ const SHELL = [
   'js/tools/warranties/index.js',
   'js/tools/warranties/logic.js',
   'js/tools.js',
+  'js/version.js',
   'vendor/exifr.umd.js',
   'vendor/html5-qrcode.min.js',
   'vendor/mqtt.min.js',
@@ -128,6 +133,11 @@ self.addEventListener('fetch', (event) => {
 
   // App files: answer instantly from cache, refresh the cache in the background
   // (so a new deploy shows up on the next launch even if VERSION wasn't bumped).
+  // "Is there a newer version?" must ask the website, not the cache.
+  if (url.origin === self.location.origin && /\/(version|changelog)\.json$/.test(url.pathname)) {
+    event.respondWith(fetch(req, { cache: 'no-store' }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || Response.error())));
+    return;
+  }
   if (url.origin === self.location.origin) {
     event.respondWith(
       caches.open(VERSION).then(async (cache) => {

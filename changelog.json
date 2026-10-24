@@ -1,0 +1,37 @@
+[
+  { "id": 9, "date": "2026-10-24", "title": "Updates & easier pairing", "items": [
+    "Settings › Updates shows your version, checks for a newer one and lists what’s new.",
+    "New “Pair phone” button at the top on the computer shows the QR code in one click."
+  ] },
+  { "id": 8, "date": "2026-10-24", "title": "Faster phone pairing", "items": [
+    "Quick link pairs in a few seconds instead of hanging on “Connecting…”.",
+    "Two extra relays on the normal web port, so strict Wi-Fi and phone networks get through.",
+    "The pairing screen shows how many relays are connected and tips if it’s slow."
+  ] },
+  { "id": 7, "date": "2026-10-24", "title": "Names and email sign-in", "items": [
+    "Settings › You & sign-in: set your name; books and items show who added them.",
+    "Optional email sign-in (with cloud sync) to join the household on a new device with a code."
+  ] },
+  { "id": 6, "date": "2026-10-24", "title": "Warranties & documents", "items": [
+    "New tool: photograph receipts and warranties, set end dates, link them to an item and note where the box is."
+  ] },
+  { "id": 5, "date": "2026-10-24", "title": "Pantry", "items": [
+    "New tool: scan food, track use-by dates, and share a shopping list."
+  ] },
+  { "id": 4, "date": "2026-10-24", "title": "Search and Reminders", "items": [
+    "Search everything from the start menu (press /).",
+    "Reminders: things lent out over 30 days, warranties and food running out, matches this week."
+  ] },
+  { "id": 3, "date": "2026-10-24", "title": "Faster and easier to use", "items": [
+    "The library stays smooth with thousands of books.",
+    "Clearer colours in dark mode and a visible keyboard focus everywhere."
+  ] },
+  { "id": 2, "date": "2026-10-24", "title": "Golf and photography", "items": [
+    "Golf: per-person calibration, practice sessions, impact timed from the ball strike.",
+    "Photos: full-size RAW and iPhone HEIC previews, ZIP export, compare a whole burst."
+  ] },
+  { "id": 1, "date": "2026-10-24", "title": "Sports", "items": [
+    "Rugby asks for the conversion after a try; line-ups with minutes played.",
+    "Cricket: wickets off wides and no-balls, retired hurt batters can come back."
+  ] }
+]

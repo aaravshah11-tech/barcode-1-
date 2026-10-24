@@ -8,6 +8,8 @@ import { renderTeams } from './teams.js';
 import { renderPair } from './pair.js';
 import { renderBackup } from './backup.js';
 import { renderAccount } from './account.js';
+import { renderUpdates } from './updates.js';
+import { shortVersion } from '../core/updates.js';
 import { myName } from '../core/people.js';
 
 function overview(root) {
@@ -22,6 +24,7 @@ function overview(root) {
         <a class="list-item" href="#/settings/pair">${icon('link')}<div class="grow"><b>Pair phone & computer</b><div class="small muted">${esc(syncText)}</div></div>${icon('chev', 'chev')}</a>
         <a class="list-item" href="#/settings/locations">${icon('pin')}<div class="grow"><b>House locations</b><div class="small muted">Rooms, bookcases, cupboards, shelves, boxes</div></div>${icon('chev', 'chev')}</a>
         <a class="list-item" href="#/settings/teams">${icon('users')}<div class="grow"><b>Teams & players</b><div class="small muted">Shared by Rugby, Cricket, Hockey and Photography</div></div>${icon('chev', 'chev')}</a>
+        <a class="list-item" href="#/settings/updates">${icon('refresh')}<div class="grow"><b>Updates & what’s new</b><div class="small muted">Version ${esc(shortVersion())} · check for a newer one</div></div>${icon('chev', 'chev')}</a>
         <a class="list-item" href="#/settings/backup">${icon('download')}<div class="grow"><b>Backup & export</b><div class="small muted">JSON backup, CSV per tool, import</div></div>${icon('chev', 'chev')}</a>
       </div>
 
@@ -70,9 +73,9 @@ function overview(root) {
 }
 
 export default {
-  routes: { '': overview, account: renderAccount, locations: renderLocations, teams: renderTeams, pair: renderPair, backup: renderBackup },
+  routes: { '': overview, account: renderAccount, updates: renderUpdates, locations: renderLocations, teams: renderTeams, pair: renderPair, backup: renderBackup },
   nav: [
-    { route: '', label: 'Settings', icon: 'gear', match: ['', 'account'] },
+    { route: '', label: 'Settings', icon: 'gear', match: ['', 'account', 'updates'] },
     { route: 'pair', label: 'Pairing', icon: 'link' },
     { route: 'locations', label: 'Locations', icon: 'pin' },
     { route: 'teams', label: 'Teams', icon: 'users' },

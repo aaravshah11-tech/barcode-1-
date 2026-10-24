@@ -31,7 +31,9 @@ Phones only allow the camera and motion sensors on **https://** sites, so HomeBa
 
 **Or Netlify** (drag and drop): download the repo as a ZIP (**Code › Download ZIP**), unzip, go to **https://app.netlify.com/drop** and drag the folder in. You get an `https://….netlify.app` address.
 
-**Updating:** push to the branch; the site updates in a minute. On your phone, close and reopen HomeBase (tap **Update** if asked).
+**Updating:** push to the branch; the site updates in a minute. In HomeBase, **Settings › Updates & what’s new** shows your version, checks whether a newer one is out, lists what changed and has an **Update now** button (your data is kept). The start menu also shows “A new version is ready” by itself.
+
+When you change the app, add a line to **`changelog.json`** (plain English, new `id` at the top) and run `npm run sw` — that’s what the Updates screen shows.
 
 ## 2. Install it on your phone
 
@@ -44,7 +46,7 @@ Phones only allow the camera and motion sensors on **https://** sites, so HomeBa
 There are two ways. You can start with Quick link and switch to Cloud sync later.
 
 ### Option A — Quick link (no setup, works today)
-1. **Computer:** HomeBase › **Settings** › **Pairing** › **Quick link (no setup)**. A QR code appears.
+1. **Computer:** click **Pair phone** at the top right (on any screen) — the QR code appears straight away. (Also on the start menu: **Show QR code**.)
 2. **Phone:** point the normal Camera app at the QR code and tap the link (or Settings › Pairing › *This is my phone*).
 3. Both show **Linked**.
 
@@ -58,7 +60,7 @@ Supabase is a free online database. About 5 minutes, done once, on your computer
 3. Left menu › **Authentication** › **Sign In / Providers** (may be called *Providers*) › turn on **Allow anonymous sign-ins** › **Save**.
 4. Left menu › **Project Settings** (cog) › **API** (or *Data API*). Copy the **Project URL** and the **anon public** key. *(Never use the `service_role` key.)*
 5. **Computer:** HomeBase › **Settings** › **Pairing** › **Cloud sync** › paste both › **Connect & create my household**.
-6. A QR code appears. **Phone:** scan it with the Camera app and open the link. Done — the badge says **Synced**.
+6. A QR code appears. **Phone:** scan it with the Camera app and open the link. Done — the badge says **Synced**. To show the code again later, click **Phone QR** at the top right.
 
 - Works on any network, even when the other device is switched off.
 - Each device also keeps its own copy, so everything works **offline**; changes upload when you’re back online.

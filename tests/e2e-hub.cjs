@@ -223,6 +223,39 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
   check(true, 'documents searchable by shop');
   await page.fill('[data-gq]', '');
 
+  // ---- Updates ----
+  const { VERSION } = await page.evaluate(async () => ({ VERSION: (await import('./js/version.js')).VERSION }));
+  let fakeNewer = true;
+  const newer = async (on) => {
+    fakeNewer = on;
+    if (newer.done) return;
+    newer.done = true;
+    await page.route(/version\.json/, (r) => !fakeNewer ? r.continue() : r.fulfill({ contentType: 'application/json', body: JSON.stringify({ version: 'homebase-ffffffffffff', changelog: 999 }) }));
+    await page.route(/changelog\.json/, (r) => !fakeNewer ? r.continue() : r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: 999, date: '2026-10-25', title: 'Shiny new thing', items: ['Something you will like.'] }, { id: 1, date: '2026-10-24', title: 'Old news', items: ['Done already.'] }]) }));
+  };
+  await newer(true);
+  await page.evaluate(async () => { const s = await import('./js/core/store.js'); await s.setLocal('upd.checkedAt', 0); });
+  await page.goto(BASE + '?nosw#/settings');
+  await page.goto(BASE + '?nosw#/');
+  await page.waitForSelector('.upd-card');
+  check((await page.textContent('.upd-card')).includes('Shiny new thing'), 'start menu says a new version is ready and what’s in it');
+  await page.click('.upd-card');
+  await page.waitForSelector('[data-update]');
+  const upd = await page.textContent('#view');
+  check(upd.includes('A new version is ready') && upd.includes('What you’ll get') && upd.includes('Shiny new thing') && upd.includes('Earlier changes'), 'Updates screen: ready + list of changes');
+  await shot('hub-updates');
+  await page.click('[data-update]');
+  await page.waitForLoadState('load');
+  await page.waitForSelector('#view *');
+  check(true, 'Update now restarts the app');
+  await newer(false);
+  await page.goto(BASE + '?nosw#/settings');
+  await page.goto(BASE + '?nosw#/settings/updates');
+  await page.waitForSelector('text=You’re up to date');
+  check((await page.textContent('#view')).includes(VERSION.replace('homebase-', '').slice(0, 7)), 'up to date: shows this version and the real changelog');
+  await page.goto(BASE + '?nosw#/settings');
+  check((await page.textContent('#view')).includes('Updates & what’s new'), 'Settings lists Updates');
+
   check(!errors.length, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
   console.log(failures ? `\n${failures} FAILED` : '\nAll hub checks passed');

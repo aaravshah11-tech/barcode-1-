@@ -33,7 +33,7 @@ jobs:
       - name: Offline file list is up to date
         run: |
           npm run sw
-          git diff --exit-code sw.js || (echo "::error::sw.js is out of date - run 'npm run sw' and commit it" && exit 1)
+          git diff --exit-code sw.js js/version.js version.json || (echo "::error::sw.js / version files are out of date - run 'npm run sw' and commit it" && exit 1)
 
       - name: Browser tests
         run: npm run test:e2e

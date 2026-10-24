@@ -128,14 +128,41 @@ function renderMenu(root) {
             <span class="tile-desc">${esc(t.desc)}</span>
           </a>`).join('')}
       </div>
+      <div data-upd-card>${updCard}</div>
       <div data-rem-card>${remCard}</div>
       <a class="card sync-card" href="#/settings/pair">
         <span class="sync-dot ${linked ? 'ok' : st.mode === 'off' ? '' : 'warn'}"></span>
-        <div class="grow"><b>${linked ? 'Phone & computer in sync' : st.mode === 'off' ? 'Pair your phone and computer' : 'Sync: ' + esc(st.message || st.state)}</b>
+        <div class="grow"><b>${linked ? 'Phone & computer in sync' : st.mode === 'off' ? 'Pair your phone and computer' : 'Sync: ' + esc(String(st.message || st.state).replace(/\s*\(.*\)$/, ''))}</b>
           <div class="small muted">${linked ? esc(st.devices?.length ? `With ${st.devices.join(', ')}` : st.mode === 'cloud' ? 'Cloud sync (Supabase) is on' : 'Quick link is on')
-            : st.mode === 'off' ? 'Scan on your phone, see it live on your computer' : 'Tap for details'}</div></div>
-        ${icon('chev', 'chev')}
+            : st.mode === 'off' ? (isPhoneDevice() ? 'Scan the QR code shown on your computer' : 'Click to show the QR code for your phone') : 'Tap for details'}</div></div>
+        ${!isPhoneDevice() && !linked ? `<span class="btn btn-sm btn-primary" aria-hidden="true">${icon('qr')} Show QR code</span>` : icon('chev', 'chev')}
       </a>`;
+  };
+  // On a computer the sync card opens the QR pop-up directly.
+  root.addEventListener('click', (e) => {
+    const card = e.target.closest('.sync-card');
+    if (!card || isPhoneDevice() || sync.getState().state === 'connected') return;
+    e.preventDefault();
+    import('./settings/pair-sheet.js').then((m) => m.openPairSheet());
+  });
+
+  // "A new version is ready" card (checked at most every 10 minutes; silent when offline).
+  let updCard = '';
+  const refreshUpdate = async () => {
+    try {
+      const last = store.getLocal('upd.checkedAt', 0);
+      let res = store.getLocal('upd.result', null);
+      const { VERSION, checkForUpdate } = await import('./core/updates.js');
+      if (!res || res.current !== VERSION || Date.now() - last > 10 * 60000) {
+        res = await checkForUpdate();
+        await store.setLocal('upd.checkedAt', Date.now());
+        await store.setLocal('upd.result', { available: res.available, current: res.current, news: res.news.map((n) => n.title) });
+      }
+      updCard = res.available ? `<a class="card upd-card" href="#/settings/updates"><span class="rem-bell" aria-hidden="true">✨</span><div class="grow"><b>A new version of HomeBase is ready</b>
+        <div class="small muted">${res.news.length ? esc(res.news.map((n) => n.title || n).slice(0, 3).join(' · ')) : 'Tap to see what’s new and update'}</div></div>${icon('chev', 'chev')}</a>` : '';
+    } catch { updCard = ''; }
+    const slot = $('[data-upd-card]');
+    if (slot && slot.innerHTML !== updCard) slot.innerHTML = updCard;
   };
 
   // Reminders summary under the tools (filled in once the tools' hooks have loaded).
@@ -197,6 +224,7 @@ function renderMenu(root) {
 
   drawBody();
   refreshReminders();
+  refreshUpdate();
   if (lastQuery) runSearch();
   const offSync = sync.onState(drawBody);
   const refreshRemindersSoon = debounce(refreshReminders, 300);
@@ -207,7 +235,7 @@ function renderMenu(root) {
     refreshRemindersSoon();
     if (input.value.trim()) onInput();
   });
-  return () => { offSync(); offStore(); document.removeEventListener('keydown', slash); };
+  return () => { lastQuery = input.value.trim(); offSync(); offStore(); document.removeEventListener('keydown', slash); };
 }
 
 /** Bold the matching words (matched on the plain text, then made safe for HTML). */
@@ -250,6 +278,9 @@ function renderSyncPill(st) {
   pill.className = `pill ${st.state === 'connected' ? 'pill-ok' : st.state === 'error' ? 'pill-danger' : 'pill-warn'}`;
 }
 
+/** Phones (and small screens) scan the code instead of showing it. */
+const isPhoneDevice = () => /iPhone|Android.+Mobile|iPod/.test(navigator.userAgent) || matchMedia('(max-width: 600px)').matches;
+
 function setupHeader() {
   const offline = () => { document.getElementById('offline-pill').hidden = navigator.onLine !== false; };
   window.addEventListener('online', offline);
@@ -257,6 +288,17 @@ function setupHeader() {
   offline();
   sync.onState(renderSyncPill);
   renderSyncPill(sync.getState());
+  // Computers get a one-click "Pair phone" button that shows the QR code.
+  const pairBtn = document.getElementById('pair-btn');
+  const showPairBtn = (st) => {
+    pairBtn.hidden = isPhoneDevice();
+    pairBtn.querySelector('span').textContent = st.mode === 'off' ? 'Pair phone' : 'Phone QR';
+    pairBtn.setAttribute('aria-label', 'Show the QR code to pair your phone');
+  };
+  showPairBtn(sync.getState());
+  sync.onState(showPairBtn);
+  window.addEventListener('resize', () => showPairBtn(sync.getState()));
+  pairBtn.addEventListener('click', () => import('./settings/pair-sheet.js').then((m) => m.openPairSheet()));
   document.getElementById('contrast-btn').addEventListener('click', () => {
     const on = document.documentElement.dataset.contrast !== 'high';
     if (on) document.documentElement.dataset.contrast = 'high'; else delete document.documentElement.dataset.contrast;

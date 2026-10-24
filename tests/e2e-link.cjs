@@ -50,6 +50,30 @@ const RELAYS = ['ws://127.0.0.1:8888', 'ws://127.0.0.1:8899', { url: 'ws://127.0
   const redraws = await comp.evaluate(() => new Promise((r) => { let n = 0; const o = new MutationObserver(() => n++); o.observe(document.querySelector('#view'), { childList: true, subtree: true }); setTimeout(() => { o.disconnect(); r(n); }, 4500); }));
   check(redraws === 0, `pairing screen sits still while linked (${redraws} redraws in 4.5 s)`);
 
+  // One-click "Pair phone" button in the top bar (fresh computer + phone)
+  const comp2 = await mk({ viewport: { width: 1280, height: 820 } }, { relays: ['ws://127.0.0.1:8888', 'ws://127.0.0.1:8889'] });
+  const phone2 = await mk({ viewport: { width: 390, height: 844 }, isMobile: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' }, { relays: ['ws://127.0.0.1:8888', 'ws://127.0.0.1:8889'] });
+  await comp2.goto(BASE + '?nosw#/library');
+  await comp2.waitForSelector('#pair-btn:not([hidden])');
+  check((await comp2.textContent('#pair-btn')).includes('Pair phone'), 'computer: “Pair phone” button in the top bar on every screen');
+  await comp2.click('#pair-btn');
+  await comp2.waitForSelector('.pair-sheet [data-qr] svg', { timeout: 10000 });
+  check(/^[A-Z0-9]{5} [A-Z0-9]{5}$/.test((await comp2.textContent('.pair-sheet [data-code]')).trim()), 'one click shows the QR code (and the typed code)');
+  await phone2.goto(BASE + '?nosw#/');
+  await phone2.waitForSelector('.menu-grid');
+  check(await phone2.isHidden('#pair-btn'), 'phone: no “Pair phone” button (it scans instead)');
+  const link2 = await comp2.evaluate(async () => (await import('./js/sync/manager.js')).pairingUrl());
+  await phone2.goto(link2.replace('http://127.0.0.1:8080/', BASE + '?nosw'));
+  await comp2.waitForSelector('.toast >> text=Phone linked!', { timeout: 15000 });
+  await comp2.waitForSelector('.pair-sheet', { state: 'detached', timeout: 5000 });
+  check(true, 'computer pop-up says “Phone linked!” and closes by itself');
+  // Start-menu card opens the same pop-up on a computer
+  const comp3 = await mk({ viewport: { width: 1280, height: 820 } }, { relays: ['ws://127.0.0.1:8888'] });
+  await comp3.goto(BASE + '?nosw#/');
+  await comp3.click('.sync-card');
+  await comp3.waitForSelector('.pair-sheet [data-qr] svg', { timeout: 10000 });
+  check(true, 'start menu “Show QR code” opens the QR pop-up');
+
   // Every relay blocked: friendly tip after a while
   const lonely = await mk({ viewport: { width: 390, height: 844 } }, { relays: ['ws://127.0.0.1:8897', 'ws://127.0.0.1:8898'] });
   await lonely.goto(BASE + '?nosw#/link/ABCDEFGHJK');
