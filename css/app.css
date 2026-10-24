@@ -403,3 +403,5 @@ label.field > span, .field-label { display: block; font-size: .82rem; font-weigh
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .two-col > *, .bar-row > * { min-width: 0; }
+.list-item > svg { width: 22px; height: 22px; flex: none; color: var(--muted); }
+.list-item .grow { overflow-wrap: anywhere; }

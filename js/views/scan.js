@@ -1,7 +1,7 @@
 // Scan screen: Add, Find ("Where is it?") and Batch modes.
 import * as store from '../store.js';
 import * as link from '../sync/relay-link.js';
-import { Scanner, cameraErrorMessage } from '../scanner.js';
+import { Scanner, cameraErrorMessage, listCameras } from '../scanner.js';
 import { lookupIsbn } from '../lookup.js';
 import { toIsbn13, isbn13to10, prettyIsbn } from '../isbn.js';
 import { feedback, unlockAudio } from '../feedback.js';
@@ -37,10 +37,11 @@ export function render(root, params) {
     <div data-batch-panel style="margin-top:12px"></div>
     <div class="scanner-box">
       <div id="reader"></div>
-      <div class="scanner-tools"><button data-torch aria-label="Torch" aria-pressed="false" hidden>${icon('torch')}</button></div>
+      <div class="scanner-tools"><button data-switch-cam aria-label="Switch camera" hidden>${icon('refresh')}</button><button data-torch aria-label="Torch" aria-pressed="false" hidden>${icon('torch')}</button></div>
       <div class="scanner-msg" data-cam-msg><div>Starting camera…</div></div>
     </div>
     <div class="scan-status" data-status aria-live="polite"></div>
+    <div data-cam-tip></div>
     <form class="manual" data-manual>
       <input name="isbn" inputmode="numeric" placeholder="Or type the ISBN" autocomplete="off" enterkeyhint="go" aria-label="ISBN">
       <button class="btn btn-primary">Go</button>
@@ -67,6 +68,7 @@ export function render(root, params) {
       if (!root.isConnected) return;
       msg.hidden = true;
       $('[data-torch]').hidden = !scanner.canTorch();
+      renderCamTools();
     } catch (err) {
       if (!root.isConnected) return;
       const m = cameraErrorMessage(err);
@@ -78,6 +80,33 @@ export function render(root, params) {
       msg.querySelector('[data-retry]').onclick = () => startCamera();
     }
   }
+  // Camera switching (e.g. a Mac's own camera vs. an iPhone used as its webcam).
+  async function renderCamTools() {
+    const cams = await listCameras();
+    if (!root.isConnected) return;
+    $('[data-switch-cam]').hidden = cams.length < 2;
+    const desktop = !/Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+    const current = cams.find((c) => c.id === scanner.currentCameraId());
+    const usingIphone = current && /iphone|continuity/i.test(current.label);
+    $('[data-cam-tip]').innerHTML = desktop && !usingIphone
+      ? `<div class="banner" style="margin-top:10px">${icon('phone')}<div class="grow small"><b>Tip for Mac:</b> use your iPhone as the camera. Plug it in with a cable (or keep it close by), then tap ${cams.length > 1 ? 'the switch-camera button' : '“Try again”'} and choose your iPhone. Laptop cameras are blurry up close.</div></div>`
+      : '';
+  }
+  $('[data-switch-cam]').onclick = async () => {
+    const cams = await listCameras();
+    const current = scanner.currentCameraId();
+    scanner.pause();
+    const s = openSheet(`<div class="list">${cams.map((c) => `<button class="list-item" data-cam="${esc(c.id)}">${icon(/iphone|continuity/i.test(c.label) ? 'phone' : 'camera')}<div class="grow">${esc(c.label)}</div>${c.id === current ? icon('check') : ''}</button>`).join('')}</div>`,
+      { title: 'Choose camera', onClose: () => scanner.resume() });
+    s.body.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-cam]');
+      if (!b) return;
+      s.close();
+      $('[data-cam-msg]').hidden = false;
+      $('[data-cam-msg]').innerHTML = '<div>Switching camera…</div>';
+      try { await scanner.switchTo(b.dataset.cam); $('[data-cam-msg]').hidden = true; renderCamTools(); } catch { startCamera(); }
+    });
+  };
   $('[data-torch]').onclick = async () => {
     torchOn = !torchOn;
     if (await scanner.setTorch(torchOn)) $('[data-torch]').setAttribute('aria-pressed', torchOn);

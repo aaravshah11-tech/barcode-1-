@@ -88,6 +88,19 @@ Good to know:
 
 ---
 
+## 3b. No linking needed: use your iPhone as your Mac's camera
+
+Macs can use an iPhone as a webcam (Apple's **Continuity Camera**, macOS 13+ and iOS 16+). Shelf runs on the Mac and reads barcodes through the iPhone's camera, so books go straight into the Mac's library with nothing to link.
+
+1. Make sure the iPhone and Mac are signed in to the **same Apple ID**, with **Wi-Fi and Bluetooth on** on both. Plugging the iPhone into the Mac with a cable makes it more reliable.
+2. On the iPhone: **Settings › General › AirPlay & Continuity** (older iOS: **AirPlay & Handoff**) › turn on **Continuity Camera**.
+3. Rest the iPhone **on its side (landscape), screen locked, back camera facing you**, on a stand or propped against something.
+4. On the Mac, open Shelf in **Safari or Chrome** and click **Scan**. Allow the camera.
+5. Shelf picks the iPhone automatically. If it shows the Mac's own camera instead, click the **⟳ switch-camera button** at the top right of the camera view and choose the iPhone.
+6. Hold each book's barcode in front of the iPhone, about 20 cm away.
+
+---
+
 ## 4. Run it on your own computer (optional, for tinkering)
 
 You need a small local web server, because opening `index.html` directly from disk won't work. Pick one:

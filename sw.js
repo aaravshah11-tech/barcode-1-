@@ -1,6 +1,6 @@
 // Shelf service worker: offline app shell + cached cover images.
 // Bump VERSION whenever you change any app file so phones pick up the update.
-const VERSION = 'shelf-v2';
+const VERSION = 'shelf-v3';
 const SHELL = [
   './',
   'index.html',

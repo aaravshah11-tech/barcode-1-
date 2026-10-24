@@ -26,6 +26,22 @@ export function cameraErrorMessage(err) {
   return { title: 'Camera didn’t start', text: msg || 'Something went wrong starting the camera.' };
 }
 
+const CAMERA_KEY = 'shelf.cameraId';
+const savedCamera = () => { try { return localStorage.getItem(CAMERA_KEY) || ''; } catch { return ''; } };
+export function saveCamera(id) { try { id ? localStorage.setItem(CAMERA_KEY, id) : localStorage.removeItem(CAMERA_KEY); } catch { /* ignore */ } }
+
+/** Cameras this device can see. Names only show up once camera permission is granted. */
+export async function listCameras() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+  } catch { return []; }
+}
+
+// An iPhone used as a Mac webcam (Continuity Camera) is the best scanner on a computer.
+const isIphoneCam = (c) => /iphone|continuity/i.test(c.label);
+const isDesktop = () => !/Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+
 export class Scanner {
   /**
    * @param {string} elementId  id of an empty div to render the video into
@@ -72,22 +88,54 @@ export class Scanner {
         if (this.qr && !this.barcodes) { const s = Math.max(120, Math.floor(Math.min(w, h) * 0.7)); return { width: s, height: s }; }
         return { width: Math.max(120, Math.floor(w * 0.82)), height: Math.max(80, Math.floor(h * (this.qr ? 0.6 : 0.42))) };
       };
-      await this.instance.start(
+      // Which camera? A saved choice, else an iPhone camera on a Mac, else the back camera.
+      const cams = await listCameras();
+      let camId = cams.find((c) => c.id && c.id === savedCamera())?.id || '';
+      if (!camId && isDesktop()) camId = cams.find(isIphoneCam)?.id || '';
+      const run = (id) => this.instance.start(
         { facingMode: 'environment' },
         {
           fps: 12,
           qrbox,
           disableFlip: true,
-          videoConstraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, advanced: [{ focusMode: 'continuous' }] },
+          videoConstraints: id
+            ? { deviceId: { exact: id }, width: { ideal: 1280 }, height: { ideal: 720 } }
+            : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, advanced: [{ focusMode: 'continuous' }] },
         },
         (text, result) => {
           if (!this.paused) this.onCode(text, result?.result?.format?.formatName || '');
         },
         () => {},
       );
+      try {
+        await run(camId);
+      } catch (err) {
+        if (!camId) throw err;
+        saveCamera(''); // the saved camera is gone (e.g. iPhone unplugged): use the default
+        await run('');
+      }
       this.running = true;
       this.paused = false;
+
+      // First run on a Mac: names were hidden until permission was granted. Switch to the iPhone if there is one.
+      if (!camId && isDesktop()) {
+        const iphone = (await listCameras()).find(isIphoneCam);
+        if (iphone && iphone.id !== this.currentCameraId()) {
+          try { await this.instance.stop(); await run(iphone.id); } catch { /* keep going with what we have */ }
+        }
+      }
     });
+  }
+
+  currentCameraId() {
+    try { return this.instance?.getRunningTrackSettings?.().deviceId || ''; } catch { return ''; }
+  }
+
+  /** Switch to another camera and remember the choice. */
+  async switchTo(id) {
+    saveCamera(id);
+    await this.stop();
+    await this.start();
   }
 
   pause() { this.paused = true; }
