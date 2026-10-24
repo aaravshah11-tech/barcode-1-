@@ -1,5 +1,6 @@
 // ============================================================
-// Device link: phone <-> computer through free public MQTT relays.
+// Quick link (no setup): phone <-> computer through free public MQTT relays.
+// Used when Supabase isn't set up. See sync/manager.js.
 //
 // Both devices join a private "room" on several public relays at
 // once (EMQX, HiveMQ, Mosquitto), so if one is down the others
@@ -15,8 +16,8 @@
 // mergeRecords / onChange), so other sync methods can be added the
 // same way.
 // ============================================================
-import * as store from '../store.js';
-import { loadScript } from '../ui.js';
+import * as store from '../core/store.js';
+import { loadScript } from '../core/ui.js';
 
 const DEFAULT_RELAYS = [
   'wss://broker.emqx.io:8084/mqtt',
@@ -136,7 +137,7 @@ function relayUrls() {
   return DEFAULT_RELAYS;
 }
 
-const myId = () => store.getSetting('deviceId');
+const myId = () => store.getDeviceId();
 const msgId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 async function publish(msg) {
@@ -159,8 +160,8 @@ async function sendRecords(recs, to) {
     size = 0;
     await pause(40); // be gentle with the free relays
   };
-  for (const s of ['rooms', 'meta', 'books']) {
-    for (const r of recs[s] || []) {
+  for (const [s, list] of Object.entries(recs)) {
+    for (const r of list || []) {
       const len = JSON.stringify(r).length;
       if (size && size + len > CHUNK_CHARS) await flush();
       (batch[s] ||= []).push(r);
@@ -260,10 +261,7 @@ function stopSession() {
 store.onChange(({ changes, origin }) => {
   if (!session || origin === 'remote') return;
   const recs = {};
-  for (const { store: s, record } of changes) {
-    if (s === 'meta' && record.local) continue;
-    (recs[s] ||= []).push(record);
-  }
+  for (const { c, record } of changes) if (!c.startsWith('_')) (recs[c] ||= []).push(record);
   if (Object.keys(recs).length) sendRecords(recs);
 });
 
@@ -271,14 +269,14 @@ export const peerNameOf = (id) => peers.get(id)?.name || '';
 
 // ---------- public controls ----------
 export async function startHosting({ newCode = false } = {}) {
-  let code = store.getSetting('hostCode');
+  let code = store.getLocal('relay.hostCode');
   if (!isValidCode(code || '') || newCode) {
     code = genCode();
-    await store.setSetting('hostCode', code);
+    await store.setLocal('relay.hostCode', code);
   }
   role = 'host';
-  await store.setSetting('hosting', true);
-  await store.setSetting('linkedHost', null);
+  await store.setLocal('relay.hosting', true);
+  await store.setLocal('relay.linkedHost', null);
   try { await startSession(code); } catch (e) { setState('error', e.message); }
 }
 
@@ -286,27 +284,27 @@ export async function connectTo(code) {
   code = normalizeCode(code);
   if (!isValidCode(code)) { setState('error', 'That code doesn’t look right — it’s 10 letters and numbers.'); return; }
   role = 'guest';
-  await store.setSetting('linkedHost', code);
-  await store.setSetting('hosting', false);
+  await store.setLocal('relay.linkedHost', code);
+  await store.setLocal('relay.hosting', false);
   try { await startSession(code); } catch (e) { setState('error', e.message); }
 }
 
 export async function unlink() {
   stopSession();
   role = null;
-  await store.setSetting('hosting', false);
-  await store.setSetting('linkedHost', null);
+  await store.setLocal('relay.hosting', false);
+  await store.setLocal('relay.linkedHost', null);
   setState('off');
 }
 
 /** Resume whatever link was active last time the app was open. */
 export function autoStart() {
-  const guestCode = store.getSetting('linkedHost');
-  if (store.getSetting('hosting')) startHosting();
+  const guestCode = store.getLocal('relay.linkedHost');
+  if (store.getLocal('relay.hosting')) startHosting();
   else if (guestCode && isValidCode(guestCode)) connectTo(guestCode);
   else if (guestCode) {
     // A code from the old linking system: ask to pair again.
-    store.setSetting('linkedHost', null);
+    store.setLocal('relay.linkedHost', null);
   }
 
   const kick = () => {

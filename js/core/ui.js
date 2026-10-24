@@ -33,6 +33,27 @@ const PATHS = {
   wifiOff: '<path d="M3 3l18 18M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 4.5-2.4M14.5 10.1A10 10 0 0 1 19 12.5M2 9a15 15 0 0 1 5-3M12 5c3.6 0 7 1.4 10 4M12 20h.01"/>',
   hand: '<path d="M7 11.5V6a1.5 1.5 0 0 1 3 0v5M10 10.5V4.5a1.5 1.5 0 0 1 3 0v6M13 10.5V5.5a1.5 1.5 0 0 1 3 0v6M16 11V8a1.5 1.5 0 0 1 3 0v6.5a6.5 6.5 0 0 1-6.5 6.5h-.8a6.5 6.5 0 0 1-5-2.4L4 15.5a1.6 1.6 0 0 1 2.4-2.1L7 14"/>',
   book: '<path d="M5 4.5h10.5A2.5 2.5 0 0 1 18 7v13H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H18"/>',
+  home: '<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
+  box: '<path d="M4 7.5l8-4 8 4v9l-8 4-8-4z"/><path d="M4 7.5l8 4 8-4M12 11.5v9"/>',
+  undo: '<path d="M9 7L4.5 11.5 9 16"/><path d="M5 11.5h9a5 5 0 0 1 0 10h-2"/>',
+  play: '<path d="M8 5.5v13l10-6.5z"/>',
+  pause: '<path d="M8 5.5v13M16 5.5v13"/>',
+  next: '<path d="M6 5.5l9 6.5-9 6.5zM18 5.5v13"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+  contrast: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/>',
+  tag: '<path d="M3.5 12.5V4.5h8l9 9-8 8z"/><circle cx="8" cy="9" r="1.4"/>',
+  image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8"/>',
+  folder: '<path d="M3.5 7.5V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9a1.5 1.5 0 0 0-1.5-1.5h-7L10 5H5A1.5 1.5 0 0 0 3.5 6.5z"/>',
+  chart: '<path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6"/>',
+  print: '<path d="M7 9V4h10v5M7 17H4.5V10h15v7H17"/><rect x="7" y="14" width="10" height="6"/>',
+  qr: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2M18 18h2v2M16 16h2v2"/>',
+  users: '<circle cx="9" cy="8.5" r="3.3"/><path d="M3 19.5c.8-3.3 3.2-5 6-5s5.2 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.6c2.4.1 4.2 1.6 5 4.4"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4.5a3 3 0 0 0 3.5 4M16 6h3.5a3 3 0 0 1-3.5 4M12 13v4M8.5 20h7M9.5 17h5"/>',
+  golf: '<path d="M12 18V3.5l6 3-6 3"/><ellipse cx="12" cy="19" rx="6" ry="1.8"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  flag: '<path d="M5 21V4M5 4.5h12l-2.5 4 2.5 4H5"/>',
+  cloud: '<path d="M7 18.5h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18.5z"/>',
 };
 export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${cls}">${PATHS[name] || ''}</svg>`;
 
@@ -201,3 +222,37 @@ export function download(filename, text, type) {
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+
+/** "34:12" style clock from milliseconds. */
+export function fmtClock(ms, { tenths = false } = {}) {
+  const neg = ms < 0; ms = Math.abs(ms);
+  const m = Math.floor(ms / 60000), sec = Math.floor((ms % 60000) / 1000);
+  return `${neg ? '-' : ''}${m}:${String(sec).padStart(2, '0')}${tenths ? '.' + Math.floor((ms % 1000) / 100) : ''}`;
+}
+
+/** Ask the user to pick one option from a list of big buttons. Resolves to the value or null. */
+export function choose(title, options, { columns = 1, cancel = true } = {}) {
+  return new Promise((resolve) => {
+    let result = null;
+    const s = openSheet(`<div class="choice-grid" style="--cols:${columns}">${options.map((o, i) =>
+      `<button class="btn btn-lg ${o.primary ? 'btn-primary' : ''}" data-i="${i}" ${o.style ? `style="${o.style}"` : ''}>${o.html ?? esc(o.label)}</button>`).join('')}</div>
+      ${cancel ? '<button class="btn btn-ghost btn-block" data-close style="margin-top:10px">Cancel</button>' : ''}`,
+    { title, onClose: () => resolve(result) });
+    s.body.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-i]');
+      if (b) { result = options[+b.dataset.i].value; s.close(); }
+    });
+  });
+}
+
+/** Keep the screen awake (live scoring, clock, golf). Returns release(). */
+export async function keepAwake() {
+  let lock = null;
+  const get = async () => { try { lock = await navigator.wakeLock?.request('screen'); } catch { /* not allowed */ } };
+  await get();
+  const onVis = () => { if (document.visibilityState === 'visible') get(); };
+  document.addEventListener('visibilitychange', onVis);
+  return () => { document.removeEventListener('visibilitychange', onVis); try { lock?.release(); } catch { /* ignore */ } };
+}
+
+export const isPhone = () => /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) || matchMedia('(max-width: 700px)').matches;

@@ -1,0 +1,26 @@
+// ============================================================
+// Tool registry. Each tool lives in js/tools/<id>/index.js and
+// exports default { routes, nav, exports }.
+//
+// To add a new tool: make a folder with an index.js, then add
+// one line here. It appears on the start menu automatically.
+// ============================================================
+export const TOOLS = [
+  { id: 'library', name: 'Library', emoji: '📚', color: '#b4532a', dark: '#e3804f', desc: 'Scan and find books in the house', load: () => import('./tools/library/index.js') },
+  { id: 'inventory', name: 'Inventory', emoji: '📦', color: '#2f6f8f', dark: '#5fb0d6', desc: 'Track stuff, boxes and cupboards', load: () => import('./tools/inventory/index.js') },
+  { id: 'sports', name: 'Sports', emoji: '🏆', color: '#2e7d4f', dark: '#5cc489', desc: 'Rugby, cricket, hockey stats & match photography', load: () => import('./tools/sports/index.js') },
+  // Match Photography is opened from the Sports menu (hidden from the start menu).
+  { id: 'photo', name: 'Match Photography', emoji: '📸', color: '#a8324a', dark: '#ef7f95', desc: 'Touchline assistant for your camera', parent: 'sports', hidden: true, load: () => import('./tools/photo/index.js') },
+  { id: 'golf', name: 'Golf Swing', emoji: '⛳', color: '#6b4fa8', dark: '#a98ce6', desc: 'Record and analyse swings with motion sensors', load: () => import('./tools/golf/index.js') },
+  { id: 'settings', name: 'Settings', emoji: '⚙️', color: '#5a5550', dark: '#b7afa5', desc: 'Locations, teams, pairing, backup', load: () => import('./settings/index.js') },
+];
+
+export const toolById = (id) => TOOLS.find((t) => t.id === id);
+
+const cache = new Map();
+export async function loadTool(id) {
+  const t = toolById(id);
+  if (!t) return null;
+  if (!cache.has(id)) cache.set(id, t.load().then((m) => m.default));
+  return cache.get(id);
+}

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Shelf</title>
-  <meta name="description" content="Catalogue the books in your house. Scan barcodes with your phone, see them everywhere.">
+  <title>HomeBase</title>
+  <meta name="description" content="Your home toolkit: library, inventory, sports stats, match photography and golf swing analysis. Phone and computer in sync.">
   <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#15130f" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
@@ -13,40 +13,39 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Shelf">
+  <meta name="apple-mobile-web-app-title" content="HomeBase">
   <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/tools.css">
   <script>
-    // Apply the saved theme before first paint to avoid a flash.
-    try { var t = localStorage.getItem('shelf.theme'); if (t && t !== 'auto') document.documentElement.dataset.theme = t; } catch (e) {}
+    try {
+      var t = localStorage.getItem('hb.theme'); if (t && t !== 'auto') document.documentElement.dataset.theme = t;
+      if (localStorage.getItem('hb.contrast') === 'high') document.documentElement.dataset.contrast = 'high';
+    } catch (e) {}
   </script>
 </head>
 <body>
-  <div class="app">
+  <div class="app" id="app">
     <header class="topbar">
-      <a href="#/" class="brand" aria-label="Shelf home">
-        <img src="icons/icon.svg" alt="" width="28" height="28">
-        <span>Shelf</span>
+      <a href="#/" class="home-btn" id="home-btn" aria-label="Back to the menu" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>
+      </a>
+      <a href="#/" class="brand" id="brand">
+        <span class="brand-icon" id="brand-icon"><img src="icons/icon.svg" alt="" width="28" height="28"></span>
+        <span id="brand-name">HomeBase</span>
       </a>
       <div class="topbar-pills">
         <span id="offline-pill" class="pill pill-warn" hidden>Offline</span>
-        <button id="mode-pill" class="pill pill-mode" type="button" hidden>Scanner</button>
-        <a id="link-pill" class="pill" href="#/link" hidden></a>
+        <a id="sync-pill" class="pill" href="#/settings/pair" hidden></a>
+        <button id="contrast-btn" class="icon-btn" type="button" aria-label="Outdoor high-contrast mode" title="Outdoor high-contrast mode">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg>
+        </button>
       </div>
     </header>
-
+    <nav class="tabbar" id="tabbar" aria-label="Tool sections" hidden></nav>
     <main id="view" tabindex="-1"></main>
-
-    <nav class="tabbar" aria-label="Main">
-      <a href="#/" data-nav="library"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.8 1 -3.9 14.5-3.8-1z"/></svg><span>Library</span></a>
-      <a href="#/scan/where" data-nav="where"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><span>Find</span></a>
-      <a href="#/scan" data-nav="scan" class="tab-scan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 8v8M10 8v8M13 8v8M16.5 8v8"/></svg><span>Scan</span></a>
-      <a href="#/stats" data-nav="stats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg><span>Stats</span></a>
-      <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><span>Settings</span></a>
-    </nav>
   </div>
-
   <div id="toasts" aria-live="polite"></div>
-  <noscript>Shelf needs JavaScript turned on.</noscript>
+  <noscript>HomeBase needs JavaScript turned on.</noscript>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // Beep + vibration feedback for scans.
-import { getSetting } from './store.js';
+import { getLocal } from './store.js';
 
 let ctx = null;
 
@@ -19,7 +19,7 @@ const TONES = {
 const BUZZ = { ok: 60, dup: [50, 60, 50], err: [200] };
 
 export function feedback(kind = 'ok') {
-  if (getSetting('sound', true)) {
+  if (getLocal('sound', true)) {
     try {
       unlockAudio();
       let t = ctx.currentTime;
@@ -38,5 +38,5 @@ export function feedback(kind = 'ok') {
       }
     } catch { /* ignore */ }
   }
-  if (getSetting('vibrate', true)) navigator.vibrate?.(BUZZ[kind] || BUZZ.ok);
+  if (getLocal('vibrate', true)) navigator.vibrate?.(BUZZ[kind] || BUZZ.ok);
 }
