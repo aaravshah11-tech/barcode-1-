@@ -1,0 +1,22 @@
+{
+  "name": "Shelf — home library",
+  "short_name": "Shelf",
+  "description": "Catalogue the books in your house by scanning their barcodes.",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f3ee",
+  "theme_color": "#b4532a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Scan a book", "url": "./#/scan" },
+    { "name": "Batch scan", "url": "./#/scan/batch" },
+    { "name": "Where is it?", "url": "./#/scan/where" }
+  ]
+}
