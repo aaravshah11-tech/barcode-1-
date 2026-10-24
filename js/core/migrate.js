@@ -44,7 +44,7 @@ export async function migrateFromShelf() {
   // Keep the existing phone <-> computer quick link working.
   if (m.hosting && m.hostCode) { await store.setLocal('relay.hostCode', m.hostCode); await store.setLocal('relay.hosting', true); }
   else if (m.linkedHost) await store.setLocal('relay.linkedHost', m.linkedHost);
-  if (m.lastLocation?.roomId) await store.setLocal('lastLocation:library', { roomId: m.lastLocation.roomId, areaId: m.lastLocation.caseId || '', spotId: m.lastLocation.caseId && m.lastLocation.shelf ? `${m.lastLocation.caseId}-s${m.lastLocation.shelf}` : '' });
+  if (m.lastLocation?.roomId) await store.setLocal('library.lastLocation', { roomId: m.lastLocation.roomId, areaId: m.lastLocation.caseId || '', spotId: m.lastLocation.caseId && m.lastLocation.shelf ? `${m.lastLocation.caseId}-s${m.lastLocation.shelf}` : '' });
   await store.setLocal('seededRooms', true);
   await store.setLocal('migratedShelf', true);
   return newBooks.length;

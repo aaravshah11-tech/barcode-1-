@@ -1,4 +1,4 @@
-// End-to-end test in a real browser (Chromium via Playwright).
+// Library tool end-to-end test in a real browser (Chromium via Playwright).
 // Book APIs are mocked with recorded responses so it runs offline.
 // Usage: serve the folder (python3 -m http.server 8080) then: node tests/e2e.cjs [screenshotDir]
 const { chromium } = require('playwright');
@@ -41,13 +41,13 @@ async function mockApis(ctx) {
   page.on('console', (m) => { if (m.type() === 'error' && !/camera|getUserMedia|Failed to load resource/i.test(m.text())) errors.push(m.text()); });
   const shot = async (name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, name + '.png') }); };
 
-  await page.goto(BASE + '?nosw#/');
+  await page.goto(BASE + '?nosw#/library');
   await page.waitForSelector('.empty');
   check(await page.isVisible('text=Your shelf is empty'), 'empty library message shown');
   await shot('01-empty');
 
   // --- Add by typing an ISBN (Open Library) ---
-  await page.goto(BASE + '?nosw#/scan');
+  await page.goto(BASE + '?nosw#/library/scan');
   await page.waitForSelector('[data-manual] input');
   await page.fill('[data-manual] input', '978-0-7475-3269-9');
   await page.click('[data-manual] button');
@@ -57,12 +57,13 @@ async function mockApis(ctx) {
   await page.click('.sheet [data-add-room]');
   await page.fill('.sheet.dialog input', 'Study');
   await page.click('.sheet.dialog button.btn-primary');
-  await page.waitForSelector('.sheet [data-add-case]');
-  await page.click('.sheet [data-add-case]');
+  await page.waitForSelector('.sheet [data-add-area]');
+  await page.click('.sheet [data-add-area]');
+  await page.click('.choice-grid button:has-text("Bookcase")');
   await page.fill('.sheet.dialog input', 'Tall bookcase');
   await page.click('.sheet.dialog button.btn-primary');
-  await page.waitForSelector('.sheet [data-shelf="3"]');
-  await page.click('.sheet [data-shelf="3"]');
+  await page.waitForSelector('.sheet [data-spot] >> text=Shelf 3');
+  await page.click('.sheet [data-spot] >> text=Shelf 3');
   await page.click('.sheet [data-add-owner]');
   await page.fill('.sheet.dialog input', 'Aarav');
   await page.click('.sheet.dialog button.btn-primary');
@@ -122,7 +123,7 @@ async function mockApis(ctx) {
   check(true, 'where-is-it search by title works');
 
   // --- Library ---
-  await page.goto(BASE + '?nosw#/');
+  await page.goto(BASE + '?nosw#/library');
   await page.waitForSelector('.grid .tile');
   check((await page.$$('.grid .tile')).length === 3, 'library grid has 3 books');
   await page.waitForTimeout(300);
@@ -160,27 +161,27 @@ async function mockApis(ctx) {
   await shot('08-book');
 
   // --- Stats ---
-  await page.goto(BASE + '?nosw#/stats');
+  await page.goto(BASE + '?nosw#/library/stats');
   await page.waitForSelector('.stat-grid');
   const statsText = await page.textContent('#view');
   check(/3\s*Books/.test(statsText) && /703\s*Total pages/.test(statsText), 'stats: 3 books, 703 pages');
   await shot('09-stats');
 
   // --- Export / import ---
-  await page.goto(BASE + '?nosw#/settings');
-  await page.waitForSelector('[data-export-json]');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-export-json]')]);
+  await page.goto(BASE + '?nosw#/settings/backup');
+  await page.waitForSelector('[data-export]');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-export]')]);
   const jsonPath = await dl.path();
   const backup = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-  check(backup.books.length === 3 && backup.rooms.length >= 2, 'JSON export has 3 books');
-  const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('[data-export-csv]')]);
+  check(backup.app === 'homebase' && backup.data.books.length === 3 && backup.data.rooms.length >= 2, 'JSON backup has 3 books');
+  const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('[data-csv="library|0"]')]);
   const csv = fs.readFileSync(await dl2.path(), 'utf8');
-  check(csv.split('\n').length === 4 && csv.includes('Study,Tall bookcase,3'), 'CSV export has header + 3 rows with location');
+  check(csv.split('\n').length === 4 && csv.includes('Study,Tall bookcase,Shelf 3'), 'Library CSV has header + 3 rows with location');
   await shot('10-settings');
 
   // Dark mode screenshot
   await page.emulateMedia({ colorScheme: 'dark' });
-  await page.goto(BASE + '?nosw#/');
+  await page.goto(BASE + '?nosw#/library');
   await page.waitForSelector('.grid .tile, .rows .row');
   await page.waitForTimeout(300);
   await shot('11-library-dark');
@@ -189,11 +190,11 @@ async function mockApis(ctx) {
   const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   await mockApis(ctx2);
   const p2 = await ctx2.newPage();
-  await p2.goto(BASE + '?nosw#/settings');
+  await p2.goto(BASE + '?nosw#/settings/backup');
   await p2.waitForSelector('[data-import]', { state: 'attached' });
   await p2.setInputFiles('[data-import]', jsonPath);
   await p2.waitForSelector('.toast >> text=Imported');
-  await p2.goto(BASE + '?nosw#/');
+  await p2.goto(BASE + '?nosw#/library');
   await p2.waitForSelector('.rows .row, .grid .tile');
   check((await p2.$$('.grid .tile, .rows .row')).length === 3, 'import into fresh browser restores 3 books');
   await p2.waitForTimeout(300);
@@ -202,7 +203,7 @@ async function mockApis(ctx) {
   // Offline add: lookup is skipped and fills in later
   await ctx.setOffline(true);
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto(BASE + '?nosw#/scan').catch(() => {});
+  await page.goto(BASE + '?nosw#/library/scan').catch(() => {});
   check(errors.length === 0, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 
   await browser.close();
