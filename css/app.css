@@ -36,7 +36,7 @@
   --danger: #b00000; --danger-soft: #ffd0d0; --shadow: none; color-scheme: light;
 }
 :root[data-contrast="high"] body { font-size: 18px; }
-:root[data-contrast="high"] .app { --tool: #000 !important; }
+:root[data-contrast="high"] { --tool: #000 !important; }
 :root[data-contrast="high"] .card, :root[data-contrast="high"] .list, :root[data-contrast="high"] .btn,
 :root[data-contrast="high"] .chip, :root[data-contrast="high"] input, :root[data-contrast="high"] select { border: 2px solid #000 !important; }
 :root[data-contrast="high"] #contrast-btn { background: #ffe600; color: #000; }

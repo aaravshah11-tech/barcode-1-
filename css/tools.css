@@ -1,0 +1,18 @@
+/* ============ Tool-specific styles ============ */
+
+/* ---------- Inventory ---------- */
+.thumb-big { width: 96px; height: 96px; border-radius: 16px; object-fit: cover; background: var(--surface-2); display: grid; place-items: center; font-size: 2.6rem; }
+.item-photo { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 18px; background: var(--surface-2); display: block; }
+.item-photo.ph { display: grid; place-items: center; font-size: 4rem; }
+.label-sheet { display: none; }
+@media print {
+  @page { margin: 10mm; }
+  .label-sheet { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .qr-label { display: flex; gap: 3mm; align-items: center; border: 1px dashed #999; border-radius: 3mm; padding: 3mm; break-inside: avoid; height: 36mm; overflow: hidden; }
+  .qr-label-code { width: 28mm; flex: none; }
+  .qr-label-code svg { width: 100%; height: auto; display: block; }
+  .qr-label-text { display: flex; flex-direction: column; gap: 1mm; font-family: system-ui, sans-serif; min-width: 0; }
+  .qr-label-text b { font-size: 13pt; line-height: 1.1; }
+  .qr-label-text span { font-size: 8pt; color: #333; }
+  .qr-label-text small { font-size: 7pt; color: #555; line-height: 1.2; }
+}

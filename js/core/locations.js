@@ -90,10 +90,14 @@ export function wherePathHtml(loc) {
 export const lastLocation = (tool) => store.getLocal(`lastLocation:${tool}`);
 export const setLastLocation = (tool, loc) => (loc ? store.setLocal(`lastLocation:${tool}`, loc) : null);
 
-// QR labels for boxes/cupboards: "HBLOC:room:area[:spot]"
-export const labelCode = (loc) => ['HBLOC', loc.roomId, loc.areaId, loc.spotId].filter(Boolean).join(':');
+// QR labels for boxes/cupboards. The QR holds a link, so the phone's own camera app
+// opens HomeBase straight to "what's inside". (Old "HBLOC:room:area:spot" codes also work.)
+export const labelUrl = (loc) => `${location.href.split('#')[0]}#/inventory/place/${[loc.roomId, loc.areaId, loc.spotId].filter(Boolean).map(encodeURIComponent).join('/')}`;
 export function parseLabel(text) {
-  const m = String(text || '').match(/HBLOC:([^:\s]+):([^:\s]+)(?::([^:\s]+))?/);
+  const t = String(text || '');
+  let m = t.match(/#\/inventory\/place\/([^/\s]+)\/([^/\s]+)(?:\/([^/\s]+))?/);
+  if (m) return { roomId: decodeURIComponent(m[1]), areaId: decodeURIComponent(m[2]), spotId: m[3] ? decodeURIComponent(m[3]) : '' };
+  m = t.match(/HBLOC:([^:\s]+):([^:\s]+)(?::([^:\s]+))?/);
   return m ? { roomId: m[1], areaId: m[2], spotId: m[3] || '' } : null;
 }
 

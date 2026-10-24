@@ -22,7 +22,9 @@ const isDark = () => document.documentElement.dataset.theme === 'dark' ||
 
 function applyToolTheme(t) {
   const app = document.getElementById('app');
-  app.style.setProperty('--tool', t ? (isDark() ? t.dark : t.color) : '');
+  // Set on <html> so pop-up sheets (outside .app) get the tool colour too.
+  if (t) document.documentElement.style.setProperty('--tool', isDark() ? t.dark : t.color);
+  else document.documentElement.style.removeProperty('--tool');
   app.dataset.tool = t?.id || '';
   document.getElementById('home-btn').hidden = !t;
   document.getElementById('brand-icon').innerHTML = t ? `<span class="tool-emoji">${t.emoji}</span>` : '<img src="icons/icon.svg" alt="" width="28" height="28">';
