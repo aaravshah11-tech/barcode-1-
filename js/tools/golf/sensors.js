@@ -17,13 +17,22 @@ export async function requestMotionPermission() {
 export function listen(onSample, onNoData) {
   let got = false;
   const t0 = performance.now();
+  // Use when the reading was taken (event.timeStamp), not when we got round to handling it,
+  // so a busy moment on the phone doesn't stretch or squash the swing.
+  let last = -Infinity;
+  const stamp = (e) => {
+    const now = performance.now();
+    const ts = e.timeStamp > 0 && Math.abs(e.timeStamp - now) < 5000 ? e.timeStamp : now; // ignore odd clocks
+    last = Math.max(last + 1, Math.round(ts - t0)); // always moving forward
+    return last;
+  };
   const handler = (e) => {
     const r = e.rotationRate;
     if (!r || (r.alpha == null && r.beta == null && r.gamma == null)) return;
     got = true;
     const a = e.accelerationIncludingGravity || e.acceleration || {};
     onSample({
-      t: Math.round(performance.now() - t0),
+      t: stamp(e),
       gx: r.beta || 0, gy: r.gamma || 0, gz: r.alpha || 0, // degrees per second around x, y, z
       ax: a.x || 0, ay: a.y || 0, az: a.z || 0,
     });

@@ -37,11 +37,12 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
       for (let t = 0; t < 450; t += dt) frames.push(peak * Math.cos((Math.PI / 2) * t / 450));      // follow-through
       for (let t = 0; t < 900; t += dt) frames.push(0);                                          // settle
       let i = 0;
+      const start = performance.now();
       const tick = () => {
         if (i >= frames.length) return resolve(frames.length);
         window.dispatchEvent(new DeviceMotionEvent('devicemotion', { rotationRate: { alpha: frames[i], beta: 0.5, gamma: -0.3 }, accelerationIncludingGravity: { x: 0, y: 9.8 + (strike && i === strikeAt ? 40 : 0), z: 0 }, interval: dt }));
         i++;
-        setTimeout(tick, dt);
+        setTimeout(tick, Math.max(0, start + i * dt - performance.now())); // fixed clock: no drift
       };
       tick();
     });
