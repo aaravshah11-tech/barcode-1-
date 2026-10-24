@@ -1,6 +1,7 @@
 // Shared sports helpers: clock, sides, player labels, events.
 import * as store from '../../core/store.js';
-import { teamName, playerLabel, player, numberIn, team } from '../../core/people.js';
+import { teamName, playerLabel, player, numberIn, team, players } from '../../core/people.js';
+import { lineupState } from './lineup.js';
 
 export const SPORT_INFO = {
   rugby: { name: 'Rugby', emoji: '🏉', periods: 2, periodMins: 40, periodName: (n, of) => (n <= of ? (n === 1 ? '1st half' : n === 2 ? '2nd half' : `Half ${n}`) : `Extra time ${n - of}`) },
@@ -65,3 +66,14 @@ export function logEvent(m, ev) {
 /** Win / draw / loss from our point of view. */
 export const resultOf = (us, them) => (us > them ? 'W' : us < them ? 'L' : 'D');
 export const playerRefs = (events, side) => [...new Set(events.filter((e) => e.side === side && e.player).map((e) => e.player))];
+
+export const TEAM_SIZE = { rugby: 15, hockey: 11 };
+/** Our match squad (player records). */
+export const squadOf = (m) => (m.squad?.length ? m.squad.map((id) => player(id)).filter(Boolean) : players(m.teamId));
+/** Current/final match time in ms. */
+export const nowMatchTime = (m) => matchTime(m, m.clock?.period || 1, clockMs(m));
+/** Line-up for our side: { onField, minutes, starters, subApps, sentOff } — null if starters weren't chosen. */
+export function lineupOf(m, events = eventsOf(m.id)) {
+  if (!m.starters?.length) return null;
+  return lineupState(m.starters, events, (e) => matchTime(m, e.period, e.clockMs), nowMatchTime(m));
+}

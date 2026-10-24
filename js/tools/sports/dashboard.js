@@ -3,7 +3,8 @@ import * as store from '../../core/store.js';
 import { player } from '../../core/people.js';
 import { lineChart, columnChart, pctText } from '../../core/charts.js';
 import { esc, icon, fmtClock, formatDate, confirmDialog, toast, debounce } from '../../core/ui.js';
-import { SPORT_INFO, match, eventsOf, sideName, sideColor, refLabel, clockMs, periodMs, matchTime, minuteOf } from './common.js';
+import { SPORT_INFO, match, eventsOf, sideName, sideColor, refLabel, clockMs, periodMs, matchTime, minuteOf, lineupOf } from './common.js';
+import { wholeMinutes } from './lineup.js';
 import { summarize } from './summary.js';
 import { eventLabel, suspensions } from './live.js';
 import { oversText } from './cricket.js';
@@ -40,18 +41,22 @@ function teamRows(m, s) {
   ];
 }
 
-function playerTable(m, s) {
-  const refs = Object.keys(s.players).filter((r) => isOurs(m, r));
+function playerTable(m, s, lu) {
+  const refs = [...new Set([...Object.keys(s.players).filter((r) => isOurs(m, r)), ...(lu ? [...lu.starters, ...lu.subApps] : [])])];
   if (!refs.length) return '<p class="muted small">No player events yet.</p>';
-  const rows = refs.map((r) => [r, s.players[r]]);
+  const blank = m.sport === 'rugby' ? { points: 0, tries: 0, kicksMade: 0, kicksMissed: 0, tackles: 0, tacklesMissed: 0, tackleSuccess: null, carries: 0, lineBreaks: 0, turnovers: 0, pensConceded: 0, yellows: 0, reds: 0 }
+    : { goals: 0, pcGoals: 0, shots: 0, shotsOn: 0, tackles: 0, interceptions: 0, greens: 0, yellows: 0, reds: 0 };
+  const rows = refs.map((r) => [r, s.players[r] || blank]);
+  const minsHead = lu ? '<th class="num">Mins</th>' : '';
+  const mins = (r) => (lu ? `<td class="num">${lu.minutes[r] != null ? `${wholeMinutes(lu.minutes[r])}′${lu.onField.includes(r) ? ' 🟢' : ''}` : '–'}</td>` : '');
   if (m.sport === 'rugby') {
     rows.sort((a, b) => b[1].points - a[1].points || b[1].tackles - a[1].tackles);
-    return `<div class="table-wrap"><table class="table"><thead><tr><th>Player</th><th class="num">Pts</th><th class="num">Tries</th><th class="num">Kicks</th><th class="num">Tackles</th><th class="num">Tkl %</th><th class="num">Carries</th><th class="num">LB</th><th class="num">TO</th><th class="num">Pens</th><th class="num">Cards</th></tr></thead><tbody>
-      ${rows.map(([r, p]) => `<tr><td>${esc(refLabel(m, r))}</td><td class="num"><b>${p.points}</b></td><td class="num">${p.tries}</td><td class="num">${p.kicksMade + p.kicksMissed ? `${p.kicksMade}/${p.kicksMade + p.kicksMissed}` : ''}</td><td class="num">${p.tackles}</td><td class="num">${p.tackleSuccess ?? ''}${p.tackleSuccess != null ? '%' : ''}</td><td class="num">${p.carries}</td><td class="num">${p.lineBreaks}</td><td class="num">${p.turnovers}</td><td class="num">${p.pensConceded}</td><td class="num">${p.yellows ? '🟨'.repeat(p.yellows) : ''}${p.reds ? '🟥' : ''}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<div class="table-wrap"><table class="table"><thead><tr><th>Player</th>${minsHead}<th class="num">Pts</th><th class="num">Tries</th><th class="num">Kicks</th><th class="num">Tackles</th><th class="num">Tkl %</th><th class="num">Carries</th><th class="num">LB</th><th class="num">TO</th><th class="num">Pens</th><th class="num">Cards</th></tr></thead><tbody>
+      ${rows.map(([r, p]) => `<tr><td>${esc(refLabel(m, r))}</td>${mins(r)}<td class="num"><b>${p.points}</b></td><td class="num">${p.tries}</td><td class="num">${p.kicksMade + p.kicksMissed ? `${p.kicksMade}/${p.kicksMade + p.kicksMissed}` : ''}</td><td class="num">${p.tackles}</td><td class="num">${p.tackleSuccess ?? ''}${p.tackleSuccess != null ? '%' : ''}</td><td class="num">${p.carries}</td><td class="num">${p.lineBreaks}</td><td class="num">${p.turnovers}</td><td class="num">${p.pensConceded}</td><td class="num">${p.yellows ? '🟨'.repeat(p.yellows) : ''}${p.reds ? '🟥' : ''}</td></tr>`).join('')}</tbody></table></div>`;
   }
   rows.sort((a, b) => b[1].goals - a[1].goals || b[1].shots - a[1].shots);
-  return `<div class="table-wrap"><table class="table"><thead><tr><th>Player</th><th class="num">Goals</th><th class="num">PC goals</th><th class="num">Shots</th><th class="num">On target</th><th class="num">Tackles</th><th class="num">Int.</th><th class="num">Cards</th></tr></thead><tbody>
-    ${rows.map(([r, p]) => `<tr><td>${esc(refLabel(m, r))}</td><td class="num"><b>${p.goals}</b></td><td class="num">${p.pcGoals}</td><td class="num">${p.shots}</td><td class="num">${p.shotsOn}</td><td class="num">${p.tackles}</td><td class="num">${p.interceptions}</td><td class="num">${'🟩'.repeat(p.greens)}${'🟨'.repeat(p.yellows)}${p.reds ? '🟥' : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="table"><thead><tr><th>Player</th>${minsHead}<th class="num">Goals</th><th class="num">PC goals</th><th class="num">Shots</th><th class="num">On target</th><th class="num">Tackles</th><th class="num">Int.</th><th class="num">Cards</th></tr></thead><tbody>
+    ${rows.map(([r, p]) => `<tr><td>${esc(refLabel(m, r))}</td>${mins(r)}<td class="num"><b>${p.goals}</b></td><td class="num">${p.pcGoals}</td><td class="num">${p.shots}</td><td class="num">${p.shotsOn}</td><td class="num">${p.tackles}</td><td class="num">${p.interceptions}</td><td class="num">${'🟩'.repeat(p.greens)}${'🟨'.repeat(p.yellows)}${p.reds ? '🟥' : ''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function scoreChart(m, events) {
@@ -84,6 +89,7 @@ function header(m, extra = '') {
 function teamDashboard(root, m) {
   const events = eventsOf(m.id);
   const s = summarize(m, events);
+  const lu = lineupOf(m, events);
   const periods = m.format?.periods || SPORT_INFO[m.sport].periods;
   root.innerHTML = `${header(m)}
     <div class="big-score">
@@ -98,7 +104,7 @@ function teamDashboard(root, m) {
         <button class="icon-btn tl-del" data-del-ev="${esc(e.id)}" aria-label="Delete event">${icon('close')}</button></div>`).join('') : '<p class="muted">Events logged on the phone appear here live.</p>'}</div></div>
       <div class="card"><h2>Team stats</h2><div class="cmp-head"><span>${esc(sideName(m, 'us'))}</span><span>${esc(sideName(m, 'them'))}</span></div>${compareRows(m, teamRows(m, s))}</div>
       <div class="card span-2"><h2>Score progression</h2>${scoreChart(m, events)}</div>
-      <div class="card span-2"><h2>Player stats</h2>${playerTable(m, s)}</div>
+      <div class="card span-2"><h2>Player stats</h2>${lu ? `<p class="small muted">🟢 = on the field now. Minutes come from the starting line-up and substitutions.</p>` : '<p class="small muted">Choose the starting line-up on the logging pad to see minutes played.</p>'}${playerTable(m, s, lu)}</div>
     </div>`;
 }
 

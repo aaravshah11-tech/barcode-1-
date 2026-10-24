@@ -50,6 +50,12 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   const matchId = phone.url().split('/').pop();
   check(true, 'rugby match created; logging pad open on phone');
   await phone.click('[data-clock-toggle]');
+  // Starting line-up: #9 and #10 start, #11 on the bench
+  await phone.click('[data-starters]');
+  await phone.click('.sheet .pick[data-ref="p11"]');
+  await phone.click('.sheet [data-done]');
+  await phone.waitForSelector('[data-lineup]');
+  check((await phone.textContent('[data-lineup]')).includes('On field 2 · Bench 1'), 'starting line-up chosen (2 on, 1 bench)');
   await tap('try'); await pick(phone, 11);
   await phone.waitForSelector('.sheet [data-conv="made"]');
   check(true, 'conversion offered straight after the try');
@@ -68,6 +74,16 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   await phone.waitForFunction(() => !document.querySelector('.bin'));
   check(true, 'undo removes the last event (sin bin gone)');
   check((await phone.textContent('[data-score-us]')) === '7' && (await phone.textContent('[data-score-them]')) === '3', 'phone scoreboard 7–3');
+  // Substitution: OFF list only has players on the field, ON list only the bench
+  await tap('sub');
+  await phone.waitForSelector('.sheet .pick');
+  const offList = await phone.$$eval('.sheet .pick b', (els) => els.map((e) => e.textContent).join(','));
+  await pick(phone, 9);
+  await phone.waitForSelector('.sheet .pick');
+  const onList = await phone.$$eval('.sheet .pick b', (els) => els.map((e) => e.textContent).join(','));
+  await pick(phone, 11);
+  check(offList === '9,10' && onList === '11', `substitution offers on-field (${offList}) then bench (${onList}) players`);
+  await phone.waitForFunction(() => document.querySelector('[data-lineup]')?.textContent.includes('On field 2 · Bench 1'));
 
   await comp.goto(BASE + `?nosw#/sports/match/${matchId}`);
   await comp.waitForSelector('.big-score');
@@ -81,6 +97,7 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   check(true, 'new try on phone updates computer scoreboard live (12)');
   const dash = await comp.textContent('#view');
   check(dash.includes('#11 Jo Brown') && /67%/.test(dash), 'player stats + tackle success % on dashboard');
+  check(await comp.isVisible('th:text-is("Mins")') && dash.includes('🟢'), 'dashboard shows minutes played + who is on the field');
   await shot(comp, 'sports-rugby-dashboard');
   await phone.click('[data-next]'); await phone.click('.sheet.dialog .btn-primary');
   await phone.waitForSelector('text=2nd half');

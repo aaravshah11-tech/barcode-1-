@@ -3,7 +3,8 @@ import * as store from '../../core/store.js';
 import { players, numberIn, team, playerLabel } from '../../core/people.js';
 import { feedback, unlockAudio } from '../../core/feedback.js';
 import { esc, icon, openSheet, toast, confirmDialog, fmtClock, keepAwake } from '../../core/ui.js';
-import { SPORT_INFO, match, eventsOf, sideName, sideColor, refLabel, clockMs, periodMs, matchTime, minuteOf, startClock, pauseClock, nextPeriod, setClock, logEvent } from './common.js';
+import { SPORT_INFO, match, eventsOf, sideName, sideColor, refLabel, clockMs, periodMs, matchTime, minuteOf, startClock, pauseClock, nextPeriod, setClock, logEvent, squadOf, lineupOf, TEAM_SIZE } from './common.js';
+import { defaultStarters, wholeMinutes } from './lineup.js';
 import { RUGBY_EVENTS, RUGBY_GROUPS, rugbyDef, lastKicker } from './rugby.js';
 import { HOCKEY_EVENTS, HOCKEY_GROUPS, hockeyDef } from './hockey.js';
 import { summarize } from './summary.js';
@@ -16,12 +17,12 @@ export const SPORT_EVENTS = {
 export const eventLabel = (m, e) => SPORT_EVENTS[m.sport]?.def(e.type)?.label || e.type;
 
 /** Players we can pick for a side: our match squad, or the opponent's players / shirt numbers. */
-export function pickPlayer(m, side, title) {
+export function pickPlayer(m, side, title, { only = null, note = null, empty = 'Nobody to choose.' } = {}) {
   return new Promise((resolve) => {
     let result = null;
     let opts;
     if (side === 'us') {
-      const squad = (m.squad?.length ? m.squad.map((id) => store.get('players', id)).filter(Boolean) : players(m.teamId));
+      const squad = squadOf(m).filter((p) => !only || only.includes(p.id));
       opts = squad.map((p) => ({ ref: p.id, num: numberIn(p, m.teamId) ?? '', name: p.name.split(' ').slice(-1)[0] }))
         .sort((a, b) => (+a.num || 999) - (+b.num || 999));
     } else {
@@ -29,7 +30,7 @@ export function pickPlayer(m, side, title) {
       opts = ps.length ? ps.map((p) => ({ ref: p.id, num: numberIn(p, m.oppTeamId) ?? '', name: p.name.split(' ').slice(-1)[0] }))
         : Array.from({ length: 23 }, (_, i) => ({ ref: `opp#${i + 1}`, num: i + 1, name: '' }));
     }
-    const s = openSheet(`<div class="pick-grid">${opts.map((o, i) => `<button class="pick" data-i="${i}"><b>${esc(o.num)}</b><span>${esc(o.name)}</span></button>`).join('')}</div>
+    const s = openSheet(`${opts.length ? '' : `<p class="muted">${esc(empty)}</p>`}<div class="pick-grid">${opts.map((o, i) => `<button class="pick" data-i="${i}" aria-label="${esc(`${o.num} ${o.name}`.trim())}"><b>${esc(o.num)}</b><span>${esc(note ? note(o.ref) : o.name)}</span></button>`).join('')}</div>
       <button class="btn btn-lg btn-block" data-skip style="margin-top:10px">Not sure / skip</button>`, { title, onClose: () => resolve(result) });
     s.body.addEventListener('click', (e) => {
       const b = e.target.closest('button');
@@ -92,6 +93,47 @@ export function suspensions(m, events, now = Date.now()) {
   }).filter((x) => x.remaining > 0);
 }
 
+/** Choose the starting line-up (toggle grid). Resolves to the saved match or null. */
+export function chooseStarters(matchId) {
+  return new Promise((resolve) => {
+    const m = match(matchId);
+    const squad = squadOf(m).map((p) => ({ ref: p.id, num: numberIn(p, m.teamId) ?? '', name: p.name.split(' ').slice(-1)[0] }))
+      .sort((a, b) => (+a.num || 999) - (+b.num || 999));
+    const size = TEAM_SIZE[m.sport] || 15;
+    const picked = new Set(m.starters?.length ? m.starters : defaultStarters(squad.map((x) => x.ref), (r) => squad.find((x) => x.ref === r)?.num, size));
+    let saved = null;
+    const s = openSheet(`<p class="muted" style="margin-top:0">Tap to choose who starts. Everyone else is on the bench. Minutes played are worked out from this and your substitutions.</p>
+      <div class="pick-grid" data-grid></div><p class="center" data-count style="font-weight:700"></p>
+      <button class="btn btn-primary btn-lg btn-block" data-done>Done</button>`, { title: 'Starting line-up', onClose: () => resolve(saved) });
+    const draw = () => {
+      s.body.querySelector('[data-grid]').innerHTML = squad.map((o) => `<button class="pick ${picked.has(o.ref) ? 'on' : ''}" data-ref="${esc(o.ref)}" aria-pressed="${picked.has(o.ref)}"><b>${esc(o.num)}</b><span>${esc(o.name)}</span></button>`).join('');
+      s.body.querySelector('[data-count]').textContent = `${picked.size} starting${picked.size !== size ? ` (usually ${size})` : ''} · ${squad.length - picked.size} on the bench`;
+    };
+    draw();
+    s.body.addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.ref) { picked.has(b.dataset.ref) ? picked.delete(b.dataset.ref) : picked.add(b.dataset.ref); draw(); }
+      if ('done' in b.dataset) { saved = await store.put('matches', { ...match(matchId), starters: [...picked] }); s.close(); }
+    });
+  });
+}
+
+/** Read-only "who's on now" sheet with minutes. */
+function showLineup(matchId) {
+  const m = match(matchId);
+  const lu = lineupOf(m);
+  if (!lu) return chooseStarters(matchId);
+  const all = squadOf(m);
+  const row = (p) => `<div class="list-item"><span class="badge" style="min-width:34px">${esc(numberIn(p, m.teamId) ?? '')}</span><div class="grow">${esc(p.name)}</div><span class="mono small">${wholeMinutes(lu.minutes[p.id])}′</span></div>`;
+  const on = all.filter((p) => lu.onField.includes(p.id));
+  const bench = all.filter((p) => !lu.onField.includes(p.id));
+  const s = openSheet(`<div class="section-title">On the field (${on.length})</div><div class="list">${on.map(row).join('') || '<div class="list-item muted">Nobody</div>'}</div>
+    <div class="section-title" style="margin-top:14px">Bench / off (${bench.length})</div><div class="list">${bench.map((p) => row(p).replace('</div><span', `${lu.sentOff.includes(p.id) ? ' <span class="tag tag-danger">sent off</span>' : ''}</div><span`)).join('') || '<div class="list-item muted">Nobody</div>'}</div>
+    <button class="btn btn-block" data-edit-starters style="margin-top:12px">Change starting line-up</button>`, { title: 'Line-up & minutes' });
+  s.body.querySelector('[data-edit-starters]').onclick = () => { s.close(); chooseStarters(matchId); };
+}
+
 export function renderLive(root, [id], ctx) {
   const m0 = match(id);
   if (!m0) { root.innerHTML = '<div class="empty"><h2>Match not found</h2><a class="btn" href="#/sports">Back</a></div>'; return; }
@@ -120,6 +162,13 @@ export function renderLive(root, [id], ctx) {
         <button class="icon-btn" data-clock-edit aria-label="Adjust clock">${icon('clock')}</button>
       </div>
       <div data-bins></div>
+      ${(() => {
+        if (!squadOf(m).length) return '';
+        const lu = lineupOf(m, events);
+        return lu
+          ? `<button class="lineup-row" data-lineup><span>🟢 On field <b>${lu.onField.length}</b> · Bench <b>${squadOf(m).length - lu.onField.length}</b></span><span class="small">Line-up & minutes ›</span></button>`
+          : `<button class="lineup-row need" data-starters><span>👥 <b>Choose your starting line-up</b></span><span class="small">for minutes played ›</span></button>`;
+      })()}
       <div class="side-toggle" role="group" aria-label="Which team?">
         <button data-side="us" aria-pressed="${side === 'us'}" style="--sc:${esc(sideColor(m, 'us'))}">${esc(sideName(m, 'us'))}</button>
         <button data-side="them" aria-pressed="${side === 'them'}" style="--sc:${esc(sideColor(m, 'them'))}">${esc(sideName(m, 'them'))}</button>
@@ -160,6 +209,8 @@ export function renderLive(root, [id], ctx) {
     unlockAudio();
     const m = match(id);
     const d = b.dataset;
+    if ('starters' in d) { await chooseStarters(id); draw(); return; }
+    if ('lineup' in d) { showLineup(id); return; }
     if (d.side) { side = d.side; root.querySelectorAll('[data-side]').forEach((x) => x.setAttribute('aria-pressed', x.dataset.side === side)); return; }
     if ('clockToggle' in d) { m.clock?.running ? await pauseClock(m) : await startClock(m); return; }
     if ('next' in d) { if (await confirmDialog({ title: 'End this period?', message: 'The clock stops and resets for the next period.', confirmLabel: 'End period' })) await nextPeriod(m); return; }
@@ -188,9 +239,12 @@ export function renderLive(root, [id], ctx) {
       const forSide = side;
       let player = '', player2 = '';
       if (def.sub) {
-        player = await pickPlayer(m, forSide, 'Player coming OFF');
+        const lu = forSide === 'us' ? lineupOf(m) : null;
+        const mins = (r) => (lu ? `${wholeMinutes(lu.minutes[r])}′` : '');
+        player = await pickPlayer(m, forSide, 'Player coming OFF', lu ? { only: lu.onField, note: mins, empty: 'Nobody is on the field yet.' } : {});
         if (player === null) return;
-        player2 = await pickPlayer(m, forSide, 'Player coming ON');
+        const bench = lu ? squadOf(m).map((p) => p.id).filter((r) => !lu.onField.includes(r) && !lu.sentOff.includes(r)) : null;
+        player2 = await pickPlayer(m, forSide, 'Player coming ON', bench ? { only: bench, empty: 'Nobody left on the bench.' } : {});
         if (player2 === null) return;
       } else if (def.player) {
         player = await pickPlayer(m, forSide, `${def.label} — who?`);

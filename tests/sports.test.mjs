@@ -124,3 +124,23 @@ test('rugby: last kicker for the conversion prompt', () => {
   assert.equal(lastKicker(evs, 'them'), 'opp#10');
   assert.equal(lastKicker([], 'us'), '');
 });
+
+test('lineup: on field, substitutions, red cards, minutes played', async () => {
+  const { lineupState, wholeMinutes, defaultStarters } = await import('../js/tools/sports/lineup.js');
+  const M = 60000;
+  const mt = (e) => e.at * M;
+  const events = [
+    { side: 'us', type: 'try', player: 'a', at: 5 },
+    { side: 'us', type: 'sub', player: 'b', player2: 'x', at: 50 },   // b off, x on
+    { side: 'them', type: 'sub', player: 'opp#1', player2: 'opp#16', at: 55 },
+    { side: 'us', type: 'red', player: 'c', at: 60 },                // c sent off
+    { side: 'us', type: 'sub', player: 'x', player2: 'b', at: 70 },   // b back on (rolling subs)
+    { side: 'us', type: 'sub', player: 'a', player2: 'c', at: 72 },   // red-carded player can't come back
+  ];
+  const s = lineupState(['a', 'b', 'c'], events, mt, 80 * M);
+  assert.deepEqual(s.onField.sort(), ['b']);
+  assert.deepEqual(Object.fromEntries(Object.entries(s.minutes).map(([k, v]) => [k, wholeMinutes(v)])), { a: 72, b: 60, c: 60, x: 20 });
+  assert.deepEqual(s.subApps, ['x']);
+  assert.deepEqual(s.sentOff, ['c']);
+  assert.deepEqual(defaultStarters(['p3', 'p1', 'p2', 'p9'], (r) => ({ p1: 1, p2: 2, p3: 3, p9: 16 })[r], 3), ['p1', 'p2', 'p3']);
+});

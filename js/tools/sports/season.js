@@ -3,7 +3,8 @@ import * as store from '../../core/store.js';
 import { teams, player } from '../../core/people.js';
 import { lineChart, bars, pctText } from '../../core/charts.js';
 import { esc, formatDate } from '../../core/ui.js';
-import { SPORT_INFO, matches, eventsOf, sideName, refLabel, resultOf } from './common.js';
+import { SPORT_INFO, matches, eventsOf, sideName, refLabel, resultOf, lineupOf } from './common.js';
+import { wholeMinutes } from './lineup.js';
 import { summarize, scoreOf } from './summary.js';
 import { aggregate } from './cricket.js';
 import { matchRow } from './index.js';
@@ -54,12 +55,16 @@ const ours = (ref, teamId) => !!ref && (player(ref)?.teamIds || []).includes(tea
 
 function teamBoards(sport, sums, teamId) {
   const tot = {};
-  for (const { s } of sums) {
-    for (const [ref, p] of Object.entries(s.players)) {
-      if (!ours(ref, teamId)) continue;
-      const t = (tot[ref] ||= { apps: 0 });
+  for (const { m, s } of sums) {
+    const lu = lineupOf(m);
+    const played = new Set(Object.keys(s.players).filter((r) => ours(r, teamId)));
+    if (lu) [...lu.starters, ...lu.subApps].forEach((r) => played.add(r));
+    for (const ref of played) {
+      const t = (tot[ref] ||= { apps: 0, starts: 0, minutes: 0 });
       t.apps++;
-      for (const [k, v] of Object.entries(p)) if (typeof v === 'number' && !['kicking', 'tackleSuccess'].includes(k)) t[k] = (t[k] || 0) + v;
+      if (lu?.starters.includes(ref)) t.starts++;
+      if (lu?.minutes[ref]) t.minutes += lu.minutes[ref];
+      for (const [k, v] of Object.entries(s.players[ref] || {})) if (typeof v === 'number' && !['kicking', 'tackleSuccess'].includes(k)) t[k] = (t[k] || 0) + v;
     }
   }
   const name = (ref) => player(ref)?.name || '?';
@@ -78,7 +83,8 @@ function teamBoards(sport, sums, teamId) {
       <div class="card"><h2>Carries</h2>${bars(top('carries'))}</div>
       <div class="card"><h2>Turnovers won</h2>${bars(top('turnovers'))}</div>
       <div class="card"><h2>Line breaks</h2>${bars(top('lineBreaks'))}</div>
-      <div class="card"><h2>Discipline (penalties)</h2>${bars(top('pensConceded'), { color: 'var(--danger)' })}</div></div>`;
+      <div class="card"><h2>Discipline (penalties)</h2>${bars(top('pensConceded'), { color: 'var(--danger)' })}</div>
+      <div class="card"><h2>Minutes played</h2>${bars(top('minutes', (t) => `${wholeMinutes(t.minutes)}′ · ${t.apps} apps (${t.starts} starts)`), { empty: 'Choose starting line-ups to track minutes.' })}</div></div>`;
   }
   return `<div class="three-col section">
     <div class="card"><h2>Top scorers</h2>${bars(top('goals'))}</div>
@@ -86,6 +92,7 @@ function teamBoards(sport, sums, teamId) {
     <div class="card"><h2>Shots</h2>${bars(top('shots', (t) => `${t.shots} (${t.shotsOn} on)`))}</div>
     <div class="card"><h2>Tackles</h2>${bars(top('tackles'))}</div>
     <div class="card"><h2>Interceptions</h2>${bars(top('interceptions'))}</div>
+    <div class="card"><h2>Minutes played</h2>${bars(top('minutes', (t) => `${wholeMinutes(t.minutes)}′ · ${t.apps} apps`), { empty: 'Choose starting line-ups to track minutes.' })}</div>
     <div class="card"><h2>Cards</h2>${bars(Object.entries(tot).map(([r, t]) => [name(r), (t.greens || 0) + (t.yellows || 0) + (t.reds || 0), `${t.greens || 0}G ${t.yellows || 0}Y ${t.reds || 0}R`]).filter((x) => x[1]).sort((a, b) => b[1] - a[1]), { color: 'var(--warn)' })}</div></div>`;
 }
 
