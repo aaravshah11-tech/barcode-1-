@@ -51,7 +51,10 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   check(true, 'rugby match created; logging pad open on phone');
   await phone.click('[data-clock-toggle]');
   await tap('try'); await pick(phone, 11);
-  await tap('conv'); await pick(phone, 10);
+  await phone.waitForSelector('.sheet [data-conv="made"]');
+  check(true, 'conversion offered straight after the try');
+  await phone.click('.sheet [data-conv="made"]'); await pick(phone, 10); // first kick: choose the kicker
+  await phone.waitForFunction(() => !document.querySelector('.sheet-backdrop'));
   await phone.click('[data-side="them"]'); await tap('pen_goal'); await pick(phone, 10);
   await tap('tackle'); await pick(phone, 9);
   await tap('tackle'); await pick(phone, 9);
@@ -71,6 +74,9 @@ const relays = () => localStorage.setItem('shelf.relays', JSON.stringify(['ws://
   await comp.waitForFunction(() => document.querySelector('.big-score')?.textContent.includes('7') && document.querySelector('.timeline')?.textContent.includes('Lineout won'), null, { timeout: 15000 });
   check(true, 'computer dashboard shows the match');
   await tap('try'); await pick(phone, 11);
+  await phone.waitForSelector('.sheet [data-kicker]');
+  check((await phone.textContent('.sheet [data-kicker]')).includes('#10 Alex Smith'), 'second conversion: last kicker (#10) already chosen');
+  await phone.click('.sheet [data-conv="missed"]');
   await comp.waitForFunction(() => document.querySelector('.bs-team b')?.textContent === '12', null, { timeout: 10000 });
   check(true, 'new try on phone updates computer scoreboard live (12)');
   const dash = await comp.textContent('#view');

@@ -4,7 +4,7 @@ import { players, numberIn, team, playerLabel } from '../../core/people.js';
 import { feedback, unlockAudio } from '../../core/feedback.js';
 import { esc, icon, openSheet, toast, confirmDialog, fmtClock, keepAwake } from '../../core/ui.js';
 import { SPORT_INFO, match, eventsOf, sideName, sideColor, refLabel, clockMs, periodMs, matchTime, minuteOf, startClock, pauseClock, nextPeriod, setClock, logEvent } from './common.js';
-import { RUGBY_EVENTS, RUGBY_GROUPS, rugbyDef } from './rugby.js';
+import { RUGBY_EVENTS, RUGBY_GROUPS, rugbyDef, lastKicker } from './rugby.js';
 import { HOCKEY_EVENTS, HOCKEY_GROUPS, hockeyDef } from './hockey.js';
 import { summarize } from './summary.js';
 import { renderCricketLive } from './cricket-live.js';
@@ -35,6 +35,47 @@ export function pickPlayer(m, side, title) {
       const b = e.target.closest('button');
       if (!b) return;
       result = 'skip' in b.dataset ? '' : opts[+b.dataset.i].ref;
+      s.close();
+    });
+  });
+}
+
+/** Rugby: right after a try, ask "Conversion made / missed?" with the usual kicker ready. */
+export function offerConversion(matchId, side) {
+  return new Promise((resolve) => {
+    let kicker = lastKicker(eventsOf(matchId), side);
+    let busy = false;
+    const m = match(matchId);
+    const s = openSheet(`<p class="muted" style="margin-top:0">${esc(sideName(m, side))} scored a try. Conversion?</p>
+      <button class="crease-row" data-kicker style="width:100%;margin-bottom:12px"></button>
+      <div class="pad conv-pad">
+        <button class="pad-btn score big" data-conv="made">✓ Made <small>+2</small></button>
+        <button class="pad-btn card-red" data-conv="missed">✗ Missed</button>
+        <button class="pad-btn" data-conv="skip">Not taken</button>
+      </div>`, { title: 'Conversion', onClose: () => resolve() });
+    const drawKicker = () => {
+      s.body.querySelector('[data-kicker]').innerHTML = `<span>🦶 Kicker: <b>${kicker ? esc(refLabel(match(matchId), kicker)) : 'choose…'}</b></span><span class="small muted">Change</span>`;
+    };
+    drawKicker();
+    s.body.addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (!b || busy) return;
+      if ('kicker' in b.dataset) {
+        const k = await pickPlayer(match(matchId), side, 'Who is kicking?');
+        if (k !== null) { kicker = k; drawKicker(); }
+        return;
+      }
+      const what = b.dataset.conv;
+      if (!what) return;
+      if (what === 'skip') { s.close(); return; }
+      busy = true;
+      if (!kicker) {
+        const k = await pickPlayer(match(matchId), side, 'Who kicked?');
+        if (k === null) { busy = false; return; }
+        kicker = k;
+      }
+      await logEvent(match(matchId), { type: what === 'made' ? 'conv' : 'conv_miss', side, player: kicker });
+      feedback(what === 'made' ? 'ok' : 'dup');
       s.close();
     });
   });
@@ -160,6 +201,8 @@ export function renderLive(root, [id], ctx) {
       feedback(def.card ? 'dup' : 'ok');
       if (!fresh.clock?.running && fresh.status !== 'done') toast('Logged — tip: start the clock so events get the right minute.', { kind: 'warn' });
       side = 'us'; // back to our team after each event
+      if (m.sport === 'rugby' && d.ev === 'try') await offerConversion(id, forSide);
+      draw(); // sheets were open, so make sure the pad shows the latest score
     }
   });
 

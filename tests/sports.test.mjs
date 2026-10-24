@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeRugby } from '../js/tools/sports/rugby.js';
+import { summarizeRugby, lastKicker } from '../js/tools/sports/rugby.js';
 import { summarizeHockey } from '../js/tools/sports/hockey.js';
 import { replayInnings, summarizeCricket, aggregate } from '../js/tools/sports/cricket.js';
 
@@ -116,4 +116,11 @@ test('cricket: all out ends the innings; season averages', () => {
   const X = agg.bowling.find((b) => b.ref === 'X');
   assert.equal(X.wickets, 4);
   assert.deepEqual(X.best, { w: 2, r: 3 });
+});
+
+test('rugby: last kicker for the conversion prompt', () => {
+  const evs = [ev('us', 'pen_goal', 'p15'), ev('them', 'conv', 'opp#10'), ev('us', 'try', 'p11'), ev('us', 'conv', 'p10'), ev('us', 'tackle', 'p7')];
+  assert.equal(lastKicker(evs, 'us'), 'p10');
+  assert.equal(lastKicker(evs, 'them'), 'opp#10');
+  assert.equal(lastKicker([], 'us'), '');
 });

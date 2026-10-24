@@ -80,3 +80,13 @@ export function summarizeRugby(events) {
   }
   return { score: { us: sides.us.points, them: sides.them.points }, sides, players };
 }
+
+const KICKS = new Set(['conv', 'conv_miss', 'pen_goal', 'pen_miss', 'drop_goal']);
+/** The player who last kicked at goal for a side (preselected for the next conversion). */
+export function lastKicker(events, side) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.side === side && KICKS.has(e.type) && e.player) return e.player;
+  }
+  return '';
+}
