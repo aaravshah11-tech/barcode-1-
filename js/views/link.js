@@ -98,6 +98,7 @@ export function render(root, params) {
     await stopScanner();
     await link.connectTo(code);
     if (location.hash.startsWith('#/link/')) history.replaceState(null, '', '#/link');
+    // A linked phone becomes a scanner (unless it was switched to the full app before).
     draw();
   }
 

@@ -214,6 +214,15 @@ export async function setSetting(key, value) {
   emit([{ store: 'meta', record: rec, prev }], 'local');
 }
 
+/**
+ * Scanner-only mode: the device just scans (used for a phone linked to a computer).
+ * On by default for a linked phone; can be switched on/off by hand.
+ */
+export function isScannerMode() {
+  const v = getSetting('scannerMode');
+  return v == null ? !!getSetting('linkedHost') : !!v;
+}
+
 export const owners = () => getSetting('owners', []);
 export async function addOwner(name) {
   name = name.trim();

@@ -60,6 +60,17 @@ async function setup(ctx) {
   await computer.waitForSelector('text=Connected to', { timeout: 10000 });
   check(/iPhone/.test(await computer.textContent('[data-status]')), 'computer sees the iPhone');
 
+  // The linked phone becomes a scanner-only device; the computer keeps the full app.
+  await phone.goto(BASE + '?nosw#/');
+  await phone.waitForFunction(() => location.hash === '#/scan', null, { timeout: 5000 });
+  check(true, 'phone: library page redirects to the scanner');
+  check(!(await phone.isVisible('.tabbar')) && await phone.isVisible('#mode-pill'), 'phone: no tab bar, "Scanner" badge shown');
+  await phone.goto(BASE + '?nosw#/settings');
+  await phone.waitForFunction(() => location.hash === '#/scan', null, { timeout: 5000 });
+  check(true, 'phone: settings page is not reachable in scanner mode');
+  check(await computer.isVisible('.tabbar') && !(await computer.isVisible('#mode-pill')), 'computer: full app with tabs');
+  if (SHOTS) await phone.screenshot({ path: path.join(SHOTS, 'phone-scanner-mode.png') });
+
   // Existing book synced to computer
   await computer.goto(BASE + '?nosw#/');
   await computer.waitForSelector("text=Harry Potter and the Philosopher's Stone", { timeout: 10000 });
@@ -81,8 +92,8 @@ async function setup(ctx) {
   await computer.click(".tile >> text=Harry Potter");
   await computer.waitForSelector('.book-hero');
   await computer.click('[data-status] [data-status=read]');
-  await phone.goto(BASE + '?nosw#/');
-  await phone.waitForSelector('[data-view]');
+  await phone.goto(BASE + '?nosw#/scan');
+  await phone.waitForSelector('[data-manual]');
   await phone.waitForFunction(() => document.querySelector('#link-pill')?.textContent.includes('Linked'), null, { timeout: 15000 });
   const phoneSees = await phone.evaluate(async () => {
     const s = await import('./js/store.js');
@@ -104,6 +115,13 @@ async function setup(ctx) {
     await computer.waitForSelector('text=Relay Survivor', { timeout: 15000 });
     check(true, 'still syncing after one relay went down');
   }
+
+  // Exit scanner mode from the badge
+  await phone.click('#mode-pill');
+  await phone.click('.sheet [data-full]');
+  await phone.click('.sheet.dialog button.btn-primary');
+  await phone.waitForSelector('.tabbar', { state: 'visible' });
+  check(await phone.isVisible('[data-view]'), 'phone: "Use the full app" brings back the library');
 
   // Computer reload -> phone reconnects automatically
   await computer.reload();

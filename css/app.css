@@ -401,6 +401,13 @@ label.field > span, .field-label { display: block; font-size: .82rem; font-weigh
 .case-row { display: flex; align-items: center; gap: 6px; padding: 6px 0 6px 12px; border-top: 1px solid var(--border); }
 .case-row .grow { flex: 1; min-width: 0; }
 
+/* ---------- scanner-only mode (phone linked to a computer) ---------- */
+.pill-mode { background: var(--accent-soft); color: var(--accent); border: 0; cursor: pointer; font: inherit; font-size: .8rem; font-weight: 600; }
+body.scanner-mode .tabbar { display: none; }
+body.scanner-mode .app { display: block; }
+body.scanner-mode #view { padding-bottom: calc(24px + var(--safe-b)); }
+body.scanner-mode #toasts { bottom: calc(16px + var(--safe-b)); }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .two-col > *, .bar-row > * { min-width: 0; }
 .list-item > svg { width: 22px; height: 22px; flex: none; color: var(--muted); }

@@ -16,7 +16,8 @@ export function render(root) {
     root.innerHTML = `<h1>Settings</h1>
 
       <div class="section"><div class="section-title">Phone & computer</div>
-        <div class="list"><a class="list-item" href="#/link">${icon('link')}<div class="grow"><b>Link phone & computer</b><div class="small muted">${esc(linkText)}</div></div>${icon('chev', 'chev')}</a></div>
+        <div class="list"><a class="list-item" href="#/link">${icon('link')}<div class="grow"><b>Link phone & computer</b><div class="small muted">${esc(linkText)}</div></div>${icon('chev', 'chev')}</a>
+          <label class="list-item"><div class="grow"><b>Scanner-only mode</b><div class="small muted">This device only scans. Use it on a phone that sends books to your computer.</div></div><input type="checkbox" data-scanner-mode ${store.isScannerMode() ? 'checked' : ''}></label></div>
       </div>
 
       <div class="section"><div class="section-title">Rooms & bookcases</div>
@@ -71,6 +72,7 @@ export function render(root) {
   root.addEventListener('change', async (e) => {
     const t = e.target;
     if (t.dataset.pref) await store.setSetting(t.dataset.pref, t.checked);
+    if ('scannerMode' in t.dataset) await store.setSetting('scannerMode', t.checked);
     if ('import' in t.dataset && t.files?.[0]) {
       try {
         const n = await backup.importJsonFile(t.files[0]);

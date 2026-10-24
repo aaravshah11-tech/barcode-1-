@@ -78,6 +78,8 @@ Push or merge changes to the branch and GitHub Pages redeploys in about a minute
 2. On the **phone**, scan that QR code with the normal camera app and open the link. Or, in Shelf: **Settings → Link phone & computer → "This is my phone"**, then scan the code or type it.
 3. Both screens now say **Linked**. Scan books on the phone (normal or **Batch** mode) and they pop up on the computer with a notification.
 
+Once linked, **the phone becomes a scanner only**: it shows just the scan screen (Add, Where is it?, Batch) with a **Scanner** badge at the top. The library, stats and settings live on the computer. To use the full app on the phone too, tap the **Scanner** badge, then **Use the full app on this phone**. Switch it back in **Settings → Scanner-only mode**.
+
 Good to know:
 - **Each device keeps a full copy** of the library. Edits on the computer (moving a book, marking it read) go to the phone too.
 - They sync **while both are open**. If the computer is off, the phone keeps everything and catches up automatically next time both are open. Keep Shelf open on the computer while you scan.

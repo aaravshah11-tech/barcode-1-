@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import * as link from './sync/relay-link.js';
 import { fillPendingLookups } from './pending.js';
-import { toast, closeAllSheets, esc } from './ui.js';
+import { toast, closeAllSheets, esc, icon, openSheet, confirmDialog } from './ui.js';
 import * as library from './views/library.js';
 import * as scan from './views/scan.js';
 import * as book from './views/book.js';
@@ -29,6 +29,11 @@ function updateNav() {
 async function route() {
   const id = ++renderId;
   const { name, params } = parseHash();
+  // A phone in scanner-only mode only has the scan and link screens.
+  if (store.isScannerMode() && !['scan', 'link'].includes(name)) {
+    location.replace('#/scan');
+    return;
+  }
   const mod = routes[name] || library;
   closeAllSheets();
   if (cleanup) { try { await cleanup(); } catch (e) { console.error(e); } cleanup = null; }
@@ -82,6 +87,50 @@ function watchRemoteAdds() {
   });
 }
 
+// ---------- scanner-only mode ----------
+let scannerMode = null;
+function applyScannerMode() {
+  const on = store.isScannerMode();
+  document.body.classList.toggle('scanner-mode', on);
+  document.getElementById('mode-pill').hidden = !on;
+  if (scannerMode !== null && on !== scannerMode) route();
+  scannerMode = on;
+}
+
+function openModeSheet() {
+  const st = link.getState();
+  const linked = st.role === 'guest' && st.state === 'connected';
+  const s = openSheet(`
+    <p>This phone is set up as a <b>scanner</b>. Books you scan are sent to ${linked ? `<b>${esc(st.devices.join(', ') || 'your computer')}</b>` : 'your computer'}. Browse the library, stats and settings there.</p>
+    <div class="banner ${linked ? 'banner-ok' : 'banner-warn'}">${icon(linked ? 'check' : 'link')}<div class="grow">${linked ? 'Connected to your computer.' : 'Not connected to your computer right now. Scans are kept here and sent when it reconnects.'}</div></div>
+    <a class="btn btn-block" href="#/link" data-close>${icon('link')} Link settings</a>
+    <button class="btn btn-ghost btn-block" data-full style="margin-top:8px">Use the full app on this phone</button>`, { title: 'Scanner mode' });
+  s.body.querySelector('[data-full]').onclick = async () => {
+    s.close();
+    if (await confirmDialog({ title: 'Use the full app here?', message: 'This phone will show the library, stats and settings too. It stays linked. You can switch back in Settings.', confirmLabel: 'Use full app' })) {
+      await store.setSetting('scannerMode', false);
+      location.hash = '#/';
+    }
+  };
+}
+
+function setupScannerMode() {
+  applyScannerMode();
+  document.getElementById('mode-pill').addEventListener('click', openModeSheet);
+  store.onChange(({ changes }) => {
+    if (changes.some((c) => c.store === 'meta' && ['scannerMode', 'linkedHost'].includes(c.record.key))) applyScannerMode();
+  });
+  // In scanner mode, tapping a book shows where it lives instead of opening the full book page.
+  document.addEventListener('click', (e) => {
+    if (!store.isScannerMode()) return;
+    const a = e.target.closest('a[href^="#/book/"]');
+    if (!a) return;
+    e.preventDefault();
+    const b = store.getBook(decodeURIComponent(a.getAttribute('href').slice(7)));
+    if (b) openSheet(`${scan.whereHtml(b)}<button class="btn btn-primary btn-block" data-close style="margin-top:12px">Done</button>`, { title: 'Where is it?' });
+  }, true);
+}
+
 // ---------- service worker ----------
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
@@ -120,6 +169,7 @@ async function boot() {
   renderOnline();
   link.onState(renderLinkPill);
   watchRemoteAdds();
+  setupScannerMode();
   await route();
   link.autoStart();
   registerServiceWorker();

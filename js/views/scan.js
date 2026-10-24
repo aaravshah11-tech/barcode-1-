@@ -296,7 +296,10 @@ export function render(root, params) {
   function saved(book) {
     feedback('ok');
     setFlash(book.id);
-    toast(`Saved “${book.title}”`, { kind: 'ok', actionLabel: 'View', onAction: () => { location.hash = `#/book/${book.id}`; } });
+    const st = link.getState();
+    const sent = st.role === 'guest' && st.state === 'connected';
+    if (store.isScannerMode()) toast(`Saved “${book.title}”${sent ? ' — sent to your computer' : ''}`, { kind: 'ok' });
+    else toast(`Saved “${book.title}”`, { kind: 'ok', actionLabel: 'View', onAction: () => { location.hash = `#/book/${book.id}`; } });
   }
 
   function confirmSheet(isbn, info, offline, allowDuplicate) {
