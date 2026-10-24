@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ALL = ['library', 'inventory', 'sports', 'photo', 'golf', 'hub', 'core', 'offline', 'supabase', 'a11y', 'perf'];
+const ALL = ['library', 'inventory', 'sports', 'photo', 'golf', 'hub', 'core', 'link', 'offline', 'supabase', 'a11y', 'perf'];
 const only = process.argv.slice(2);
 const tests = (only.length ? ALL.filter((t) => only.includes(t)) : ALL).map((t) => (t === 'supabase' ? 'supabase-e2e.cjs' : t === 'a11y' || t === 'perf' ? `${t}.cjs` : `e2e-${t}.cjs`));
 

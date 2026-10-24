@@ -109,7 +109,10 @@ export function renderPair(root, params) {
       error: ['banner-danger', 'alert', esc(st.message || 'Problem connecting')],
     };
     const [cls, ic, text] = map[st.state] || map.connecting;
-    return `<div class="banner ${cls}" data-status>${icon(ic)}<div class="grow">${text}</div></div>`;
+    const tip = st.mode === 'relay' && st.slow && st.state !== 'connected'
+      ? `<div class="small" data-slow-tip style="margin-top:6px">Taking a while? ${st.relays ? 'Make sure HomeBase is open on <b>both</b> devices (on the phone, keep it in front — don’t switch to another app).' : 'Your network may be blocking the relays. Try switching the phone between Wi-Fi and mobile data.'} For pairing that always works, use <b>Cloud sync</b> below.</div>`
+      : '';
+    return `<div class="banner ${cls}" data-status>${icon(ic)}<div class="grow">${text}${tip}</div></div>`;
   }
 
   async function startScan() {

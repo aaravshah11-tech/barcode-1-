@@ -19,11 +19,17 @@
 import * as store from '../core/store.js';
 import { loadScript } from '../core/ui.js';
 
+// Several free public relays at once; the first two use the normal https port (443),
+// which phone networks and school/work Wi-Fi almost never block.
 const DEFAULT_RELAYS = [
+  'wss://mqtt.eclipseprojects.io:443/mqtt',
+  { url: 'wss://public.cloud.shiftr.io:443', username: 'public', password: 'public' },
   'wss://broker.emqx.io:8084/mqtt',
   'wss://broker.hivemq.com:8884/mqtt',
   'wss://test.mosquitto.org:8081/mqtt',
 ];
+const HELLO_RETRY = 2000; // keep saying hello until the other device answers
+const SLOW_HINT = 15000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_LENGTH = 10;
 const CHUNK_CHARS = 48000; // keep each relay message small
@@ -46,6 +52,8 @@ export const getState = () => ({
   code: session?.code || '',
   devices: [...peers.values()].map((p) => p.name),
   relays: session ? session.clients.filter((c) => c.connected).length : 0,
+  relaysTotal: session ? session.clients.length : 0,
+  slow: !!session && !peers.size && Date.now() - session.startedAt > SLOW_HINT,
 });
 
 export function onState(fn) {
@@ -53,10 +61,15 @@ export function onState(fn) {
   return () => subs.delete(fn);
 }
 
+let lastSnap = '';
 function setState(s, msg = '') {
   state = s;
   message = msg;
   const snap = getState();
+  // Only tell the screens when something visible changed (avoids redrawing every 2 s while waiting).
+  const key = JSON.stringify(snap);
+  if (key === lastSnap) return;
+  lastSnap = key;
   subs.forEach((fn) => { try { fn(snap); } catch (e) { console.error(e); } });
 }
 
@@ -64,12 +77,13 @@ function refreshState() {
   if (!session) return setState('off');
   const online = session.clients.some((c) => c.connected);
   if (peers.size) return setState('connected');
+  const n = session.clients.filter((c) => c.connected).length;
   if (!online) {
     return setState(session.everConnected ? 'error' : 'connecting',
-      navigator.onLine === false ? 'You’re offline. Shelf will reconnect when you’re back online.'
-        : session.everConnected ? 'Lost connection to the relays. Reconnecting…' : 'Connecting…');
+      navigator.onLine === false ? 'You’re offline. HomeBase will reconnect when you’re back online.'
+        : session.everConnected ? 'Lost connection to the relays. Reconnecting…' : 'Connecting to the relays…');
   }
-  setState('waiting', role === 'host' ? 'Waiting for your phone…' : 'Waiting for your computer. Open Shelf on it.');
+  setState('waiting', `${role === 'host' ? 'Waiting for your phone…' : 'Waiting for your computer — keep HomeBase open on it.'} (${n} of ${session.clients.length} relays connected)`);
 }
 
 // ---------- codes ----------
@@ -128,13 +142,15 @@ async function open(key, bytes) {
 }
 
 // ---------- relays ----------
-function relayUrls() {
+/** [{ url, username?, password? }] */
+function relayList() {
+  let list = DEFAULT_RELAYS;
   try {
     // Optional override (also used by the automated tests).
     const custom = JSON.parse(localStorage.getItem('shelf.relays') || 'null');
-    if (Array.isArray(custom) && custom.length) return custom;
+    if (Array.isArray(custom) && custom.length) list = custom;
   } catch { /* ignore */ }
-  return DEFAULT_RELAYS;
+  return list.map((r) => (typeof r === 'string' ? { url: r } : r));
 }
 
 const myId = () => store.getDeviceId();
@@ -181,14 +197,25 @@ async function handle(bytes) {
   if (msg.to && msg.to !== myId()) return;
 
   const isNew = !peers.has(msg.from);
-  peers.set(msg.from, { name: String(msg.name || 'Device').slice(0, 40), role: msg.role, lastSeen: Date.now() });
-  if (isNew) refreshState();
+  peers.set(msg.from, { ...(peers.get(msg.from) || {}), name: String(msg.name || 'Device').slice(0, 40), role: msg.role, lastSeen: Date.now() });
+  if (isNew) {
+    refreshState();
+    // First word from this device (even if its "hello" got lost): swap what we have straight away.
+    if (msg.t !== 'hello' && msg.t !== 'bye') {
+      await publish({ t: 'hello', reply: true, to: msg.from });
+      await publish({ t: 'manifest', m: store.manifest(), to: msg.from });
+    }
+  }
 
   if (msg.t === 'bye') {
     peers.delete(msg.from);
     refreshState();
   } else if (msg.t === 'hello') {
-    // Someone joined: say hi back and swap manifests.
+    // Someone joined: say hi back and swap manifests. The same hello arrives once per relay
+    // and may be repeated, so only answer a device once every few seconds.
+    const p = peers.get(msg.from);
+    if (!isNew && p.answeredAt && Date.now() - p.answeredAt < 4000) return;
+    p.answeredAt = Date.now();
     if (!msg.reply) await publish({ t: 'hello', reply: true, to: msg.from });
     await publish({ t: 'manifest', m: store.manifest(), to: msg.from });
   } else if (msg.t === 'manifest') {
@@ -206,16 +233,17 @@ async function startSession(code) {
   await ensureLib();
   stopSession();
   const { topic, key } = await deriveSecrets(code);
-  const s = (session = { code, topic, key, clients: [], everConnected: false });
+  const s = (session = { code, topic, key, clients: [], everConnected: false, startedAt: Date.now() });
   refreshState();
-  for (const url of relayUrls()) {
+  for (const { url, username, password } of relayList()) {
     const client = window.mqtt.connect(url, {
-      clientId: `shelf_${Math.random().toString(16).slice(2, 14)}`,
+      clientId: `hb_${Math.random().toString(16).slice(2, 14)}`,
       keepalive: 30,
-      reconnectPeriod: 5000,
-      connectTimeout: 10000,
+      reconnectPeriod: 2000,
+      connectTimeout: 6000,
       clean: true,
       protocolVersion: 4,
+      ...(username ? { username, password } : {}),
     });
     client.on('connect', () => {
       if (session !== s) return client.end(true);
@@ -231,6 +259,12 @@ async function startSession(code) {
     s.clients.push(client);
   }
   s.heartbeat = setInterval(() => publish({ t: 'ping' }), HEARTBEAT);
+  // Until someone answers, say hello every couple of seconds (public relays can drop a message).
+  s.hello = setInterval(() => {
+    if (session !== s) return;
+    if (!peers.size && s.clients.some((c) => c.connected)) publish({ t: 'hello' });
+    if (!peers.size) refreshState(); // updates the "taking a while" hint
+  }, HELLO_RETRY);
   s.sweep = setInterval(() => {
     const now = Date.now();
     let changed = false;
@@ -247,6 +281,7 @@ function stopSession() {
   if (!s) return;
   clearInterval(s.heartbeat);
   clearInterval(s.sweep);
+  clearInterval(s.hello);
   for (const c of s.clients) {
     try {
       if (c.connected) {

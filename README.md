@@ -48,7 +48,7 @@ There are two ways. You can start with Quick link and switch to Cloud sync later
 2. **Phone:** point the normal Camera app at the QR code and tap the link (or Settings › Pairing › *This is my phone*).
 3. Both show **Linked**.
 
-Works while **both devices have HomeBase open**. Data travels through free public relays, encrypted with your pairing code.
+Works while **both devices have HomeBase open**. Data travels through several free public relays at once (two of them on the normal https port, so strict Wi-Fi and phone networks still get through), encrypted with your pairing code. Pairing usually takes a few seconds; the screen shows how many relays are connected. If it’s stuck on *Connecting…*, switch the phone between Wi-Fi and mobile data, or use Cloud sync (Option B), which always works.
 
 ### Option B — Cloud sync with Supabase (recommended: works any time, anywhere)
 Supabase is a free online database. About 5 minutes, done once, on your computer:
@@ -131,6 +131,7 @@ Settings › **Backup**: one JSON file with everything (import it on any device;
 | Camera or motion doesn’t work | Use the **https://** link. iPhone: Settings › Safari › Camera / Motion & Orientation Access › Allow. Android: tap 🔒 by the address › Permissions. |
 | “Anonymous sign-ins are turned off” | Supabase › Authentication › Sign In / Providers › allow anonymous sign-ins. |
 | “The database isn’t set up yet” | Run `supabase/schema.sql` in Supabase’s SQL Editor (step 3B.2). |
+| Quick link stuck on “Connecting…” | Your network is blocking the relays: switch the phone between Wi-Fi and mobile data, keep HomeBase open on both devices, or set up Cloud sync. |
 | “Pairing code not valid” | On the computer show a fresh QR (Settings › Pairing) and scan again. |
 | Badge says “Offline · saved here” | Fine — changes upload automatically when you’re back online. |
 | Photos all in “Not near a moment” | Check the camera clock offset (shoot the clock next time, or enter it by hand) and widen the match window. |
