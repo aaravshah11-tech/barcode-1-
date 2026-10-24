@@ -1,6 +1,6 @@
 // Scan screen: Add, Find ("Where is it?") and Batch modes.
 import * as store from '../store.js';
-import * as link from '../sync/peer-link.js';
+import * as link from '../sync/relay-link.js';
 import { Scanner, cameraErrorMessage } from '../scanner.js';
 import { lookupIsbn } from '../lookup.js';
 import { toIsbn13, isbn13to10, prettyIsbn } from '../isbn.js';
@@ -89,7 +89,7 @@ export function render(root, params) {
     $('[data-linked]').innerHTML = st.role === 'guest'
       ? st.state === 'connected'
         ? `<div class="banner banner-ok" style="margin:0">${icon('laptop')}<div class="grow">Linked to your computer. Scans show up there instantly.</div></div>`
-        : `<div class="banner banner-warn" style="margin:0">${icon('link')}<div class="grow">Not connected to your computer right now. Scans are saved here and sent when it reconnects.</div></div>`
+        : `<div class="banner banner-warn" style="margin:0">${icon('link')}<div class="grow">Your computer isn’t connected right now (is Shelf open on it?). Scans are saved here and sent when it reconnects.</div></div>`
       : '';
   }
 

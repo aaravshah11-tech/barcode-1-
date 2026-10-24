@@ -1,6 +1,6 @@
 // Library: grid / list of books with search, filters and sorting.
 import * as store from '../store.js';
-import * as link from '../sync/peer-link.js';
+import * as link from '../sync/relay-link.js';
 import { esc, icon, coverHtml, openSheet, debounce, plural } from '../ui.js';
 
 const PREFS_KEY = 'shelf.libraryPrefs';

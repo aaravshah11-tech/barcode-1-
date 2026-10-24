@@ -1,5 +1,5 @@
 // Pair a phone with a computer.
-import * as link from '../sync/peer-link.js';
+import * as link from '../sync/relay-link.js';
 import { Scanner, cameraErrorMessage } from '../scanner.js';
 import { esc, icon, loadScript, confirmDialog } from '../ui.js';
 
@@ -21,7 +21,7 @@ export function render(root, params) {
       body = `<div class="card center">
           <p style="font-weight:600">On your phone, open the camera and scan this code</p>
           <div class="qr" data-qr aria-label="Pairing QR code"></div>
-          <div class="code">${esc(st.code.slice(0, 3))} ${esc(st.code.slice(3))}</div>
+          <div class="code">${esc(link.formatCode(st.code))}</div>
           <p class="small muted">Or in Shelf on your phone: Settings › Link phone &amp; computer › “This is my phone” and type the code.</p>
         </div>
         ${statusHtml(st)}
@@ -35,7 +35,7 @@ export function render(root, params) {
       body = `<div class="card">
           <h2>Scan the code on your computer</h2>
           <div class="scanner-box" style="margin:10px 0"><div id="link-reader" style="width:100%"></div><div class="scanner-msg" data-cam-msg>Starting camera…</div></div>
-          <form data-code-form style="display:flex;gap:8px"><input name="code" placeholder="Or type the 6-letter code" autocomplete="off" autocapitalize="characters" maxlength="7" style="text-transform:uppercase;letter-spacing:.12em"><button class="btn btn-primary">Connect</button></form>
+          <form data-code-form style="display:flex;gap:8px"><input name="code" placeholder="Or type the 10-character code" autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="characters" maxlength="14" style="text-transform:uppercase;letter-spacing:.1em"><button class="btn btn-primary">Connect</button></form>
         </div><button class="btn btn-ghost btn-block" data-back style="margin-top:8px">Back</button>`;
     } else {
       body = `<div class="choice">
@@ -48,7 +48,7 @@ export function render(root, params) {
             <li>On your phone, scan the QR code it shows (or type the code).</li>
             <li>Scan books on your phone — they pop up on the computer straight away.</li>
           </ol>
-          <p class="small muted" style="margin:10px 0 0">Both devices keep a full copy of the library, so each works offline. They catch up whenever they’re both open and online. The connection is direct between your devices; a free PeerJS service just introduces them.</p>
+          <p class="small muted" style="margin:10px 0 0">Both devices keep a full copy of the library, so each works offline. They catch up whenever they’re both open and online. Messages travel through free public relays and are encrypted with your pairing code first, so the relays can’t read them.</p>
         </div>`;
     }
     root.innerHTML = `<h1>Link phone &amp; computer</h1><p class="muted">Use your phone as a barcode scanner for your computer.</p>${body}`;
@@ -68,8 +68,8 @@ export function render(root, params) {
 
   function statusHtml(st) {
     const map = {
-      connected: ['banner-ok', 'check', st.role === 'host' ? `Connected to <b>${esc(st.devices.join(', '))}</b>. Books scanned there appear here live.` : 'Connected to your computer.'],
-      waiting: ['', 'phone', 'Waiting for your phone to connect…'],
+      connected: ['banner-ok', 'check', st.role === 'host' ? `Connected to <b>${esc(st.devices.join(', '))}</b>. Books scanned there appear here live.` : `Connected to <b>${esc(st.devices.join(', ') || 'your computer')}</b>.`],
+      waiting: ['', st.role === 'host' ? 'phone' : 'laptop', esc(st.message || 'Waiting…')],
       connecting: ['banner-warn', 'refresh', esc(st.message || 'Connecting…')],
       error: ['banner-warn', 'alert', esc(st.message || 'Connection problem. Retrying…')],
     };
@@ -116,8 +116,8 @@ export function render(root, params) {
     if (!e.target.matches('[data-code-form]')) return;
     e.preventDefault();
     const code = link.normalizeCode(e.target.code.value);
-    if (code.length === 6) connect(code);
-    else e.target.code.setCustomValidity('Enter the 6-character code'), e.target.code.reportValidity(), setTimeout(() => e.target.code.setCustomValidity(''), 1500);
+    if (link.isValidCode(code)) connect(code);
+    else e.target.code.setCustomValidity('Enter the 10-character code shown on your computer'), e.target.code.reportValidity(), setTimeout(() => e.target.code.setCustomValidity(''), 1500);
   });
 
   // Status changes: redraw only when the role changes, otherwise just swap the status line.

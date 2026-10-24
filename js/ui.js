@@ -145,7 +145,7 @@ document.addEventListener('error', (e) => {
 
 // ---------- misc ----------
 /** Shrink a photo to a small JPEG data URL so it fits nicely in the database. */
-export function resizeImage(file, maxSize = 640, quality = 0.8) {
+export function resizeImage(file, maxSize = 480, quality = 0.75) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();

@@ -1,6 +1,6 @@
 // Shelf service worker: offline app shell + cached cover images.
 // Bump VERSION whenever you change any app file so phones pick up the update.
-const VERSION = 'shelf-v1';
+const VERSION = 'shelf-v2';
 const SHELL = [
   './',
   'index.html',
@@ -16,7 +16,7 @@ const SHELL = [
   'js/backup.js',
   'js/feedback.js',
   'js/pending.js',
-  'js/sync/peer-link.js',
+  'js/sync/relay-link.js',
   'js/components/location-picker.js',
   'js/components/book-form.js',
   'js/views/library.js',
@@ -26,7 +26,7 @@ const SHELL = [
   'js/views/settings.js',
   'js/views/link.js',
   'vendor/html5-qrcode.min.js',
-  'vendor/peerjs.min.js',
+  'vendor/mqtt.min.js',
   'vendor/qrcode.js',
   'icons/icon.svg',
   'icons/icon-192.png',

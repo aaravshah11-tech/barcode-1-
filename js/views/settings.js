@@ -1,6 +1,6 @@
 // Settings: rooms & bookcases, family, linking, backup, appearance.
 import * as store from '../store.js';
-import * as link from '../sync/peer-link.js';
+import * as link from '../sync/relay-link.js';
 import * as backup from '../backup.js';
 import { esc, icon, promptDialog, confirmDialog, toast, plural } from '../ui.js';
 import { fillPendingLookups } from '../pending.js';

@@ -74,17 +74,17 @@ Push or merge changes to the branch and GitHub Pages redeploys in about a minute
 
 ## 3. Use your phone as the scanner for your computer
 
-1. On the **computer**, open Shelf and go to **Settings → Link phone & computer → "This is my computer"**. A QR code and a 6-letter code appear.
+1. On the **computer**, open Shelf and go to **Settings → Link phone & computer → "This is my computer"**. A QR code and a 10-character code appear.
 2. On the **phone**, scan that QR code with the normal camera app and open the link. Or, in Shelf: **Settings → Link phone & computer → "This is my phone"**, then scan the code or type it.
 3. Both screens now say **Linked**. Scan books on the phone (normal or **Batch** mode) and they pop up on the computer with a notification.
 
 Good to know:
 - **Each device keeps a full copy** of the library. Edits on the computer (moving a book, marking it read) go to the phone too.
 - They sync **while both are open**. If the computer is off, the phone keeps everything and catches up automatically next time both are open. Keep Shelf open on the computer while you scan.
-- The devices connect directly to each other (WebRTC). A free public service (PeerJS) only introduces them; your books don't pass through or stay on a server.
+- Messages go through three free public relays at once (EMQX, HiveMQ and Mosquitto), so linking keeps working if one is down. Everything is **encrypted on your device with a key made from your pairing code**, so the relays only see scrambled data. Nothing is stored on them.
+- It works whether the phone and computer are on the same Wi-Fi or not (even on mobile data).
 - It reconnects by itself after a reload, a sleep or a Wi-Fi drop. To stop linking: **Settings → Link phone & computer → Unlink**.
-- On very strict networks (some offices or schools) a direct connection can fail. Home Wi-Fi works fine.
-- Anyone who has your 6-letter code while the computer is linking could connect, so don't share it. Press **New code** to change it.
+- Anyone with your pairing code could join, so don't share it. Press **New code** to change it (then pair again).
 
 ---
 
@@ -119,7 +119,8 @@ Then open **http://localhost:8080** in your browser. The camera works on `localh
 | "Camera permission is off" | iPhone: **Settings → Safari → Camera → Allow**, or in Safari tap **aA → Website Settings → Camera**. Android: tap the 🔒 next to the address → **Permissions → Camera**. |
 | Barcode won't scan | Hold the book 15–25 cm away, fill the box with the barcode, and avoid glare. Or type the 13 digits under the camera. |
 | "Not found online" | Some books (old, local or self-published) aren't in either database. Fill in the form; a cover photo makes it look nice. |
-| Phone says "Can't find your computer" | Make sure Shelf is open on the computer with linking turned on, and both have internet. |
+| Phone says "Waiting for your computer" | Open Shelf on the computer. It connects by itself within a few seconds. Both need internet. |
+| "Lost connection to the relays" | Check the internet connection. Shelf keeps retrying. Your scans are saved on the phone meanwhile. |
 | Book info is missing on books added offline | Go online and it fills in automatically, or tap **Settings → Fetch details**. |
 
 ---
@@ -144,10 +145,10 @@ js/
   feedback.js           Beep + vibration
   backup.js             JSON / CSV export, JSON import
   ui.js                 Toasts, sheets, dialogs, covers, icons
-  sync/peer-link.js     Phone ↔ computer link (WebRTC via PeerJS)
+  sync/relay-link.js    Phone ↔ computer link (encrypted, via public MQTT relays)
   components/           Location picker, book form, owner/status/rating pickers
   views/                library, scan, book, stats, settings, link
-vendor/                 html5-qrcode 2.3.8, PeerJS 1.5.4, qrcode-generator 1.4.4 (bundled for offline use)
+vendor/                 html5-qrcode 2.3.8, MQTT.js 5.10.4, qrcode-generator 1.4.4 (bundled for offline use)
 icons/                  App icons
 tests/                  Unit tests + browser end-to-end tests
 ```
@@ -158,13 +159,13 @@ Each book is one record in IndexedDB (`books` store). Rooms, with their bookcase
 
 ### Adding cloud sync later (e.g. Supabase)
 
-The data layer was built for this. A sync module only needs these `store.js` functions, which the phone↔computer link already uses:
+The data layer was built for this. A sync module only needs these `store.js` functions, which the phone↔computer link (`relay-link.js`) already uses:
 
 - `store.onChange(fn)`: get every local change and push it up.
 - `store.mergeRecords(data)`: apply records downloaded from the cloud (newer wins).
 - `store.manifest()` / `store.recordsNewerThan(m)`: work out what the other side is missing.
 
-A Supabase version would have tables `books`, `rooms` and `meta` (columns: `id`, `data jsonb`, `updated_at`, `library_id`). It would upsert on `onChange`, use Supabase Realtime to receive changes and pass them to `mergeRecords`, and add a sign-in so the family shares one `library_id`. You would create it as `js/sync/supabase.js` next to `peer-link.js`; nothing else needs to change.
+A Supabase version would have tables `books`, `rooms` and `meta` (columns: `id`, `data jsonb`, `updated_at`, `library_id`). It would upsert on `onChange`, use Supabase Realtime to receive changes and pass them to `mergeRecords`, and add a sign-in so the family shares one `library_id`. You would create it as `js/sync/supabase.js` next to `relay-link.js`; nothing else needs to change.
 
 ### Tests
 
@@ -174,7 +175,7 @@ npm run test:live              # real lookups for 9780747532699 and 978014143951
 
 # Browser tests (Playwright + Chromium): serve the app on :8080 first
 node tests/e2e.cjs             # add / duplicate / not-found / batch / where / library / stats / backup
-node tests/link-e2e.cjs x.y4m  # two-device link test (needs a local PeerJS server, see file header)
+node tests/link-e2e.cjs x.y4m  # two-device link test (needs local MQTT relays, see file header)
 ```
 
-Credits: book data from [Open Library](https://openlibrary.org) and [Google Books](https://books.google.com). Barcode reading by [html5-qrcode](https://github.com/mebjas/html5-qrcode) (ZXing). Device linking by [PeerJS](https://peerjs.com).
+Credits: book data from [Open Library](https://openlibrary.org) and [Google Books](https://books.google.com). Barcode reading by [html5-qrcode](https://github.com/mebjas/html5-qrcode) (ZXing). Device linking by [MQTT.js](https://github.com/mqttjs/MQTT.js) over the free public brokers from EMQX, HiveMQ and Eclipse Mosquitto.

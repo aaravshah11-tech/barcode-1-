@@ -1,6 +1,8 @@
-// Two-device test: a "computer" and a "phone" browser linked through a local PeerJS server.
-// Needs: the app served on :8080, a PeerJS server on 127.0.0.1:9000/myapp
-//   (npx peerjs --port 9000 --path /myapp), and optionally a fake-camera .y4m with a barcode.
+// Two-device test: a "computer" and a "phone" browser linked through MQTT relays.
+// Needs: the app served on :8080 and two local MQTT-over-WebSocket brokers on
+// 127.0.0.1:8888 and :8889 (e.g. aedes + websocket-stream). A third relay (:8890)
+// is deliberately missing to prove a dead relay doesn't break linking.
+// Set RELAY_PIDFILE to a file holding the :8888 broker's PID to also test it dying mid-session.
 // Usage: node tests/link-e2e.cjs [barcode.y4m] [screenshotDir]
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -13,7 +15,7 @@ let failures = 0;
 const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) failures++; };
 
 async function setup(ctx) {
-  await ctx.addInitScript(() => localStorage.setItem('shelf.peerServer', JSON.stringify({ host: '127.0.0.1', port: 9000, path: '/myapp', secure: false })));
+  await ctx.addInitScript(() => localStorage.setItem('shelf.relays', JSON.stringify(['ws://127.0.0.1:8888', 'ws://127.0.0.1:8889', 'ws://127.0.0.1:8890'])));
   await ctx.route(/openlibrary\.org\/api\/books/, (r) => r.fulfill({ contentType: 'application/json', body: r.request().url().includes('9780747532699') ? fx('ol-9780747532699') : '{}' }));
   await ctx.route(/openlibrary\.org\/(isbn|works)\//, (r) => r.fulfill({ status: 404, body: '' }));
   await ctx.route(/googleapis/, (r) => r.fulfill({ contentType: 'application/json', body: r.request().url().includes('9780141439518') ? fx('google-9780141439518') : '{"totalItems":0}' }));
@@ -47,13 +49,13 @@ async function setup(ctx) {
   await computer.waitForSelector('.code');
   await computer.waitForSelector('text=Waiting for your phone', { timeout: 10000 });
   const code = (await computer.textContent('.code')).replace(/\s/g, '');
-  check(/^[A-Z0-9]{6}$/.test(code), `computer shows pairing code ${code}`);
+  check(/^[A-Z0-9]{10}$/.test(code), `computer shows pairing code ${code}`);
   check(!!(await computer.$('[data-qr] svg')), 'computer shows a QR code');
   if (SHOTS) await computer.screenshot({ path: path.join(SHOTS, 'link-computer.png') });
 
   // Phone: open the pairing link (what scanning the QR with the phone camera does)
   await phone.goto(BASE + `?nosw#/link/${code}`);
-  await phone.waitForSelector('text=Connected to your computer', { timeout: 15000 });
+  await phone.waitForSelector('text=Connected to Computer', { timeout: 15000 });
   check(true, 'phone connected');
   await computer.waitForSelector('text=Connected to', { timeout: 10000 });
   check(/iPhone/.test(await computer.textContent('[data-status]')), 'computer sees the iPhone');
@@ -87,6 +89,21 @@ async function setup(ctx) {
     return s.allBooks().find((b) => b.title.startsWith('Harry'))?.status;
   });
   check(phoneSees === 'read', 'status change on computer reached the phone');
+
+  // One relay dies mid-session -> the other keeps working
+  if (process.env.RELAY_PIDFILE) {
+    process.kill(+fs.readFileSync(process.env.RELAY_PIDFILE, 'utf8'));
+    await computer.waitForTimeout(500);
+    await phone.goto(BASE + '?nosw#/scan');
+    await phone.fill('[data-manual] input', '9780000000002');
+    await phone.click('[data-manual] button');
+    await phone.waitForSelector('.book-form input[name=title]');
+    await phone.fill('.book-form input[name=title]', 'Relay Survivor');
+    await phone.click('.book-form button.btn-primary');
+    await computer.goto(BASE + '?nosw#/');
+    await computer.waitForSelector('text=Relay Survivor', { timeout: 15000 });
+    check(true, 'still syncing after one relay went down');
+  }
 
   // Computer reload -> phone reconnects automatically
   await computer.reload();

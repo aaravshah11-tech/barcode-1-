@@ -1,6 +1,6 @@
 // App entry: boot, hash router, header status, service worker.
 import * as store from './store.js';
-import * as link from './sync/peer-link.js';
+import * as link from './sync/relay-link.js';
 import { fillPendingLookups } from './pending.js';
 import { toast, closeAllSheets, esc } from './ui.js';
 import * as library from './views/library.js';
@@ -53,7 +53,7 @@ function renderLinkPill(st) {
   pill.hidden = false;
   const label = {
     connected: st.role === 'host' ? `Linked · ${st.devices.join(', ')}` : 'Linked to computer',
-    waiting: 'Waiting for phone',
+    waiting: st.role === 'host' ? 'Waiting for phone' : 'Waiting for computer',
     connecting: 'Connecting…',
     error: 'Link offline',
   }[st.state] || 'Link';
