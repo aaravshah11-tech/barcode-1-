@@ -1,6 +1,6 @@
 // HomeBase service worker: whole app available offline + cached cover/product images.
 // The file list and VERSION are updated by: npm run sw
-const VERSION = 'homebase-1b63f75c2825';
+const VERSION = 'homebase-2648b325a918';
 const SHELL = [
   './',
   'index.html',
@@ -20,6 +20,7 @@ const SHELL = [
   'js/core/search.js',
   'js/core/store.js',
   'js/core/ui.js',
+  'js/settings/account.js',
   'js/settings/backup.js',
   'js/settings/index.js',
   'js/settings/locations.js',

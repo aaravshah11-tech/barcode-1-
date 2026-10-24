@@ -122,6 +122,45 @@ grant select, insert, update on public.records to authenticated;
 grant select on public.households, public.members to authenticated;
 grant usage on sequence public.records_seq to authenticated;
 
+-- ---------- Names & optional email sign-in ----------
+-- Each person can give the household their name. With email sign-in (optional) the same
+-- account can be used on a new device, and the household can see who is who.
+alter table public.members add column if not exists display_name text;
+
+create or replace function public.set_my_name(p_household uuid, p_name text) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_member(p_household) then raise exception 'Not a member'; end if;
+  update public.members set display_name = nullif(btrim(left(p_name, 60)), '') where household_id = p_household and user_id = auth.uid();
+  return true;
+end $$;
+
+-- Households this account belongs to (used when signing in with email on a new device).
+create or replace function public.my_households() returns table (id uuid, name text, join_code text)
+language sql security definer stable set search_path = public as $$
+  select h.id, h.name, h.join_code from public.households h
+  join public.members m on m.household_id = h.id
+  where m.user_id = auth.uid() order by m.joined_at;
+$$;
+
+-- Everyone in a household: name, device and sign-in email (members only).
+create or replace function public.household_people(p_household uuid)
+returns table (user_id uuid, display_name text, device_name text, email text, is_me boolean)
+language plpgsql security definer stable set search_path = public as $$
+begin
+  if not public.is_member(p_household) then raise exception 'Not a member'; end if;
+  return query select m.user_id, m.display_name, m.device_name, u.email::text, m.user_id = auth.uid()
+    from public.members m left join auth.users u on u.id = m.user_id
+    where m.household_id = p_household order by m.joined_at;
+end $$;
+
+revoke all on function public.set_my_name(uuid, text) from public, anon;
+revoke all on function public.my_households() from public, anon;
+revoke all on function public.household_people(uuid) from public, anon;
+grant execute on function public.set_my_name(uuid, text) to authenticated;
+grant execute on function public.my_households() to authenticated;
+grant execute on function public.household_people(uuid) to authenticated;
+
 -- ---------- Realtime: push record changes to devices ----------
 do $$
 begin

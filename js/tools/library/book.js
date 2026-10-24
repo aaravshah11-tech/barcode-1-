@@ -4,6 +4,7 @@ import { lookupIsbn } from './lookup.js';
 import { prettyIsbn } from './isbn.js';
 import { esc, icon, coverHtml, toast, openSheet, confirmDialog, formatDate, todayIso } from '../../core/ui.js';
 import { locationPicker } from '../../core/locations.js';
+import { nameOfDevice } from '../../core/people.js';
 import { openBookForm, ownerPicker, statusPicker, starsPicker } from './book-form.js';
 
 export function render(root, params) {
@@ -18,7 +19,7 @@ export function render(root, params) {
     const p = store.locationParts(b.location);
     const details = [
       ['Publisher', b.publisher], ['Published', b.year], ['Pages', b.pages || ''], ['Language', b.language],
-      ['ISBN-13', prettyIsbn(b.isbn13)], ['ISBN-10', b.isbn10], ['Added', formatDate(b.addedAt)],
+      ['ISBN-13', prettyIsbn(b.isbn13)], ['ISBN-10', b.isbn10], ['Added', `${formatDate(b.addedAt)}${nameOfDevice(b.createdBy) ? ` by ${nameOfDevice(b.createdBy)}` : ''}`],
       ['Info from', { openlibrary: 'Open Library', google: 'Google Books', manual: 'Entered by hand' }[b.source] || ''],
     ].filter(([, v]) => v);
     root.innerHTML = `

@@ -2,7 +2,7 @@
 import * as store from '../../core/store.js';
 import * as D from './data.js';
 import * as L from '../../core/locations.js';
-import { family } from '../../core/people.js';
+import { family, nameOfDevice } from '../../core/people.js';
 import { bars, tally } from '../../core/charts.js';
 import { esc, icon, openSheet, debounce, plural, toast, confirmDialog, formatDate, todayIso } from '../../core/ui.js';
 import { openItemForm, thumbHtml } from './form.js';
@@ -112,7 +112,7 @@ export function renderItem(root, [id]) {
       <div class="section"><div class="section-title">Details</div><dl class="card details">
         <dt>Condition</dt><dd>${esc(D.CONDITIONS.find((c) => c.id === i.condition)?.label || '')}</dd>
         ${i.owner ? `<dt>Owner</dt><dd>${esc(i.owner)}</dd>` : ''}${i.barcode ? `<dt>Barcode</dt><dd>${esc(i.barcode)}</dd>` : ''}
-        <dt>Added</dt><dd>${esc(formatDate(i.createdAt))}</dd>${i.notes ? `<dt>Notes</dt><dd style="white-space:pre-line">${esc(i.notes)}</dd>` : ''}</dl></div>
+        <dt>Added</dt><dd>${esc(formatDate(i.createdAt))}${nameOfDevice(i.createdBy) ? ` by ${esc(nameOfDevice(i.createdBy))}` : ''}</dd>${i.notes ? `<dt>Notes</dt><dd style="white-space:pre-line">${esc(i.notes)}</dd>` : ''}</dl></div>
       <div class="section btn-row"><button class="btn" data-dup>${icon('plus')} Add another like this</button><button class="btn btn-danger" data-del>${icon('trash')} Delete</button></div>`;
     root.querySelector('[data-lend]')?.addEventListener('submit', (e) => { e.preventDefault(); const w = e.target.who.value.trim(); if (w) store.patch('items', id, { lentTo: w, lentDate: todayIso() }); });
   };

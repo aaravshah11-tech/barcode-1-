@@ -50,7 +50,7 @@ export const getRaw = (c, id) => col(c).get(id) || null;
 export async function put(c, input) {
   const prev = input.id ? col(c).get(input.id) : null;
   const base = prev && !prev.deleted ? prev : {};
-  const rec = stamp({ ...base, ...input, id: input.id || uid(), deleted: false, createdAt: base.createdAt || input.createdAt || Date.now() }, prev?.updatedAt);
+  const rec = stamp({ ...base, ...input, id: input.id || uid(), deleted: false, createdAt: base.createdAt || input.createdAt || Date.now(), ...(prev ? {} : { createdBy: input.createdBy || deviceId }) }, prev?.updatedAt);
   col(c).set(rec.id, rec);
   await db.put('records', toRow(c, rec));
   emit([{ c, record: rec, prev }], 'local');
@@ -64,7 +64,7 @@ export async function putMany(c, inputs) {
   for (const input of inputs) {
     const prev = input.id ? col(c).get(input.id) : null;
     const base = prev && !prev.deleted ? prev : {};
-    const rec = stamp({ ...base, ...input, id: input.id || uid(), deleted: false, createdAt: base.createdAt || input.createdAt || Date.now() }, prev?.updatedAt);
+    const rec = stamp({ ...base, ...input, id: input.id || uid(), deleted: false, createdAt: base.createdAt || input.createdAt || Date.now(), ...(prev ? {} : { createdBy: input.createdBy || deviceId }) }, prev?.updatedAt);
     col(c).set(rec.id, rec);
     rows.push(toRow(c, rec));
     changes.push({ c, record: rec, prev });

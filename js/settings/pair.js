@@ -17,6 +17,8 @@ export function renderPair(root, params) {
   let scanner = null;
   let showScan = false;
   let showCloudForm = false;
+  let emailStep = ''; // '' | 'email' | 'code'
+  let emailAddr = '';
   let busy = false;
   let errorMsg = '';
 
@@ -38,7 +40,7 @@ export function renderPair(root, params) {
           <p class="small muted" style="margin-top:10px">This QR code is like a password for your data — don’t share it.</p>
           <button class="btn btn-sm" data-rotate>${icon('refresh')} New code (old ones stop working)</button></div>
         <div class="card"><h2>Cloud sync is on</h2>
-          <dl class="details"><dt>Mode</dt><dd>Supabase (works anywhere)</dd><dt>This device</dt><dd>${esc(cfg.role === 'host' ? 'Set it up' : 'Joined by QR')}</dd>
+          <dl class="details"><dt>Mode</dt><dd>Supabase (works anywhere)</dd><dt>This device</dt><dd>${esc(cfg.role === 'host' ? 'Set it up' : 'Joined')}</dd>
           <dt>Other devices online</dt><dd>${esc(st.devices?.join(', ') || 'none right now')}</dd><dt>Waiting to upload</dt><dd>${st.pending || 0}</dd>
           <dt>Project</dt><dd class="small">${esc(cfg.url)}</dd></dl>
           <button class="btn btn-danger btn-block" data-cloud-off style="margin-top:14px">Stop syncing on this device</button></div>
@@ -62,6 +64,16 @@ export function renderPair(root, params) {
           <button class="btn btn-primary btn-lg btn-block" ${busy ? 'disabled' : ''}>${busy ? 'Connecting…' : 'Connect & create my household'}</button>
         </form>
         <p class="small muted" style="margin-top:10px">Only use the <b>anon public</b> key, never the “service_role” key.</p></div>
+        <div class="card section"><h2>Already set up on another device?</h2>
+          ${emailStep === 'code' ? `<p>We emailed a 6-digit code to <b>${esc(emailAddr)}</b>.</p>
+            <form data-email-code style="display:flex;gap:8px"><input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" aria-label="Code from the email" style="letter-spacing:.2em;font-family:var(--mono)"><button class="btn btn-primary" ${busy ? 'disabled' : ''}>${busy ? 'Joining…' : 'Sign in'}</button></form>`
+          : emailStep === 'email' ? `<p class="small muted">If you added your email on the other device (Settings › You & sign-in), sign in here instead of scanning a QR code. Use the same Project URL and key.</p>
+            <form data-email-form>
+              <label class="field"><span>Project URL</span><input name="url" placeholder="https://abcdefgh.supabase.co" autocomplete="off" inputmode="url" required></label>
+              <label class="field"><span>anon public key</span><textarea name="key" required style="min-height:60px;font-family:var(--mono);font-size:.8rem"></textarea></label>
+              <label class="field"><span>Your email</span><input name="email" type="email" autocomplete="email" required></label>
+              <button class="btn btn-primary btn-block" ${busy ? 'disabled' : ''}>${busy ? 'Sending…' : 'Email me a code'}</button></form>`
+          : '<button class="btn btn-outline btn-block" data-email-start>✉️ Sign in with email</button>'}</div>
         <button class="btn btn-ghost btn-block" data-back style="margin-top:8px">Back</button>`;
     } else if (st.mode === 'relay') {
       html += statusBanner(st);
@@ -138,7 +150,8 @@ export function renderPair(root, params) {
     errorMsg = '';
     if ('cloudSetup' in d) { showCloudForm = true; draw(); }
     else if ('scan' in d) { showScan = true; draw(); }
-    else if ('back' in d) { showScan = false; showCloudForm = false; await stopScan(); draw(); }
+    else if ('back' in d) { showScan = false; showCloudForm = false; emailStep = ''; await stopScan(); draw(); }
+    else if ('emailStart' in d) { emailStep = 'email'; draw(); }
     else if ('relayHost' in d) { await relay.startHosting(); }
     else if ('relayNew' in d) { await relay.startHosting({ newCode: true }); }
     else if ('relayOff' in d) { if (await confirmDialog({ title: 'Stop the quick link?', message: 'Both devices keep their data.', confirmLabel: 'Stop' })) await relay.unlink(); }
@@ -162,6 +175,20 @@ export function renderPair(root, params) {
       busy = false;
       draw();
       if (errorMsg) { showCloudForm = true; draw(); }
+    } else if (f.matches('[data-email-form]')) {
+      busy = true; emailAddr = f.email.value.trim(); draw();
+      try { await sb.startEmailSignIn(f.url.value, f.key.value, emailAddr); emailStep = 'code'; } catch (err) { errorMsg = sb.friendlyError(err); }
+      busy = false; draw();
+      root.querySelector('[data-email-code] input')?.focus();
+    } else if (f.matches('[data-email-code]')) {
+      busy = true; draw();
+      try {
+        await relay.unlink();
+        await sb.finishEmailSignIn(f.code.value);
+        showCloudForm = false; emailStep = '';
+        toast('Signed in — this device is now part of your household.', { kind: 'ok', timeout: 6000 });
+      } catch (err) { errorMsg = sb.friendlyError(err); }
+      busy = false; draw();
     } else if (f.matches('[data-code-form]')) {
       const p = sync.parsePairing(f.code.value);
       if (p) pair(p); else toast('That code doesn’t look right.', { kind: 'err' });

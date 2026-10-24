@@ -58,3 +58,18 @@ export function playerLabel(id, teamId) {
   return n != null && n !== '' ? `#${n} ${p.name}` : p.name;
 }
 export const shortName = (name = '') => { const parts = name.trim().split(/\s+/); return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : name; };
+
+// ---------- who's who ----------
+// Each device says whose it is (synced 'profiles' record, id = device id), so
+// "added by" and the household list can show names. Works with any kind of sync.
+const deviceLabel = () => { const ua = navigator.userAgent; return /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android phone' : /Mac/.test(ua) ? 'Mac' : 'Computer'; };
+export const myName = () => store.getLocal('me.name', '') || store.get('profiles', store.getDeviceId())?.name || '';
+export async function setMyName(name) {
+  const n = String(name || '').trim().slice(0, 60);
+  await store.setLocal('me.name', n);
+  await store.put('profiles', { id: store.getDeviceId(), name: n, device: deviceLabel() });
+  if (n && !family().includes(n)) await addFamily(n);
+  return n;
+}
+export const nameOfDevice = (deviceId) => (deviceId ? store.get('profiles', deviceId)?.name || '' : '');
+export const profiles = () => store.all('profiles').filter((p) => p.name);

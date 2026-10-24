@@ -9,7 +9,7 @@ const check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fail
 
 const SCREENS = [
   '#/', '#/library', '#/library/book/b1', '#/library/scan', '#/inventory', '#/inventory/add', '#/sports', '#/sports/match/m1', '#/sports/live/m1',
-  '#/sports/season', '#/photo', '#/photo/cull/m1', '#/photo/export/m1', '#/golf', '#/golf/swings', '#/golf/trends', '#/golf/golfers', '#/reminders', '#/pantry', '#/pantry/shopping', '#/pantry/add', '#/warranties', '#/warranties/add', '#/settings',
+  '#/sports/season', '#/photo', '#/photo/cull/m1', '#/photo/export/m1', '#/golf', '#/golf/swings', '#/golf/trends', '#/golf/golfers', '#/reminders', '#/pantry', '#/pantry/shopping', '#/pantry/add', '#/warranties', '#/warranties/add', '#/settings', '#/settings/account',
 ];
 
 (async () => {

@@ -7,6 +7,8 @@ import { renderLocations } from './locations.js';
 import { renderTeams } from './teams.js';
 import { renderPair } from './pair.js';
 import { renderBackup } from './backup.js';
+import { renderAccount } from './account.js';
+import { myName } from '../core/people.js';
 
 function overview(root) {
   const draw = () => {
@@ -16,6 +18,7 @@ function overview(root) {
     const syncText = st.mode === 'off' ? 'Not paired yet' : `${st.mode === 'cloud' ? 'Cloud (Supabase)' : 'Quick link'} · ${st.state === 'connected' ? 'connected' : st.state}`;
     root.innerHTML = `<h1>Settings</h1>
       <div class="list">
+        <a class="list-item" href="#/settings/account"><span aria-hidden="true">🙋</span><div class="grow"><b>You & sign-in</b><div class="small muted">${esc(myName() ? `You’re ${myName()}` : 'Add your name')}${sync.sb.isConfigured() ? ' · optional email sign-in' : ''}</div></div>${icon('chev', 'chev')}</a>
         <a class="list-item" href="#/settings/pair">${icon('link')}<div class="grow"><b>Pair phone & computer</b><div class="small muted">${esc(syncText)}</div></div>${icon('chev', 'chev')}</a>
         <a class="list-item" href="#/settings/locations">${icon('pin')}<div class="grow"><b>House locations</b><div class="small muted">Rooms, bookcases, cupboards, shelves, boxes</div></div>${icon('chev', 'chev')}</a>
         <a class="list-item" href="#/settings/teams">${icon('users')}<div class="grow"><b>Teams & players</b><div class="small muted">Shared by Rugby, Cricket, Hockey and Photography</div></div>${icon('chev', 'chev')}</a>
@@ -67,9 +70,9 @@ function overview(root) {
 }
 
 export default {
-  routes: { '': overview, locations: renderLocations, teams: renderTeams, pair: renderPair, backup: renderBackup },
+  routes: { '': overview, account: renderAccount, locations: renderLocations, teams: renderTeams, pair: renderPair, backup: renderBackup },
   nav: [
-    { route: '', label: 'Settings', icon: 'gear' },
+    { route: '', label: 'Settings', icon: 'gear', match: ['', 'account'] },
     { route: 'pair', label: 'Pairing', icon: 'link' },
     { route: 'locations', label: 'Locations', icon: 'pin' },
     { route: 'teams', label: 'Teams', icon: 'users' },

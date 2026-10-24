@@ -18,6 +18,7 @@ test('schema: pairing, privacy and newest-wins', { skip: !PGlite && 'pglite not 
     create role anon; create role authenticated;
     create schema auth;
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    create table auth.users (id uuid primary key, email text);
     create publication supabase_realtime;
     grant usage on schema public to authenticated;`);
   await db.exec(readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8'));
@@ -67,6 +68,20 @@ test('schema: pairing, privacy and newest-wins', { skip: !PGlite && 'pglite not 
   await assert.rejects(as(U3, `select public.join_household($1, $2, 'x')`, [h.id, h.join_code]), /not valid/);
   await as(U3, `select public.join_household($1, $2, 'x')`, [h.id, code2]);
   assert.equal((await as(U3, `select * from public.records`)).rows.length, 1);
+
+  // Names + email sign-in: everyone sees who is who; strangers see nothing.
+  await db.exec(`insert into auth.users values ('${U1}', 'mum@example.com'), ('${U2}', null)`);
+  await as(U1, `select public.set_my_name($1, '  Mum  ')`, [h.id]);
+  await as(U2, `select public.set_my_name($1, 'Aarav')`, [h.id]);
+  const people = (await as(U2, `select display_name, device_name, email, is_me from public.household_people($1)`, [h.id])).rows;
+  assert.deepEqual(people.map((p) => [p.display_name, p.device_name, p.email, p.is_me]), [['Mum', 'Mac', 'mum@example.com', false], ['Aarav', 'iPhone', null, true], [null, 'x', null, false]]);
+  await assert.rejects(as('44444444-4444-4444-4444-444444444444', `select * from public.household_people($1)`, [h.id]), /Not a member/);
+  await assert.rejects(as('44444444-4444-4444-4444-444444444444', `select public.set_my_name($1, 'Evil')`, [h.id]), /Not a member/);
+  const mine = (await as(U1, `select * from public.my_households()`)).rows;
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].id, h.id);
+  assert.equal(mine[0].join_code, code2);
+  assert.equal((await as('44444444-4444-4444-4444-444444444444', `select * from public.my_households()`)).rows.length, 0);
 
   const pub = await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`);
   assert.deepEqual(pub.rows.map((x) => x.tablename), ['records']);

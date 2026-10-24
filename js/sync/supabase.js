@@ -1,7 +1,9 @@
 // ============================================================
 // Cloud sync with Supabase (free tier): database + realtime.
 //
-// • Each device signs in anonymously (no email needed).
+// • Each device signs in anonymously (no email needed). Adding an
+//   email later is optional: it keeps the same account, gives the
+//   household names, and lets a new device sign in with a code.
 // • Devices share a "household". The computer creates it; the
 //   phone joins by scanning a QR code that carries the household
 //   id and a secret join code. Row-level security means only
@@ -54,6 +56,11 @@ export function friendlyError(e) {
   const code = e?.code || '';
   if (/anonymous.*disabled|anonymous_provider_disabled/i.test(msg + code)) return 'Anonymous sign-ins are turned off. In Supabase: Authentication › Sign In / Providers › turn on “Allow anonymous sign-ins”.';
   if (/create_household|join_household|function .* does not exist|relation .* does not exist|PGRST202|42883|42P01/i.test(msg + code)) return 'The database isn’t set up yet. In Supabase open SQL Editor, paste supabase/schema.sql and press Run.';
+  if (/token.*(expired|invalid)|otp.*(expired|invalid)|invalid.*(token|otp)/i.test(msg)) return 'That code is wrong or has expired. Ask for a new one.';
+  if (/signups? not allowed|user not found/i.test(msg)) return 'There’s no HomeBase account with that email yet. Add your email on a device that’s already set up first (Settings › You & sign-in).';
+  if (/only request this after|rate limit|too many/i.test(msg)) return 'Please wait a minute before asking for another code.';
+  if (/email.*(provider|logins?).*disabled|email signups are disabled/i.test(msg)) return 'Email sign-in is turned off. In Supabase: Authentication › Sign In / Providers › Email › turn it on.';
+  if (/my_households|set_my_name|household_people/i.test(msg)) return 'The database needs updating for names and email sign-in. In Supabase open SQL Editor, paste supabase/schema.sql again and press Run.';
   if (/Pairing code not valid/i.test(msg)) return 'That pairing code isn’t valid any more. Show a fresh QR code on the computer and scan again.';
   if (/Invalid API key|No API key|apikey/i.test(msg)) return 'The Supabase key looks wrong. Copy the “anon public” key again from Project Settings › API.';
   if (/Failed to fetch|NetworkError|Load failed|network/i.test(msg)) return navigator.onLine === false ? 'You’re offline. Changes are saved here and will upload when you’re back online.' : 'Can’t reach Supabase. Check the Project URL and your internet connection.';
@@ -263,6 +270,101 @@ export async function stop() {
   try { await channel?.unsubscribe(); } catch { /* ignore */ }
   channel = null;
   setState('off');
+}
+
+// ---------- names & optional email sign-in ----------
+/** { email, anonymous } for the account this device uses (or null when cloud sync is off). */
+export async function account() {
+  if (!client) return null;
+  const { data } = await client.auth.getUser();
+  const u = data?.user;
+  return u ? { email: u.email || u.new_email || '', confirmed: !!u.email, anonymous: !!u.is_anonymous || !u.email } : null;
+}
+
+/**
+ * Step 1: send a 6-digit code to `email`.
+ * An anonymous device account is upgraded in place (same account, so it stays in the household).
+ * If that email already has an account, we sign in to it instead and re-join the household.
+ * Returns the code type to pass to verifyEmail().
+ */
+export async function sendEmailCode(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('That email address doesn’t look right.');
+  const acc = await account();
+  if (acc?.anonymous) {
+    const { error } = await client.auth.updateUser({ email });
+    if (!error) return 'email_change';
+    if (!/already|registered|exists|taken/i.test(error.message || '')) throw error;
+  }
+  const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  if (error) throw error;
+  return 'email';
+}
+
+/** Step 2: check the code. Afterwards this device is signed in with that email. */
+export async function verifyEmail(email, code, type) {
+  email = String(email || '').trim().toLowerCase();
+  const { error } = await client.auth.verifyOtp({ email, token: String(code || '').replace(/\s/g, ''), type });
+  if (error) throw error;
+  const cfg = config();
+  // Signed in to an existing account: make sure it belongs to this household.
+  if (type === 'email' && cfg?.householdId) {
+    const { error: e2 } = await client.rpc('join_household', { p_household: cfg.householdId, p_code: cfg.joinCode, p_device: deviceName() });
+    if (e2) throw e2;
+  }
+  const name = store.getLocal('me.name');
+  if (name && cfg?.householdId) await setMemberName(name).catch(() => {});
+  setState(state, message);
+}
+
+/** Tell the household your name (shown in "People in this household"). */
+export async function setMemberName(name) {
+  const cfg = config();
+  if (!client || !cfg?.householdId) return;
+  const { error } = await client.rpc('set_my_name', { p_household: cfg.householdId, p_name: name });
+  if (error) throw error;
+}
+
+/** Everyone in the household: [{ display_name, device_name, email, is_me }]. */
+export async function householdPeople() {
+  const cfg = config();
+  if (!client || !cfg?.householdId) return [];
+  const { data, error } = await client.rpc('household_people', { p_household: cfg.householdId });
+  if (error) throw error;
+  return data || [];
+}
+
+/** New device, step 1: email a code (needs the project URL and key from Settings › Pairing on the other device). */
+let pendingSignIn = null;
+export async function startEmailSignIn(url, key, email) {
+  url = normUrl(url);
+  key = String(key || '').trim();
+  email = String(email || '').trim().toLowerCase();
+  const c = await makeClient(url, key);
+  const { error } = await c.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  if (error) throw error;
+  pendingSignIn = { c, url, key, email };
+}
+
+/** New device, step 2: check the code and join the household this account belongs to. */
+export async function finishEmailSignIn(code) {
+  if (!pendingSignIn) throw new Error('Ask for a code first.');
+  const { c, url, key, email } = pendingSignIn;
+  const { error } = await c.auth.verifyOtp({ email, token: String(code || '').replace(/\s/g, ''), type: 'email' });
+  if (error) throw error;
+  const { data, error: e2 } = await c.rpc('my_households');
+  if (e2) throw e2;
+  const h = data?.[0];
+  if (!h) throw new Error('This email isn’t part of a household yet. Pair this device with the QR code instead.');
+  const { error: e3 } = await c.rpc('join_household', { p_household: h.id, p_code: h.join_code, p_device: deviceName() });
+  if (e3) throw e3;
+  await store.setLocal(CFG, { url, key, householdId: h.id, joinCode: h.join_code, role: 'guest' });
+  await store.setLocal(CURSOR, 0);
+  await queueEverything();
+  client = c;
+  pendingSignIn = null;
+  await start();
+  return h;
 }
 
 /** Pairing data shown in the computer's QR code. */
