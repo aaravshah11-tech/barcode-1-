@@ -8,9 +8,16 @@
     "start": "npx --yes serve -l 8080 .",
     "test": "node --test tests/*.test.mjs",
     "test:live": "node tests/live-lookup.mjs",
-    "sw": "node scripts/update-sw.mjs"
+    "sw": "node scripts/update-sw.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.2.12"
+    "@electric-sql/pglite": "0.2.12",
+    "aedes": "0.51.3",
+    "playwright": "1.63.0",
+    "websocket-stream": "5.5.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
