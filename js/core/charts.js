@@ -39,7 +39,8 @@ export function lineChart(series, { height = 220, xFmt = (x) => x, yFmt = (y) =>
   const sy = (y) => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
   const ticks = (a, b, n) => Array.from({ length: n + 1 }, (_, i) => a + ((b - a) * i) / n);
   const grid = ticks(y0, y1, 4).map((y) => `<line x1="${L}" x2="${W - R}" y1="${sy(y)}" y2="${sy(y)}" class="grid"/><text x="${L - 6}" y="${sy(y) + 4}" text-anchor="end">${esc(yFmt(y))}</text>`).join('');
-  const xt = ticks(x0, x1, 5).map((x) => `<text x="${sx(x)}" y="${H - 8}" text-anchor="middle">${esc(xFmt(x))}</text>`).join('');
+  // Skip x labels that would read the same as the one before (e.g. #1 #1 #1 on a short count axis).
+  const xt = ticks(x0, x1, 5).filter((x, i, arr) => i === 0 || String(xFmt(x)) !== String(xFmt(arr[i - 1]))).map((x) => `<text x="${sx(x)}" y="${H - 8}" text-anchor="middle">${esc(xFmt(x))}</text>`).join('');
   const lines = series.map((s, i) => {
     const c = s.color || seriesColor(i);
     const d = s.points.map((p, j) => `${j ? 'L' : 'M'}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join('');

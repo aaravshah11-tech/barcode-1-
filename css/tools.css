@@ -210,3 +210,14 @@ body:has(.undo-bar) #toasts { bottom: calc(84px + var(--safe-b)) !important; }
 .v-stage.n5, .v-stage.n6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
 .v-stage.n3 img, .v-stage.n4 img, .v-stage.n5 img, .v-stage.n6 img { height: calc((100dvh - 200px) / 2); }
 .v-stage figure { cursor: pointer; }
+/* golf: golfers + sessions */
+.link-btn { background: none; border: 0; padding: 0; color: var(--tool, var(--accent)); font: inherit; text-decoration: underline; cursor: pointer; }
+.session-row { margin-top: 12px; text-align: center; }
+.session-card { margin-bottom: 14px; }
+.session-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.session-head a { font-weight: 700; color: var(--text); }
+.calib-big { font: 800 3.4rem/1 var(--mono); text-align: center; margin: 18px 0; color: var(--tool); }
+.calib-steps { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
+.calib-steps span { width: 14px; height: 14px; border-radius: 50%; background: var(--border); }
+.calib-steps span.done { background: var(--ok); }
+.rows .row.hl { outline: 2px solid var(--tool); outline-offset: -2px; }
