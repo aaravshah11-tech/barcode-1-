@@ -33,15 +33,15 @@ function applyToolTheme(t) {
   document.title = t ? `${t.name} · HomeBase` : 'HomeBase';
 }
 
-function renderNav(t, mod, routeName) {
+function renderNav(t, mod, routeName, subpath = '') {
   const nav = t && mod?.nav;
   tabbar.hidden = !nav?.length;
   if (!nav?.length) { tabbar.innerHTML = ''; return; }
   const parent = t.parent ? toolById(t.parent) : null;
   tabbar.innerHTML = (parent ? `<a href="#/${parent.id}" class="tab-back">${icon('back')}<span>${esc(parent.name)}</span></a>` : '') +
     nav.map((n) => {
-      const active = (n.match || [n.route]).includes(routeName);
-      return `<a href="#/${t.id}${n.route ? '/' + n.route : ''}" class="${active ? 'active' : ''} ${n.primary ? 'tab-primary' : ''}">${icon(n.icon)}<span>${esc(n.label)}</span></a>`;
+      const active = n.match ? n.match.includes(routeName) || n.match.some((x) => x.includes('/') && subpath.startsWith(x)) : n.route.includes('/') ? subpath.startsWith(n.route) : routeName === n.route;
+      return `<a href="${n.href || `#/${t.id}${n.route ? '/' + n.route : ''}`}" class="${active ? 'active' : ''} ${n.primary ? 'tab-primary' : ''}">${n.emoji ? `<span class="nav-emoji" aria-hidden="true">${n.emoji}</span>` : icon(n.icon)}<span>${esc(n.label)}</span></a>`;
     }).join('');
 }
 
@@ -87,7 +87,7 @@ async function route() {
   let routeName = params[0] && mod.routes[params[0]] ? params[0] : '';
   const rest = routeName ? params.slice(1) : params;
   current = { tool: t.id, route: routeName };
-  renderNav(t, mod, routeName);
+  renderNav(t, mod, routeName, params.join('/'));
   view.replaceChildren(page);
   try {
     cleanup = (await mod.routes[routeName](page, rest, makeCtx(t))) || null;

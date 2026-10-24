@@ -393,3 +393,4 @@ body.nav-hidden #toasts { bottom: calc(16px + var(--safe-b)); }
   .app { display: block !important; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.nav-emoji { font-size: 1.35rem; line-height: 24px; height: 24px; }
