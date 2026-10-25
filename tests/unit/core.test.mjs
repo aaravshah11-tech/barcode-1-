@@ -100,3 +100,16 @@ test('Mission Log: auto-delete after N days, CSV export', () => {
   assert.ok(csv.includes("'=SUM(1)"), 'formula neutralised');
   assert.ok(csv.startsWith('﻿Time (UTC)'));
 });
+
+test('only HQ’s own pages (or HQ behind Tailscale) count as same-origin; proxied requests are not "local"', async () => {
+  const { sameOrigin, isLocalRequest } = await import('../../server/security.js');
+  const req = (headers, ip = '192.168.1.5') => ({ headers, socket: { remoteAddress: ip } });
+  assert.ok(sameOrigin(req({ host: '192.168.1.10:8443' })));
+  assert.ok(sameOrigin(req({ host: '192.168.1.10:8443', origin: 'https://192.168.1.10:8443' })));
+  assert.ok(!sameOrigin(req({ host: '192.168.1.10:8443', origin: 'https://evil.example' })));
+  assert.ok(!sameOrigin(req({ host: '192.168.1.10:8443', origin: 'not a url' })));
+  assert.ok(sameOrigin(req({ host: 'localhost:8443', origin: 'https://hq.tail1234.ts.net', 'x-forwarded-host': 'hq.tail1234.ts.net' })));
+  assert.ok(isLocalRequest(req({}, '127.0.0.1')));
+  assert.ok(!isLocalRequest(req({}, '192.168.1.5')));
+  assert.ok(!isLocalRequest(req({ 'x-forwarded-for': '100.64.0.7' }, '127.0.0.1')));
+});

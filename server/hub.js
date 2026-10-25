@@ -2,6 +2,7 @@
 //   Dashboard  ← state, agent, event, threat …            (logged-in browsers)
 //   Agent      → hello(token), status, event, grid, pong   ← welcome, signed cmd
 import { WebSocketServer } from 'ws';
+import { sameOrigin } from './security.js';
 
 const OFFLINE_GRACE = 20000; // a quick Wi-Fi blip shouldn't fill the Mission Log with offline/online
 const HEARTBEAT = 20000;
@@ -14,8 +15,7 @@ export function attachHub(server, { hq, sessionOf }) {
     const url = new URL(req.url, 'https://hq');
     if (url.pathname !== '/ws') return socket.destroy();
     // Only pages served by HQ itself may connect.
-    const origin = req.headers.origin;
-    if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
+    if (!sameOrigin(req)) return socket.destroy();
     wss.handleUpgrade(req, socket, head, (ws) => {
       if (sessionOf(req)) dashboard(ws); else agent(ws);
     });

@@ -58,3 +58,19 @@ export function pickCodename(taken) {
   for (;;) { const c = `${CODENAMES[crypto.randomInt(CODENAMES.length)]}-${n}`; if (!used.has(c)) return c; n++; }
 }
 export const agentLabel = (a) => `AGENT-${String(a.number).padStart(2, '0')}`;
+
+/**
+ * Did this request come from a page served by HQ itself? (Blocks other websites from talking to HQ.)
+ * Behind `tailscale serve` the original address arrives as X-Forwarded-Host; a web page can't fake that header.
+ */
+export function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  let host;
+  try { host = new URL(origin).host; } catch { return false; }
+  return host === req.headers.host || (!!req.headers['x-forwarded-host'] && host === String(req.headers['x-forwarded-host']).split(',')[0].trim());
+}
+
+/** Is this request from the HQ computer itself (not forwarded by Tailscale or another proxy)? */
+export const isLocalRequest = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)
+  && !req.headers['x-forwarded-for'] && !req.headers['tailscale-user-login'];

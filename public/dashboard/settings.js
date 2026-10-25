@@ -33,6 +33,19 @@ function general(body, S, onChange) {
     <h2 style="margin-bottom:8px">Export the Mission Log</h2>
     <div class="row"><a class="btn" href="/api/export?format=csv" download>⇩ CSV (spreadsheet)</a><a class="btn" href="/api/export?format=json" download>⇩ JSON</a></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+    <h2 style="margin-bottom:8px">Away from home (Tailscale)</h2>
+    ${S.network?.tailscaleUrls?.length ? `<p class="small"><span class="dot on"></span> Tailscale is running on HQ. From your phone (with Tailscale on) open: ${S.network.tailscaleUrls.map((u) => `<span class="mono">${esc(u)}</span>`).join(' or ')}</p>` : ''}
+    <details><summary class="small"><b>How to see the Command Centre when you’re out</b></summary>
+      <ol class="small" style="line-height:1.7;padding-left:20px">
+        <li>Tailscale makes a private, encrypted link between <b>your own</b> devices. Nothing is opened to the internet, and it’s free for personal use.</li>
+        <li>Install <b>Tailscale</b> on this HQ computer (tailscale.com/download) and sign in.</li>
+        <li>Install the <b>Tailscale</b> app on your phone and sign in with the <b>same account</b>.</li>
+        <li>On HQ, open Terminal and run once: <code class="mono">tailscale serve --bg https+insecure://localhost:${esc(S.network?.httpsPort || 8443)}</code></li>
+        <li>It prints an address like <span class="mono">https://my-mac.tail1234.ts.net</span>. Open that on your phone (Tailscale on) — it has a proper padlock, no certificate setup needed. Add it to your Home Screen.</li>
+      </ol>
+      <p class="small muted">Alerts don’t need Tailscale: they reach your phone anywhere. Tailscale is only for opening the Command Centre.</p>
+    </details>
+    <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
     <h2 style="margin-bottom:8px">HQ password</h2>
     <form data-pw class="row">
       <input type="password" name="current" placeholder="Current password" autocomplete="current-password" required style="flex:1;min-width:160px">

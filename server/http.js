@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_DIR, HTTPS_PORT, HTTP_PORT, mainAddress, lanAddresses, hostName } from './config.js';
-import { randomToken, sha256, hashPassword, checkPassword } from './security.js';
+import { randomToken, sha256, hashPassword, checkPassword, sameOrigin, isLocalRequest } from './security.js';
 import { missionById } from '../public/shared/missions.js';
 import { toCsv } from './export.js';
 
@@ -20,7 +20,7 @@ const SECURITY_HEADERS = {
 const COOKIE = 'sentinel_sid';
 const SESSION_DAYS = 60;
 
-const isLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+const isLocal = isLocalRequest;
 const cookies = (req) => Object.fromEntries((req.headers.cookie || '').split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
 
 /** Tiny "slow down" guard for logins and pairing codes. */
@@ -78,6 +78,7 @@ export function makeHandlers({ hq, db, certs, extra = {} }) {
   const network = () => ({
     address: mainAddress(), addresses: lanAddresses(), host: hostName(), httpsPort: HTTPS_PORT, httpPort: HTTP_PORT,
     dashboardUrl: httpsBase(mainAddress()), setupUrl: `http://${mainAddress()}:${HTTP_PORT}/`, certMethod: certs?.meta?.method || '', certNames: certs?.meta ? [...certs.meta.ips, ...certs.meta.dns] : [],
+    tailscaleUrls: lanAddresses().filter((a) => a.tailscale).map((a) => httpsBase(a.address)),
   });
 
   // ---------- the HTTPS server: dashboard, Agents, API ----------
@@ -142,8 +143,7 @@ export function makeHandlers({ hq, db, certs, extra = {} }) {
     // ----- everything else needs the HQ password -----
     if (!sessionOf(req)) return sendJson(res, 401, { error: 'Please log in.' });
     // Basic protection against other websites poking the API from your browser.
-    const origin = req.headers.origin;
-    if (m !== 'GET' && origin && new URL(origin).host !== req.headers.host) return sendJson(res, 403, { error: 'Wrong origin.' });
+    if (m !== 'GET' && !sameOrigin(req)) return sendJson(res, 403, { error: 'Wrong origin.' });
 
     if (p === '/api/state' && m === 'GET') return sendJson(res, 200, { ...hq.snapshot(), network: network() });
     if (p === '/api/network' && m === 'GET') return sendJson(res, 200, network());
