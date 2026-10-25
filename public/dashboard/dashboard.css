@@ -71,3 +71,7 @@
 .recon-row { padding: 8px 0; border-bottom: 1px solid var(--line); gap: 10px; }
 .recon-device.muted { opacity: .55; }
 .tag-amber { color: var(--amber); border-color: var(--amber); }
+.alert-rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 14px; margin-top: 8px; }
+.recon-row select { width: auto; flex: 0 1 190px; }
+.recon-row input[type="checkbox"], .alert-rules input[type="checkbox"] { flex: none; }
+.alert-rules label { flex-wrap: nowrap; margin: 0; }
