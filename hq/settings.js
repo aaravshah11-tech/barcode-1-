@@ -1,0 +1,99 @@
+// Command Centre settings: General (effects, Mission Log, export, backup), Phones (see HQ from anywhere), Alerts.
+import { esc, $, toast, sheet, confirmBox, qrSvg, ago } from '../shared/ui.js';
+import { forgetViewer } from './transport.js';
+
+const TABS = [['general', 'General'], ['phones', 'Phones'], ['alerts', 'Alerts']];
+const extraTabs = {}; // filled in by alerts.js
+export const registerTab = (id, render) => { extraTabs[id] = render; };
+const hr = '<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">';
+
+/** Save text as a file on this device (Mission Log export, backups). */
+export function download({ filename, type, text }) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+export function openSettings(S, { tab = 'general', onChange } = {}) {
+  const s = sheet(`<div class="filters" role="tablist" style="margin-bottom:14px">${TABS.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-pressed="${k === tab}">${l}</button>`).join('')}</div><div data-tabbody></div>`, { title: 'Settings', wide: true, onClose: () => { S.onViewers = null; } });
+  const body = s.body.querySelector('[data-tabbody]');
+  const show = async (t) => {
+    S.onViewers = null;
+    s.body.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === t)));
+    if (t === 'general') general(body, S, onChange);
+    else if (t === 'phones') phones(body, S);
+    else { await import('./alerts.js'); await extraTabs[t]?.(body, S); }
+  };
+  s.body.addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); });
+  show(tab);
+  return s;
+}
+
+function general(body, S, onChange) {
+  const st = S.settings, local = S.mode === 'hq';
+  body.innerHTML = `
+    <form data-general>
+      <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Scanlines, glitch and typewriter effects (also used by Agents)</span></label>
+      <label class="field"><span>Keep Mission Log entries for</span><div class="row"><input type="number" name="retentionDays" min="1" max="3650" value="${esc(st.retentionDays)}" style="max-width:120px"><span class="muted">days, then delete automatically</span></div></label>
+      <button class="btn-primary">Save</button>
+    </form>
+    ${hr}<h2 style="margin-bottom:8px">Export the Mission Log</h2>
+    <div class="row"><button data-export="csv">⇩ CSV (spreadsheet)</button><button data-export="json">⇩ JSON</button></div>
+    ${local ? `${hr}<h2 style="margin-bottom:8px">This HQ</h2>
+    <p class="small">HQ code: <b class="mono c-green" data-hqcodeshow>${esc(S.hqCode())}</b></p>
+    <p class="small muted">Everything HQ knows is stored in <b>this browser on this computer</b>. Keep this page open (and the computer plugged in and awake) — Agents can only report while it’s open.
+      Moving to another computer or browser? Make a backup here and restore it there.</p>
+    <div class="row"><button data-backup>⇩ Back up HQ</button><label class="btn" style="cursor:pointer">⇧ Restore a backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>` : ''}`;
+  $('[data-general]', body).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { const s = await S.api('/settings', { method: 'PATCH', body: { fx: e.target.fx.checked, retentionDays: Number(e.target.retentionDays.value) } }); onChange?.(s); toast('Settings saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
+  });
+  body.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', async () => {
+    try { download(await S.api(`/export?format=${b.dataset.export}`)); } catch (x) { toast(x.message, { kind: 'err' }); }
+  }));
+  $('[data-backup]', body)?.addEventListener('click', async () => { try { download(await S.api('/backup')); toast('Backup saved — keep the file somewhere safe (it holds your Agents’ keys).'); } catch (x) { toast(x.message, { kind: 'err' }); } });
+  $('[data-restore]', body)?.addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (!(await confirmBox('Restore this backup?', 'It replaces everything in this HQ (Agents, Mission Log, settings). The page reloads afterwards.', { ok: 'Restore', danger: true }))) return;
+    try { await S.api('/restore', { method: 'POST', body: JSON.parse(await f.text()) }); location.reload(); } catch (x) { toast(x.message || 'That file couldn’t be read.', { kind: 'err' }); }
+  });
+}
+
+/** Phones linked to HQ can open the Command Centre from anywhere (and get alerts while it's open). */
+function phones(body, S) {
+  if (S.mode !== 'hq') {
+    body.innerHTML = `<p>This phone is linked to HQ. You can open the Command Centre from anywhere with internet.</p>
+      <button class="btn-danger" data-unlink>Unlink this phone</button>`;
+    $('[data-unlink]', body).addEventListener('click', async () => { if (await confirmBox('Unlink this phone?', 'You’ll need a new QR code from HQ to link it again.', { ok: 'Unlink', danger: true })) { forgetViewer(); location.reload(); } });
+    return;
+  }
+  const draw = (viewers) => {
+    body.innerHTML = `
+      <p style="margin-top:0">Link your own phone to see the Command Centre (and get alerts) when you’re out. It’s a private, encrypted link straight to this computer.</p>
+      <button class="btn-primary" data-linkphone>＋ Link a phone</button>
+      <div data-linkbox></div>
+      ${hr}<h2 style="margin-bottom:8px">Linked phones</h2>
+      <div>${viewers.map((v) => `<div class="row recon-row" data-viewer="${esc(v.id)}"><b class="grow">${esc(v.label)}</b><span class="small muted">linked ${esc(ago(v.createdAt))} · last opened ${esc(ago(v.lastSeen))}</span><button class="btn-ghost small" data-unlinkv aria-label="Unlink ${esc(v.label)}">Unlink</button></div>`).join('') || '<p class="small muted">None yet.</p>'}</div>`;
+    $('[data-linkphone]', body).addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
+        const p = await S.api('/pair', { method: 'POST', body: { role: 'viewer' } });
+        const link = S.joinLink('./remote.html', { hq: S.info.hqId, link: p.code });
+        const box = $('[data-linkbox]', body);
+        box.innerHTML = `<div class="recruit" style="margin-top:14px"><div class="qr" data-qr></div><div><ol><li>On <b>your</b> phone, open the Camera and scan this code.</li><li>Tap the link, give the phone a name, press <b>Link this phone</b>.</li><li>Then add it to your Home Screen (Share → Add to Home Screen).</li></ol><p class="small muted">The code works once, for 10 minutes.</p></div></div>`;
+        const qr = $('[data-qr]', box);
+        qr.innerHTML = await qrSvg(link);
+        qr.dataset.link = link;
+      } catch (x) { toast(x.message, { kind: 'err' }); e.target.disabled = false; }
+    });
+    body.querySelectorAll('[data-unlinkv]').forEach((b) => b.addEventListener('click', async () => {
+      const id = b.closest('[data-viewer]').dataset.viewer;
+      try { await S.api(`/viewers/${id}`, { method: 'DELETE' }); toast('Phone unlinked'); } catch (x) { toast(x.message, { kind: 'err' }); }
+    }));
+  };
+  S.onViewers = (v) => { if (!$('[data-qr]', body)) draw(v); else { toast('Phone linked ✔'); draw(v); } };
+  S.api('/viewers').then(draw, (x) => { body.innerHTML = `<p class="c-red">${esc(x.message)}</p>`; });
+}

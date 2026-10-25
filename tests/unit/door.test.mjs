@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeDoor } from '../../public/agent/lib/door-core.js';
+import { makeDoor } from '../../agent/lib/door-core.js';
 
 const play = (d, steps) => steps.flatMap(([rate, ms]) => { const out = []; for (let t = 0; t < ms; t += 20) { const r = d.step(rate, 20); if (r) out.push(r); } return out; });
 

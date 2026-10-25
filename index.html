@@ -2,26 +2,58 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HomeBase retired</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050807">
+<title>SENTINEL</title>
+<meta name="description" content="SENTINEL: turn your computer into HQ and old phones into Agents. Nothing to download.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="shared/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="shared/theme.css">
 <style>
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b0d0c; color: #cfe9d6; font: 16px/1.5 system-ui, sans-serif; padding: 24px; box-sizing: border-box; }
-  main { max-width: 520px; }
-  h1 { font-size: 1.6rem; margin: 0 0 8px; }
-  code { font-family: ui-monospace, Menlo, monospace; color: #39ff88; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  .hero { text-align: center; }
+  .hero .logo { width: 96px; height: 96px; }
+  .hero h1 { font: 700 clamp(1.6rem, 6vw, 2.4rem) var(--mono); letter-spacing: .25em; color: var(--green); margin: 12px 0 4px; }
+  .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 28px 0; }
+  .choice { display: block; text-decoration: none; color: inherit; padding: 18px; }
+  .choice b { display: block; font: 700 1rem var(--mono); letter-spacing: .12em; color: var(--green); margin-bottom: 6px; }
+  .choice:hover { border-color: var(--green); }
+  ol { line-height: 1.75; padding-left: 20px; }
+  .note { border-left: 3px solid var(--line-2); padding-left: 12px; }
 </style>
 </head>
-<body>
+<body class="fx">
 <main>
-  <h1>HomeBase has been retired</h1>
-  <p>This app has been replaced by <b>SENTINEL</b>, which runs on your own computer instead of this website.</p>
-  <p>Nothing was deleted: HomeBase is kept on the <code>homebase-archive</code> branch of this repository and can be brought back at any time.</p>
-  <p>You can remove the HomeBase icon from your home screen.</p>
+  <div class="hero">
+    <img class="logo" src="shared/logo.svg" alt="">
+    <h1>SENTINEL</h1>
+    <p class="muted">Your home command centre. Your computer is HQ. Old phones and tablets become Agents.<br>Nothing to download or install.</p>
+  </div>
+
+  <div class="choices">
+    <a class="panel choice" href="hq/" data-start><b>▶ START HQ</b><span class="small">On the computer that stays at home. Keep this tab open.</span></a>
+    <a class="panel choice" href="agent/"><b>◉ BE AN AGENT</b><span class="small">On an old phone or tablet. (Easier: scan the QR code that HQ shows.)</span></a>
+    <a class="panel choice" href="hq/remote.html"><b>▤ MY PHONE</b><span class="small">See HQ from anywhere, after linking it in HQ’s Settings → Phones.</span></a>
+  </div>
+
+  <section class="panel">
+    <h2>How it works</h2>
+    <ol class="small">
+      <li>On your computer, press <b>START HQ</b>. Bookmark it. (Chrome/Edge: ⋮ → Cast, save and share → <b>Install page as app</b> to give it its own window.)</li>
+      <li>Press <b>＋ RECRUIT</b>. Scan the QR code with an old phone on your Wi-Fi. It appears on the radar.</li>
+      <li>Click the Agent and give it a mission: MOTION WATCH, DOOR TRIPWIRE, SOUND LEVEL, LIGHT CHECK, DOOR PANEL or INTEL SCREEN.</li>
+      <li>Press <b>AWAY</b> when everyone leaves. Movement then means <b>THREAT RED</b>.</li>
+    </ol>
+    <p class="small note muted">Privacy: cameras and microphones are only used on the Agent itself. HQ only ever receives events like “motion detected” or “72 dB”. Devices talk to each other directly over an encrypted link; a free matchmaking service only introduces them. Your Mission Log stays in your HQ computer’s browser.</p>
+  </section>
+  <p class="small muted" style="text-align:center;margin-top:24px">Looking for HomeBase? It has been retired and is kept on the <span class="mono">homebase-archive</span> branch.</p>
 </main>
 <script>
-  // Remove the old offline copy of HomeBase from this device.
-  if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
-  if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+  // Pass settings such as ?signal= (used by the tests) on to HQ and the Agent page.
+  if (location.search) document.querySelectorAll('.choice').forEach((a) => { a.href += location.search; });
+  // Clean up the old HomeBase app on devices that had it installed (its worker lived at this folder's root).
+  if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => { if (new URL(r.scope).pathname === location.pathname.replace(/[^/]*$/, '')) r.unregister(); }));
+  if (window.caches) caches.keys().then((ks) => ks.forEach((k) => { if (!k.startsWith('sentinel')) caches.delete(k); }));
 </script>
 </body>
 </html>

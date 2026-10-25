@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeDetector } from '../../public/agent/lib/motion-core.js';
+import { makeDetector } from '../../agent/lib/motion-core.js';
 
 const W = 64, H = 48;
 const room = (shade = 90, box = null) => {

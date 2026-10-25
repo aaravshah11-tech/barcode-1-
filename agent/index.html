@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050807">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SENTINEL Agent">
+<title>SENTINEL // Agent</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../shared/icons/apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="./agent.css">
+</head>
+<body class="fx">
+<div class="banner-active" data-banner role="status" aria-live="polite" hidden></div>
+<main class="agent-main" id="main"></main>
+<div class="dim" data-dim hidden><div class="dim-clock mono" data-dimclock></div><div class="small muted">Tap to wake</div></div>
+<div class="find" data-find hidden><div class="find-text mono">HERE<br><span data-findname></span></div></div>
+<script type="module" src="./agent.js"></script>
+</body>
+</html>

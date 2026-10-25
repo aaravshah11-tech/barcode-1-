@@ -4,7 +4,9 @@
   "private": true,
   "description": "SENTINEL: a spy-themed home command centre. Your computer is HQ; old phones and tablets become Agents.",
   "type": "module",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "cert": "node --disable-warning=ExperimentalWarning scripts/cert.mjs",
@@ -18,6 +20,8 @@
     "ws": "8.18.0"
   },
   "devDependencies": {
+    "peer": "^1.0.2",
+    "peerjs": "^1.5.5",
     "playwright": "1.63.0"
   }
 }

@@ -1,83 +1,86 @@
-// Command Centre: first-time password, dashboard, presence, settings, export, recruit QR, login.
+// HQ page: front page → START HQ, boot, online, HOME/AWAY, settings, export, backup, recruit QR, one HQ per browser.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startHQ, check, finish } = require('./helpers.cjs');
+const { startWorld, launch, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
-  const hq = await startHQ();
-  const browser = await chromium.launch();
+  const world = await startWorld();
+  const browser = await launch(chromium);
   const errors = [];
-  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1360, height: 860 }, acceptDownloads: true });
+  const ctx = await browser.newContext({ viewport: { width: 1360, height: 860 }, acceptDownloads: true });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error' && !/401|favicon/.test(m.text())) errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/favicon/.test(m.text())) errors.push(m.text()); });
   const shot = (n) => SHOTS && page.screenshot({ path: path.join(SHOTS, `${n}.png`) });
 
-  await page.goto(hq.url + '/');
-  await page.waitForSelector('[data-gate]');
-  check((await page.textContent('#app')).includes('First time here'), 'first visit on the HQ computer asks for a new password');
-  await page.fill('[name=pw]', 'secret1');
-  await page.fill('[name=pw2]', 'secret2');
-  await page.click('[data-gate] button');
-  await page.waitForSelector('text=don’t match');
-  await page.fill('[name=pw2]', 'secret1');
-  await page.click('[data-gate] button');
+  // Front page
+  await page.goto(`${world.root}?${world.sig}`);
+  check((await page.textContent('h1')).includes('SENTINEL'), 'front page loads');
+  await shot('front-page');
+  await page.click('[data-start]');
   await page.waitForSelector('.boot');
-  check(true, 'boot animation plays');
-  await page.waitForTimeout(700);
-  await shot('boot');
+  check(true, 'START HQ → boot animation plays (no password, no install)');
   await page.waitForSelector('.boot', { state: 'detached', timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('HQ ONLINE'), null, { timeout: 15000 });
+  check(true, 'HQ goes ONLINE (matchmaking server reached)');
   await page.waitForSelector('[data-threat].GREEN');
-  check((await page.textContent('[data-threat]')).includes('THREAT GREEN'), 'threat level GREEN');
   check((await page.textContent('[data-agents]')).includes('NO AGENTS YET'), 'empty Agents list explains how to recruit');
-  check((await page.textContent('[data-log]')).includes('SENTINEL // HQ ONLINE') && (await page.textContent('[data-log]')).includes('HQ password set'), 'Mission Log shows HQ ONLINE and the password being set');
+  check((await page.textContent('[data-log]')).includes('SENTINEL // HQ ONLINE'), 'Mission Log: HQ ONLINE');
   check(await page.evaluate(() => document.body.classList.contains('fx')), 'scanline effects on by default');
   await page.waitForTimeout(600);
   await shot('dashboard-empty');
 
-  // Presence switch
+  // HOME / AWAY
   await page.click('[data-mode="away"]');
   await page.waitForSelector('[data-mode="away"][aria-pressed="true"]');
-  await page.waitForSelector('[data-log] >> text=Presence set to AWAY');
-  check(true, 'AWAY switch saved and logged');
+  await page.waitForSelector('[data-log] >> text=Set to AWAY');
+  check((await page.textContent('[data-peoplelist]')).includes('AWAY'), 'AWAY switch saved, logged and shown');
+  await page.click('[data-mode="home"]');
 
   // Recruit dialog
   await page.click('[data-recruit]');
   await page.waitForSelector('.recruit [data-qr] svg');
-  const code = (await page.textContent('[data-code]')).trim();
-  check(/^[A-Z2-9]{6}$/.test(code), `recruit shows a QR code and a 6-character code (${code})`);
-  check((await page.textContent('.recruit')).includes(`http://127.0.0.1:${hq.httpPort}`), 'recruit shows the setup address for devices without a camera');
+  const link = await page.getAttribute('[data-qr]', 'data-link');
+  const hqCode = (await page.textContent('[data-hqcode]')).trim();
+  check(/\/barcode-1-\/agent\/#hq=sntl-[a-z0-9]{8}&pair=[A-Z0-9]{6}/.test(link), 'QR code links to this site’s Agent page with HQ’s code and a one-time code');
+  check(/^[A-Z0-9]{8}$/.test(hqCode), `short HQ code shown for typing by hand (${hqCode})`);
   await shot('recruit');
   await page.keyboard.press('Escape');
 
-  // Settings: effects off, retention, export
+  // Settings: effects, export, backup
   await page.click('[data-settings]');
-  await page.uncheck('[data-general] [name=fx]');
-  await page.fill('[data-general] [name=retentionDays]', '7');
+  await page.uncheck('[name=fx]');
   await page.click('[data-general] button');
-  await page.waitForSelector('.toast >> text=Settings saved');
-  check(!(await page.evaluate(() => document.body.classList.contains('fx'))), 'effects can be switched off');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('a[href*="format=csv"]')]);
-  const csv = require('fs').readFileSync(await dl.path(), 'utf8');
-  check(csv.includes('Time (UTC)') && csv.includes('Presence set to AWAY'), 'Mission Log exports as CSV');
-  // Log out and back in
-  await page.click('[data-logout]');
-  await page.waitForSelector('[data-gate]');
-  await page.fill('[name=pw]', 'wrong-one');
-  await page.click('[data-gate] button');
-  await page.waitForSelector('text=Wrong password');
-  await page.fill('[name=pw]', 'secret1');
-  await page.click('[data-gate] button');
-  await page.waitForSelector('[data-threat]');
-  check(true, 'log out, wrong password refused, right password lets you back in');
+  await page.waitForFunction(() => !document.body.classList.contains('fx'));
+  check(true, 'effects can be switched off');
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-export="csv"]')]);
+  const csvText = require('fs').readFileSync(await csv.path(), 'utf8');
+  check(csv.suggestedFilename().endsWith('.csv') && csvText.includes('Set to AWAY'), 'Mission Log exports as CSV');
+  const [bk] = await Promise.all([page.waitForEvent('download'), page.click('[data-backup]')]);
+  const backup = JSON.parse(require('fs').readFileSync(await bk.path(), 'utf8'));
+  check(backup.sentinel === 'hq-backup' && backup.events.length > 2, 'HQ backup downloads');
+  check((await page.textContent('[data-hqcodeshow]')).trim() === hqCode, 'HQ code shown in Settings');
+  await page.click('[data-tab="alerts"]');
+  await page.waitForSelector('[data-rule="awayMotion"]');
+  check(true, 'Alerts tab opens');
+  await page.click('[data-tab="phones"]');
+  await page.waitForSelector('[data-linkphone]');
+  check(true, 'Phones tab opens');
+  await page.keyboard.press('Escape');
 
-  // Someone else on the network without the password
-  const other = await (await browser.newContext({ ignoreHTTPSErrors: true })).newPage();
-  const res = await other.request.get(hq.url + '/api/state');
-  check(res.status() === 401, 'the dashboard data needs the password');
-  const setup = await other.request.post(hq.url + '/api/setup', { data: { password: 'takeover' } });
-  check(setup.status() === 409, 'password can’t be set again by someone else');
+  // Data survives a reload (kept in this browser)
+  await page.reload();
+  await page.waitForSelector('[data-log] >> text=Set to AWAY', { timeout: 15000 });
+  check(true, 'Mission Log is still there after reloading the page');
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('HQ ONLINE'), null, { timeout: 30000 });
+  check(true, 'HQ comes back ONLINE with the same HQ code after a reload');
 
-  await finish(browser, hq, errors, 'dashboard');
+  // A second HQ tab in the same browser is refused politely
+  const second = await ctx.newPage();
+  await second.goto(world.hqUrl);
+  await second.waitForSelector('text=already open in another tab');
+  check(true, 'opening HQ twice: the second tab explains instead of fighting');
+
+  await finish(browser, world, errors, 'dashboard');
 })().catch((e) => { console.error(e); process.exit(1); });

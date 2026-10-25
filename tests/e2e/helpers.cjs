@@ -1,54 +1,81 @@
-// Starts a real HQ (separate process, throwaway data folder, test ports) for browser tests.
-const { spawn } = require('child_process');
+// Test helpers: serves this folder like GitHub Pages does (under /barcode-1-/), runs a private
+// PeerJS matchmaking server, and launches Chromium set up for WebRTC between local pages.
+const http = require('http');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
-const https = require('https');
+const { PeerServer } = require('peer');
 
-// Every HQ a test starts is stopped when the test ends, even if it crashed.
-const children = new Set();
-process.on('exit', () => { for (const c of children) try { c.kill(); } catch {} });
+const ROOT = path.join(__dirname, '../..');
+const BASE = '/barcode-1-/';
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
-let portBase = 9400 + Math.floor(Math.random() * 400);
-exports.startHQ = async function startHQ(opts = {}, tries = 0) {
-  try { return await launchHQ(opts); } catch (e) {
-    // A leftover process may hold the port: try fresh ports (not when restarting on the same ones).
-    if (!opts.reuse && tries < 4 && /already in use/.test(e.message)) { portBase += 37; return startHQ(opts, tries + 1); }
-    throw e;
-  }
-};
-async function launchHQ({ env = {}, reuse = null } = {}) {
-  const data = reuse?.data || fs.mkdtempSync(path.join(os.tmpdir(), 'sentinel-test-'));
-  const httpsPort = reuse?.httpsPort || portBase++, httpPort = reuse?.httpPort || portBase++;
-  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '../../server/index.js')], {
-    env: { ...process.env, SENTINEL_DATA: data, SENTINEL_HTTPS_PORT: String(httpsPort), SENTINEL_HTTP_PORT: String(httpPort), SENTINEL_PUBLIC_IP: '127.0.0.1', SENTINEL_HOST: '127.0.0.1', SENTINEL_NO_MKCERT: '1', SENTINEL_NO_RECON: '1', ...env },
-    stdio: ['ignore', 'pipe', 'pipe'],
+function startSite() {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://x');
+    if (!url.pathname.startsWith(BASE)) { res.statusCode = 404; return res.end('not found'); }
+    let file = path.join(ROOT, decodeURIComponent(url.pathname.slice(BASE.length)));
+    if (!file.startsWith(ROOT) || /node_modules|\.git|tests/.test(path.relative(ROOT, file))) { res.statusCode = 403; return res.end(); }
+    if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
+    fs.readFile(file, (err, data) => {
+      if (err) { res.statusCode = 404; return res.end('not found'); }
+      res.setHeader('Content-Type', TYPES[path.extname(file)] || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end(data);
+    });
   });
-  children.add(child);
-  child.once('exit', () => children.delete(child));
-  let out = '';
-  child.stdout.on('data', (d) => { out += d; if (process.env.DEBUG) process.stdout.write(`[hq] ${d}`); });
-  child.stderr.on('data', (d) => { out += d; if (process.env.DEBUG) process.stderr.write(`[hq] ${d}`); });
-  const url = `https://127.0.0.1:${httpsPort}`;
-  for (let i = 0; i < 100; i++) {
-    const ok = await new Promise((r) => https.get(`${url}/api/ping`, { rejectUnauthorized: false }, (res) => { res.resume(); r(res.statusCode === 200); }).on('error', () => r(false)));
-    if (ok) break;
-    if (child.exitCode != null) throw new Error(`HQ exited:\n${out}`);
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  return {
-    url, httpUrl: `http://127.0.0.1:${httpPort}`, data, httpsPort, httpPort, log: () => out,
-    stop: () => new Promise((r) => { child.once('exit', r); child.kill(); setTimeout(r, 2000); }),
-  };
+  return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
 }
+
+/** Starts the site + matchmaking server. Returns URLs for HQ, Agents and phones. */
+exports.startWorld = async function startWorld() {
+  const site = await startSite();
+  const sigPort = 9300 + Math.floor(Math.random() * 600);
+  const signal = PeerServer({ port: sigPort, host: '127.0.0.1', path: '/' });
+  await new Promise((r) => setTimeout(r, 300));
+  const root = `http://127.0.0.1:${site.address().port}${BASE}`;
+  const sig = `signal=127.0.0.1:${sigPort}`;
+  return {
+    root, sig,
+    hqUrl: `${root}hq/?${sig}`,
+    agentUrl: `${root}agent/?${sig}`,
+    remoteUrl: `${root}hq/remote.html?${sig}`,
+    stopSignal: () => new Promise((r) => { try { signal.close(() => r()); } catch { r(); } setTimeout(r, 1000); }),
+    stop: async () => { site.close(); try { signal.close(); } catch { /* ignore */ } },
+  };
+};
+
+const WEBRTC = ['--disable-features=WebRtcHideLocalIpsWithMdns', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'];
+exports.launch = (chromium, extra = []) => chromium.launch({ args: [...WEBRTC, ...extra] });
+
+/** Calls HQ's API from the HQ page (the same thing its buttons do). */
+exports.hqApi = (page) => (method, p, body) => page.evaluate(([m, pa, b]) => window.__hq.api(m, pa, b), [method, p, body]);
+
+/** Opens HQ and waits for it to be online. */
+exports.openHQ = async (page, world) => {
+  await page.goto(world.hqUrl);
+  await page.waitForSelector('[data-threat]', { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('HQ ONLINE'), null, { timeout: 15000 });
+};
+
+/** Recruits a new Agent in `ctx` with a fresh code from HQ. */
+exports.recruit = async (dash, ctx, world, { manual = false } = {}) => {
+  const api = exports.hqApi(dash);
+  const { code } = await api('POST', '/pair', { role: 'agent' });
+  const hqId = (await api('GET', '/state')).info.hqId;
+  const p = await ctx.newPage();
+  await p.goto(`${world.agentUrl}#hq=${hqId}&pair=${code}`);
+  await p.waitForFunction(() => window.__agent?.connected, null, { timeout: 20000 });
+  const id = (await api('GET', '/state')).agents.at(-1).id;
+  return { p, id };
+};
 
 let failures = 0;
 exports.check = (c, m) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) failures++; };
 exports.failures = () => failures;
-exports.finish = async (browser, hq, errors, name) => {
+exports.finish = async (browsers, world, errors, name) => {
   exports.check(!errors.length, 'no JavaScript errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
-  await browser?.close();
-  await hq?.stop();
+  for (const b of [].concat(browsers)) await b?.close();
+  await world?.stop();
   console.log(failures ? `\n${failures} FAILED` : `\nAll ${name} checks passed`);
   process.exit(failures ? 1 : 0);
 };
