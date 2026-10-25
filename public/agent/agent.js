@@ -123,7 +123,7 @@ function send(obj) {
 async function onMessage(msg) {
   if (msg.t === 'welcome') {
     connected = true;
-    creds = { ...creds, codename: msg.codename, label: msg.label };
+    creds = { ...creds, codename: msg.codename, label: msg.label, name: msg.name || '' };
     save(creds);
     hmacKey = await crypto.subtle.importKey('raw', enc.encode(creds.token), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
     if (typeof msg.now === 'number') hqOffset = msg.now - Date.now();
@@ -172,6 +172,7 @@ function command(cmd) {
 
 function applyConfig(c) {
   if (typeof c.fx === 'boolean') { fx = c.fx; document.body.classList.toggle('fx', fx); }
+  if (typeof c.name === 'string') { creds.name = c.name; save(creds); }
   if (c.codename) { creds.codename = c.codename; save(creds); const el = document.querySelector('[data-codename]'); if (el) el.textContent = c.codename; }
   if (c.mission) runMission(c.mission, c.settings || {});
   setBanner();

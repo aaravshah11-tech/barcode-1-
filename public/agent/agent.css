@@ -43,3 +43,18 @@ body { overflow-x: hidden; }
 .find-text { font-size: clamp(2rem, 14vw, 6rem); font-weight: 900; text-align: center; color: #000; }
 @keyframes findflash { 0% { background: #39ff88; } 50% { background: #ffffff; } }
 @media (prefers-reduced-motion: reduce) { .find { animation-duration: 1.2s; } }
+/* INTEL SCREEN */
+.intel { display: grid; gap: 12px; }
+.intel-threat { justify-content: center; font-size: clamp(.8rem, 2.4vw, 1.1rem); padding: 10px 14px; white-space: normal; text-align: center; }
+.intel-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.intel-radar { aspect-ratio: 1; width: 100%; }
+.intel-radar canvas { width: 100%; height: 100%; display: block; }
+.intel-side { display: grid; gap: 10px; }
+.intel-log { list-style: none; margin: 0; padding: 0; font: .8rem/1.45 var(--mono); }
+.intel-log li { padding: 4px 0; border-bottom: 1px dashed rgba(42, 66, 53, .6); }
+.intel-log time { color: var(--muted); margin-right: 6px; }
+.intel-log .warn { color: var(--amber); } .intel-log .alert { color: var(--red); }
+.people { display: flex; gap: 8px; flex-wrap: wrap; }
+.person { display: inline-flex; gap: 8px; align-items: center; font: .82rem var(--mono); padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+body.intel-mode .agent-main { max-width: none; }
+@media (max-width: 700px) { .intel-grid { grid-template-columns: 1fr; } }

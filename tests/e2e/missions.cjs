@@ -10,7 +10,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   const hq = await startHQ();
   const errors = [];
   const browsers = [];
-  const launch = async (file) => { const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', ...(file ? [`--use-file-for-fake-video-capture=${file}`] : [])] }); browsers.push(b); return b; };
+  const launch = async (file) => { const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', ...(file ? [`--use-file-for-fake-video-capture=${file}`] : [])] }); browsers.push(b); return b; };
   const watch = (p, who) => p.on('pageerror', (e) => errors.push(`[${who}] ${e.message}`));
   const shot = (p, n) => SHOTS && p.screenshot({ path: path.join(SHOTS, `${n}.png`) });
 
@@ -111,6 +111,55 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   await dash.waitForSelector('[data-log] >> text=Door closed', { timeout: 10000 });
   check(true, 'door swings back → “Door closed”');
   check(!door.sent.some((s) => /data:|base64/i.test(s)), 'door Agent sends events only');
+
+  // ---------- INTEL SCREEN (wall display) ----------
+  const wall = await recruit(main, 'intel');
+  await assign(wall.id, 'intel', {});
+  await wall.p.waitForSelector('.intel-threat');
+  await wall.p.waitForFunction(() => document.querySelector('[data-log]').textContent.includes('Door closed'));
+  check(true, 'INTEL SCREEN shows the threat level and Mission Log');
+  check(await wall.p.isHidden('[data-dim]'), 'INTEL SCREEN never dims');
+
+  // ---------- DOOR PANEL ----------
+  const bell = await recruit(main, 'panel');
+  await api(`/api/agents/${bell.id}`, { method: 'PATCH', data: { name: 'Front door' } });
+  await assign(bell.id, 'panel', { label: 'RING HQ', cooldown: 3 });
+  await bell.p.waitForSelector('[data-knock]');
+  await bell.p.waitForFunction(() => document.querySelector('[data-knock]').textContent === 'RING HQ');
+  await bell.p.click('[data-knock]');
+  await bell.p.waitForSelector('text=HQ NOTIFIED');
+  await dash.waitForSelector('[data-log] >> text=Knock knock at Front door!');
+  check(true, 'DOOR PANEL: pressing the button alerts HQ (“Knock knock at Front door!”)');
+  await wall.p.waitForFunction(() => document.querySelector('[data-log]').textContent.includes('Knock knock'));
+  check(true, 'INTEL SCREEN updates live');
+  await shot(bell.p, 'agent-panel');
+  await shot(wall.p, 'agent-intel');
+
+  // ---------- SOUND LEVEL (Chrome's fake microphone plays a tone) ----------
+  const ear = await recruit(main, 'sound');
+  await assign(ear.id, 'sound', { threshold: 40, minMs: 100, cooldown: 30, calibration: 110 });
+  await ear.p.waitForSelector('[data-db]');
+  const tap = await ear.p.waitForSelector('.activate button', { timeout: 2500 }).catch(() => null);
+  if (tap) await tap.click();
+  await dash.waitForSelector('[data-log] >> text=/Loud sound: \\d+ dB/', { timeout: 20000 });
+  check(true, 'SOUND LEVEL: a noise above the limit → “Loud sound: NN dB”');
+  check(!ear.sent.some((x) => x.length > 2000 || /data:|base64|blob:/i.test(x)), 'sound Agent sends numbers only — no audio');
+  const reading = (await api('/api/state')).agents.find((a) => a.id === ear.id).status?.level;
+  check(typeof reading === 'number', `dashboard shows the live dB reading (${reading} dB)`);
+  await shot(ear.p, 'agent-sound');
+
+  // ---------- LIGHT CHECK (fake video: dark, then the lights go on) ----------
+  const lamp = await launch(video.lights());
+  const eye = await recruit(lamp, 'light');
+  await assign(eye.id, 'light', { threshold: 35 });
+  await dash.waitForSelector('[data-log] >> text=/Lights switched (on|off)/', { timeout: 25000 });
+  check(true, 'LIGHT CHECK: lights switched on/off is reported');
+  await shot(eye.p, 'agent-light');
+
+  // ---------- STANDBY ----------
+  await assign(ear.id, 'standby', {});
+  await ear.p.waitForFunction(() => document.querySelector('[data-banner]').textContent.includes('STANDBY'));
+  check(await ear.p.evaluate(() => !document.querySelector('[data-banner]').classList.contains('watching')), 'back to STANDBY: microphone released, banner no longer red');
 
   check(!(await dash.$('.toast.err')), 'no error messages on the dashboard');
   await finish(null, hq, errors, 'missions');
