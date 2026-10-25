@@ -11,7 +11,7 @@ export async function start(ctx) {
     <div class="cam-wrap"><div class="zone-grid view" data-grid style="grid-template-columns:repeat(${COLS},1fr);grid-template-rows:repeat(${ROWS},1fr)"></div><canvas class="hot" data-hot width="${COLS}" height="${ROWS}"></canvas></div>
     <div class="row"><span class="grow mono small" data-state>Starting camera…</span><button class="small" data-zones>Ignore zones</button></div>
     <div class="meter" aria-label="Movement"><div data-meter></div></div>
-    <p class="privacy">The camera picture stays on this device. HQ only hears “motion detected”. Nothing is recorded or saved.</p>`;
+    <p class="privacy">HQ only hears “motion detected”. The picture is only sent if HQ opens Live view — then a red LIVE VIEW banner shows at the top. Nothing is recorded or saved.</p>`;
   const $ = (q) => ctx.root.querySelector(q);
   const wrap = $('.cam-wrap');
   let cam;

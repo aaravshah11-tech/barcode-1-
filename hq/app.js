@@ -158,6 +158,7 @@ function onMsg(msg) {
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
   else if (msg.t === 'settings') { S.settings = msg.settings; renderTop(); renderPeople(); document.body.classList.toggle('fx', S.settings.fx); radar?.setFx(S.settings.fx); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
+  else if (msg.t === 'frame') liveFrame(msg);
 }
 function upsert(a) { const i = S.agents.findIndex((x) => x.id === a.id); if (i >= 0) S.agents[i] = a; else S.agents.push(a); S.agents.sort((x, y) => x.number - y.number); }
 
@@ -263,7 +264,7 @@ function refreshDrawer() {
   if (s) s.innerHTML = liveHtml(a);
   drawer.el.querySelector('.sheet-head h2').textContent = `${a.label} // ${a.codename}`;
   drawer.body.querySelectorAll('[data-mission]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mission === a.mission)));
-  drawer.body.querySelectorAll('[data-cmd]').forEach((b) => { b.disabled = !a.online; });
+  drawer.body.querySelectorAll('[data-cmd], [data-liveview]').forEach((b) => { b.disabled = !a.online; });
   if (drawer.body.dataset.mission !== a.mission) drawAgent(a);
 }
 function liveHtml(a) {
@@ -299,7 +300,7 @@ function drawAgent(a) {
       <label class="field grow" style="margin:0"><span>Where is it?</span><input name="name" value="${esc(a.name)}" placeholder="e.g. Hallway" maxlength="40" autocomplete="off"></label><button style="align-self:end">Save</button></form>
     <div><h2 style="margin-bottom:8px">Mission</h2><div class="missions">${S.missions.map((x) => `<button class="mission" data-mission="${x.id}" aria-pressed="${x.id === a.mission}"><b>${x.glyph} ${esc(x.name)}</b><span>${esc(x.summary)}</span></button>`).join('')}</div></div>
     ${m?.settings.length ? `<form data-msettings><h2 style="margin-bottom:8px">${esc(m.name)} settings</h2>${m.settings.map((s) => settingField(s, a.settings?.[s.key] ?? s.default)).join('')}<button class="btn-primary">Send to Agent</button></form>` : ''}
-    <div class="row"><button data-cmd="find" ${a.online ? '' : 'disabled'}>◎ Find it (flash + beep)</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>↻ Restart Agent page</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
+    <div class="row"><button class="btn-primary" data-liveview ${a.online ? '' : 'disabled'}>📷 Live view</button><button data-cmd="find" ${a.online ? '' : 'disabled'}>◎ Find it (flash + beep)</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>↻ Restart Agent page</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
   </div>`;
   box.querySelectorAll('input[type=range]').forEach((r) => r.addEventListener('input', () => {
     const def = m.settings.find((s) => s.key === r.name);
@@ -327,6 +328,8 @@ function drawAgent(a) {
       let na;
       try { na = await T.api(`/agents/${a.id}`, { method: 'PATCH', body: { mission: b.dataset.mission } }); } catch (x) { return toast(x.message, { kind: 'err' }); }
       upsert(na); renderAgents(); drawAgent(na); toast(`${na.codename}: ${missionById(na.mission).name}`);
+    } else if ('liveview' in b.dataset) {
+      openLive(a);
     } else if (b.dataset.cmd) {
       try { await T.api(`/agents/${a.id}/command`, { method: 'POST', body: { action: b.dataset.cmd } }); toast(b.dataset.cmd === 'find' ? `${a.codename} is flashing and beeping` : 'Restarting the Agent page'); } catch (x) { toast(x.message, { kind: 'err' }); }
     } else if ('remove' in b.dataset) {
@@ -334,6 +337,35 @@ function drawAgent(a) {
       try { await T.api(`/agents/${a.id}`, { method: 'DELETE' }); drawer?.close(); toast(`${a.codename} disconnected`); } catch (x) { toast(x.message, { kind: 'err' }); }
     }
   });
+}
+
+// ---------------- LIVE VIEW ----------------
+// Shows what an Agent's camera sees, only while this window is open. Nothing is recorded or saved,
+// and the Agent shows a red “LIVE VIEW” banner the whole time.
+let liveView = null;
+async function openLive(a) {
+  liveView?.close();
+  const s = sheet(`<div class="live">
+      <div class="live-frame"><img data-liveimg alt="Live camera view from ${esc(a.codename)}"><div class="live-wait mono" data-livewait>CONNECTING TO CAMERA…</div><span class="live-tag mono">● LIVE</span></div>
+      <p class="small muted">Live view is not recorded or saved. ${esc(a.codename)} shows a red “LIVE VIEW” banner while you watch. Closing this window stops it.</p>
+    </div>`, { title: `LIVE // ${a.codename}`, wide: true, onClose: () => { clearInterval(renew); liveView = null; T.api(`/agents/${a.id}/live`, { method: 'POST', body: { on: false } }).catch(() => {}); } });
+  liveView = { id: a.id, sheet: s, close: () => s.close(), last: Date.now() };
+  const go = (renewing) => T.api(`/agents/${a.id}/live`, { method: 'POST', body: { on: true, renew: renewing } }).catch((x) => { const w = s.body.querySelector('[data-livewait]'); if (w) { w.textContent = x.message; w.hidden = false; } });
+  go(false);
+  const renew = setInterval(() => {
+    go(true);
+    const w = s.body.querySelector('[data-livewait]');
+    if (w && Date.now() - liveView.last > 8000) { w.textContent = 'NO PICTURE — is the Agent’s screen on?'; w.hidden = false; }
+  }, 10000);
+}
+function liveFrame(m) {
+  if (!liveView || liveView.id !== m.agentId) return;
+  const img = liveView.sheet.body.querySelector('[data-liveimg]');
+  const w = liveView.sheet.body.querySelector('[data-livewait]');
+  if (m.error) { if (w) { w.textContent = m.error; w.hidden = false; } return; }
+  liveView.last = Date.now();
+  if (img) img.src = m.data;
+  if (w) w.hidden = true;
 }
 
 // ---------------- recruiting ----------------

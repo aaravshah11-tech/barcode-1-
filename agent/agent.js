@@ -6,6 +6,7 @@ import { canonical } from '../shared/canonical.js';
 import { missionById, cleanSettings } from '../shared/missions.js';
 import { boot } from '../shared/boot.js';
 import { dial } from '../shared/link.js';
+import { openCamera, activeCamera } from './lib/camera.js';
 
 const KEY = 'sentinel.agent';
 const main = document.getElementById('main');
@@ -114,6 +115,7 @@ function setBanner() {
   if (!creds) { banner.hidden = true; return; }
   const def = missionById(mission.id || 'standby');
   banner.hidden = false;
+  if (live && connected) { banner.textContent = 'LIVE VIEW – HQ IS WATCHING THIS CAMERA'; banner.className = 'banner-active watching live'; return; }
   banner.textContent = connected ? `SENTINEL AGENT ACTIVE – ${def.name}` : `SENTINEL AGENT – ${def.name} – RECONNECTING TO HQ`;
   banner.className = `banner-active ${!connected ? 'offline' : def.needs.some((n) => n === 'camera' || n === 'microphone') ? 'watching' : ''}`;
   const linkEl = document.querySelector('[data-link]');
@@ -200,6 +202,7 @@ function command(cmd) {
   else if (cmd.action === 'find') findMe();
   else if (cmd.action === 'wake') wake();
   else if (cmd.action === 'reload') location.reload();
+  else if (cmd.action === 'live') { if (p.on) startLive(); else stopLive(); }
   else if (cmd.action === 'disconnect') {
     stopped = true; save(null); stopMission(); link?.close();
     banner.hidden = true;
@@ -280,6 +283,40 @@ function makeCtx(def, settings, root) {
     /** Latest Command Centre snapshot from HQ (INTEL SCREEN). */
     lastState: () => lastState,
   };
+}
+
+// ---------------- LIVE VIEW: HQ asked to see the camera ----------------
+// Only while HQ keeps asking (it renews every 20 s); small JPEGs, shown at HQ and never saved.
+// The red banner above says so the whole time.
+let live = null; // { until, own, timer, opening }
+let frameNo = 0;
+async function startLive() {
+  if (live) { live.until = Date.now() + 30000; return; }
+  live = { until: Date.now() + 30000, own: null, timer: null, opening: false };
+  wake();
+  setBanner();
+  live.timer = setInterval(async () => {
+    if (!live) return;
+    if (Date.now() > live.until || !connected) return stopLive();
+    let cam = activeCamera() || live.own;
+    if (!cam && !live.opening) {
+      live.opening = true;
+      try { live.own = await openCamera(mission.settings?.camera || 'environment'); } catch (e) { send({ t: 'frame', error: e.message }); stopLive(); return; } finally { if (live) live.opening = false; }
+      cam = live.own;
+    }
+    const data = cam?.snapshot();
+    if (!data) return;
+    // The link only carries small messages, so send the picture in pieces.
+    const id = ++frameNo, size = 12000, n = Math.ceil(data.length / size);
+    for (let i = 0; i < n; i++) send({ t: 'frame', id, i, n, part: data.slice(i * size, (i + 1) * size) });
+  }, 700);
+}
+function stopLive() {
+  if (!live) return;
+  clearInterval(live.timer);
+  live.own?.stop();
+  live = null;
+  setBanner();
 }
 
 // ---------------- status, battery, wake lock, dimming ----------------

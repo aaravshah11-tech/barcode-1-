@@ -14,7 +14,7 @@ export const MISSIONS = [
   },
   {
     id: 'motion', name: 'MOTION WATCH', glyph: '◉', needs: ['camera'], eventKinds: ['motion'],
-    summary: 'Uses the camera to spot movement. Images never leave the Agent — HQ only hears “motion detected”.',
+    summary: 'Uses the camera to spot movement. HQ only hears “motion detected” (plus Live view when you open it).',
     settings: [
       { key: 'sensitivity', label: 'Sensitivity', type: 'number', min: 1, max: 10, step: 1, default: 6, help: 'Higher catches smaller movements.' },
       { key: 'cooldown', label: 'Cooldown', type: 'number', min: 5, max: 600, step: 5, default: 30, unit: 's', help: 'Quiet time after reporting motion.' },
@@ -43,7 +43,7 @@ export const MISSIONS = [
   },
   {
     id: 'light', name: 'LIGHT CHECK', glyph: '☀', needs: ['camera'], eventKinds: ['light'],
-    summary: 'Notices lights being switched on or off from the camera’s overall brightness. No images are sent.',
+    summary: 'Notices lights being switched on or off from the camera’s overall brightness. No images are sent (except Live view, when you open it).',
     settings: [
       { key: 'threshold', label: 'On/off brightness', type: 'number', min: 5, max: 95, step: 1, default: 35, unit: '%', help: 'Brighter than this counts as lights on.' },
       { key: 'camera', label: 'Camera', type: 'select', default: 'environment', options: [['environment', 'Back camera'], ['user', 'Front camera']] },

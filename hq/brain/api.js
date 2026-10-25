@@ -38,6 +38,13 @@ export function makeApi({ hq, db }) {
       if (!hq.command(mm[1], body.action)) throw fail(409, 'That Agent is offline.');
       return { ok: true };
     }
+    mm = p.match(/^\/agents\/([\w-]{1,64})\/live$/);
+    if (mm && m === 'POST') {
+      if (!hq.db.agent(mm[1])) throw fail(404, 'No such Agent.');
+      if (!hq.command(mm[1], 'live', { on: !!body.on })) throw fail(409, 'That Agent is offline.');
+      if (body.on && !body.renew) { const a = hq.db.agent(mm[1]); hq.logEvent({ kind: 'agent', agentId: a.id, message: `Live view opened on ${a.codename}` }); }
+      return { ok: true };
+    }
     if (p === '/viewers' && m === 'GET') return hq.viewers();
     mm = p.match(/^\/viewers\/([\w-]{1,64})$/);
     if (mm && m === 'DELETE') { if (!hq.removeViewer(mm[1])) throw fail(404, 'No such phone.'); return { ok: true }; }

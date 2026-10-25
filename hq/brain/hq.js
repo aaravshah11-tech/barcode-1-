@@ -207,6 +207,15 @@ export class HQ extends Emitter {
     this.pushAgent(agentId);
   }
 
+  /** LIVE VIEW: a camera picture goes straight to the open dashboards. It is never stored or logged. */
+  agentFrame(agentId, f) {
+    const msg = typeof f.data === 'string' && f.data.startsWith('data:image/jpeg;base64,') && f.data.length < 96000 ? { t: 'frame', agentId, data: f.data }
+      : typeof f.error === 'string' ? { t: 'frame', agentId, error: f.error.slice(0, 200) } : null;
+    if (!msg) return;
+    const text = JSON.stringify(msg);
+    for (const d of this.dashboards) d.send(text); // dashboards only — not INTEL SCREEN Agents
+  }
+
   // ---------- orders to Agents (signed) ----------
   command(agentId, action, payload = {}) {
     const o = this.online.get(agentId);

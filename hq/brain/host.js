@@ -52,7 +52,7 @@ export async function startHost({ hq, api, onStatus = () => {} }) {
 
   function handle(conn) {
     conns.add(conn);
-    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null;
+    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, frame = null;
     const send = (obj) => { if (conn.open) try { conn.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
     const close = () => { try { conn.close(); } catch { /* ignore */ } };
     const deny = setTimeout(() => { if (!role) close(); }, 10000);
@@ -107,6 +107,15 @@ export async function startHost({ hq, api, onStatus = () => {} }) {
         if (msg.t === 'status') hq.agentStatus(me.id, msg);
         else if (msg.t === 'event') hq.agentEvent(me.id, msg);
         else if (msg.t === 'grid') hq.agentSetGrid(me.id, String(msg.key || ''), msg.cells);
+        else if (msg.t === 'frame') {
+          // Live view pictures arrive in pieces; put them back together (never stored).
+          if (typeof msg.error === 'string') return hq.agentFrame(me.id, { error: msg.error });
+          const n = Math.min(8, Number(msg.n) || 0), i = Number(msg.i);
+          if (!n || !(i >= 0 && i < n) || typeof msg.part !== 'string') return;
+          if (!frame || frame.id !== msg.id) frame = { id: msg.id, parts: new Array(n), got: 0 };
+          if (frame.parts[i] == null) { frame.parts[i] = msg.part; frame.got++; }
+          if (frame.got === n) { hq.agentFrame(me.id, { data: frame.parts.join('') }); frame = null; }
+        }
       } else if (role === 'viewer' && msg.t === 'api') {
         try { send({ t: 'res', id: msg.id, ok: true, data: await api(String(msg.method || 'GET'), String(msg.path || ''), msg.body, { remote: true }) }); } catch (e) { send({ t: 'res', id: msg.id, ok: false, status: e.status || 500, error: e.message }); }
       }

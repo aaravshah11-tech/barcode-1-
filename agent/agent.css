@@ -63,3 +63,6 @@ body.intel-mode .agent-main { max-width: none; }
 .codes { display: flex; gap: 10px; justify-content: center; align-items: flex-end; flex-wrap: wrap; }
 .codes label { display: grid; gap: 4px; text-align: left; }
 .codes input { width: 170px; text-align: center; letter-spacing: .25em; font-size: 1.3rem; text-transform: uppercase; }
+.banner-active.live { font-weight: 800; letter-spacing: .14em; animation: livepulse 1.2s ease-in-out infinite; }
+@keyframes livepulse { 50% { box-shadow: 0 0 34px rgba(255, 77, 77, .9); } }
+@media (prefers-reduced-motion: reduce) { .banner-active.live { animation: none; } }
