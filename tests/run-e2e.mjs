@@ -8,7 +8,7 @@ const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'e2e');
 const only = process.argv.slice(2);
 const ORDER = ['dashboard', 'pairing', 'missions', 'recon', 'alerts', 'a11y'];
 const rank = (n) => (ORDER.includes(n) ? ORDER.indexOf(n) : ORDER.length);
-const files = readdirSync(dir).filter((f) => f.endsWith('.cjs') && f !== 'helpers.cjs').map((f) => f.replace('.cjs', ''))
+const files = readdirSync(dir).filter((f) => f.endsWith('.cjs') && !['helpers.cjs', 'video.cjs'].includes(f)).map((f) => f.replace('.cjs', ''))
   .filter((n) => !only.length || only.includes(n)).sort((a, b) => rank(a) - rank(b));
 if (process.env.SHOTS) mkdirSync(process.env.SHOTS, { recursive: true });
 const results = [];

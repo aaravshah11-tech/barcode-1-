@@ -66,3 +66,8 @@
 .gate { min-height: 100dvh; display: grid; place-items: center; padding: 20px; }
 .gate .panel { width: min(420px, 100%); }
 .gate .logo { width: 72px; height: 72px; display: block; margin: 0 auto 10px; }
+
+/* Settings › People */
+.recon-row { padding: 8px 0; border-bottom: 1px solid var(--line); gap: 10px; }
+.recon-device.muted { opacity: .55; }
+.tag-amber { color: var(--amber); border-color: var(--amber); }

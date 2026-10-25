@@ -10,7 +10,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   const hq = await startHQ();
   const errors = [];
   const browsers = [];
-  const launch = async (file) => { const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', ...(file ? [`--use-file-for-fake-video-capture=${file}`] : [])] }); browsers.push(b); return b; };
+  const launch = async (file) => { const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', ...(file ? [`--use-file-for-fake-video-capture=${file}`] : []), `--use-file-for-fake-audio-capture=${video.tone()}`] }); browsers.push(b); return b; };
   const watch = (p, who) => p.on('pageerror', (e) => errors.push(`[${who}] ${e.message}`));
   const shot = (p, n) => SHOTS && p.screenshot({ path: path.join(SHOTS, `${n}.png`) });
 
@@ -139,12 +139,21 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   const ear = await recruit(main, 'sound');
   await assign(ear.id, 'sound', { threshold: 40, minMs: 100, cooldown: 30, calibration: 110 });
   await ear.p.waitForSelector('[data-db]');
-  const tap = await ear.p.waitForSelector('.activate button', { timeout: 2500 }).catch(() => null);
-  if (tap) await tap.click();
-  await dash.waitForSelector('[data-log] >> text=/Loud sound: \\d+ dB/', { timeout: 20000 });
+  // The page may ask for a tap before it can listen (browsers' autoplay rule). Keep tapping until readings flow.
+  for (let i = 0; i < 40; i++) {
+    const btn = await ear.p.$('.activate button');
+    if (btn) await btn.click().catch(() => {});
+    if (await ear.p.evaluate(() => /\d/.test(document.querySelector('[data-db]')?.textContent || ''))) break;
+    await ear.p.waitForTimeout(250);
+  }
+  await dash.waitForSelector('[data-log] >> text=/Loud sound: \\d+ dB/', { timeout: 20000 }).catch(async (e) => {
+    console.log('sound debug:', await ear.p.evaluate(() => [document.querySelector('[data-db]')?.textContent, document.querySelector('[data-info]')?.textContent, document.querySelector('.activate')?.outerHTML?.slice(0, 200)]));
+    throw e;
+  });
   check(true, 'SOUND LEVEL: a noise above the limit → “Loud sound: NN dB”');
   check(!ear.sent.some((x) => x.length > 2000 || /data:|base64|blob:/i.test(x)), 'sound Agent sends numbers only — no audio');
-  const reading = (await api('/api/state')).agents.find((a) => a.id === ear.id).status?.level;
+  let reading;
+  for (let i = 0; i < 30 && typeof reading !== 'number'; i++) { reading = (await api('/api/state')).agents.find((a) => a.id === ear.id).status?.level; if (typeof reading !== 'number') await ear.p.waitForTimeout(200); }
   check(typeof reading === 'number', `dashboard shows the live dB reading (${reading} dB)`);
   await shot(ear.p, 'agent-sound');
 
