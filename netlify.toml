@@ -1,7 +1,0 @@
-# Netlify: no build step, publish the folder as-is.
-[build]
-  publish = "."
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Cache-Control = "no-cache"
