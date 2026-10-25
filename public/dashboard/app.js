@@ -261,6 +261,7 @@ function settingField(s, v) {
 }
 
 function drawAgent(a) {
+  if (!drawer || S.open !== a.id) return; // the window was closed meanwhile
   const box = drawer.body.querySelector('[data-drawer]');
   drawer.body.dataset.mission = a.mission;
   const m = missionById(a.mission);
@@ -295,7 +296,9 @@ function drawAgent(a) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.mission && b.dataset.mission !== a.mission) {
-      try { const na = await api(`/api/agents/${a.id}`, { method: 'PATCH', body: { mission: b.dataset.mission } }); upsert(na); renderAgents(); drawAgent(na); toast(`${na.codename}: ${missionById(na.mission).name}`); } catch (x) { toast(x.message, { kind: 'err' }); }
+      let na;
+      try { na = await api(`/api/agents/${a.id}`, { method: 'PATCH', body: { mission: b.dataset.mission } }); } catch (x) { return toast(x.message, { kind: 'err' }); }
+      upsert(na); renderAgents(); drawAgent(na); toast(`${na.codename}: ${missionById(na.mission).name}`);
     } else if (b.dataset.cmd) {
       try { await api(`/api/agents/${a.id}/command`, { method: 'POST', body: { action: b.dataset.cmd } }); toast(b.dataset.cmd === 'find' ? `${a.codename} is flashing and beeping` : 'Restarting the Agent page'); } catch (x) { toast(x.message, { kind: 'err' }); }
     } else if ('remove' in b.dataset) {

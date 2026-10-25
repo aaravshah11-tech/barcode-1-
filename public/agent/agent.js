@@ -24,6 +24,7 @@ let fx = true;
 let mission = { id: null, settings: null, inst: null };
 let hmacKey = null;
 const outbox = [];
+let lastState = null;
 let lastCmd = null;
 
 function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
@@ -138,6 +139,7 @@ async function onMessage(msg) {
     return command(msg.cmd);
   }
   if (msg.t === 'pong') return;
+  if (msg.t === 'state') lastState = msg;
   mission.inst?.onHq?.(msg); // INTEL SCREEN gets the dashboard's live updates
 }
 
@@ -177,11 +179,11 @@ function applyConfig(c) {
 
 // ---------------- missions (plug-ins in /agent/missions/) ----------------
 let runId = 0;
-async function runMission(id, settings) {
+async function runMission(id, settings, force = false) {
   const def = missionById(id) || missionById('standby');
   const clean = cleanSettings(def.id, settings);
-  if (mission.id === def.id && mission.inst?.update) { mission.settings = clean; mission.inst.update(clean); return; }
-  if (mission.id === def.id && JSON.stringify(mission.settings) === JSON.stringify(clean)) return;
+  if (!force && mission.id === def.id && mission.inst?.update) { mission.settings = clean; mission.inst.update(clean); return; }
+  if (!force && mission.id === def.id && JSON.stringify(mission.settings) === JSON.stringify(clean)) return;
   const my = ++runId;
   await stopMission();
   mission = { id: def.id, settings: clean, inst: null };
@@ -236,6 +238,9 @@ function makeCtx(def, settings, root) {
       });
     },
     keepBright(on) { noDim = on; armDimmer(); },
+    restart() { runMission(def.id, mission.settings, true); },
+    /** Latest Command Centre snapshot from HQ (INTEL SCREEN). */
+    lastState: () => lastState,
   };
 }
 
