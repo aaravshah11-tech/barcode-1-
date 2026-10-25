@@ -235,6 +235,7 @@ function refreshDrawer() {
   if (s) s.innerHTML = liveHtml(a);
   drawer.el.querySelector('.sheet-head h2').textContent = `${a.label} // ${a.codename}`;
   drawer.body.querySelectorAll('[data-mission]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mission === a.mission)));
+  drawer.body.querySelectorAll('[data-cmd]').forEach((b) => { b.disabled = !a.online; });
   if (drawer.body.dataset.mission !== a.mission) drawAgent(a);
 }
 function liveHtml(a) {

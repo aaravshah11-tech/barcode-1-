@@ -6,9 +6,9 @@ const path = require('path');
 const https = require('https');
 
 let portBase = 9400 + Math.floor(Math.random() * 400);
-exports.startHQ = async function startHQ({ env = {} } = {}) {
-  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'sentinel-test-'));
-  const httpsPort = portBase++, httpPort = portBase++;
+exports.startHQ = async function startHQ({ env = {}, reuse = null } = {}) {
+  const data = reuse?.data || fs.mkdtempSync(path.join(os.tmpdir(), 'sentinel-test-'));
+  const httpsPort = reuse?.httpsPort || portBase++, httpPort = reuse?.httpPort || portBase++;
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '../../server/index.js')], {
     env: { ...process.env, SENTINEL_DATA: data, SENTINEL_HTTPS_PORT: String(httpsPort), SENTINEL_HTTP_PORT: String(httpPort), SENTINEL_PUBLIC_IP: '127.0.0.1', SENTINEL_HOST: '127.0.0.1', SENTINEL_NO_MKCERT: '1', SENTINEL_NO_RECON: '1', ...env },
     stdio: ['ignore', 'pipe', 'pipe'],

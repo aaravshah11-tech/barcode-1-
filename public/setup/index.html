@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050807">
+<title>SENTINEL // Join HQ</title>
+<link rel="icon" href="/shared/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="/setup/setup.css">
+</head>
+<body>
+<main class="setup">
+  <img src="/shared/logo.svg" alt="" class="setup-logo" width="72" height="72">
+  <h1 class="mono">SENTINEL // JOIN HQ</h1>
+  <div data-step="check" class="panel"><p class="mono">&gt; Contacting HQ securely…</p></div>
+
+  <div data-step="code" class="panel" hidden>
+    <p>Type the 6-character code shown on HQ’s <b>Recruit</b> screen:</p>
+    <form data-codeform class="row"><input name="code" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" class="mono code-input" aria-label="Recruit code"><button class="btn-primary">Go</button></form>
+  </div>
+
+  <div data-step="trust" class="panel" hidden>
+    <h2 class="c-amber">First time on this device: trust HQ</h2>
+    <p>Phones only let a web page use the camera and sensors over a secure connection. HQ makes its own security certificate, so this device needs to trust it once. <b>About a minute.</b></p>
+    <p><a class="btn btn-primary" href="/sentinel-ca.crt" data-download>⇩ Download HQ certificate</a></p>
+    <details data-os="ios"><summary>iPhone / iPad</summary><ol>
+      <li>Tap <b>Download HQ certificate</b> above, then <b>Allow</b> (“…download a configuration profile”). Tap <b>Close</b>.</li>
+      <li>Open the <b>Settings</b> app. Near the top tap <b>Profile Downloaded</b> → <b>Install</b> → enter your passcode → <b>Install</b> → <b>Done</b>.</li>
+      <li>Still in Settings: <b>General → About → Certificate Trust Settings</b> → switch on <b>SENTINEL Local CA</b> → <b>Continue</b>.</li>
+      <li>Come back to Safari and tap <b>Done — continue</b> below.</li>
+    </ol></details>
+    <details data-os="android"><summary>Android</summary><ol>
+      <li>Tap <b>Download HQ certificate</b> above (Chrome saves <span class="mono">SENTINEL-HQ.crt</span>).</li>
+      <li>Open <b>Settings</b> and search for <b>“CA certificate”</b> (usually Security → More security settings → Encryption &amp; credentials → Install a certificate → <b>CA certificate</b>). Tap <b>Install anyway</b> and choose <span class="mono">SENTINEL-HQ.crt</span> from Downloads.</li>
+      <li>Come back to Chrome and tap <b>Done — continue</b> below.</li>
+    </ol></details>
+    <details data-os="other"><summary>Computer / other</summary><ol>
+      <li>Download the certificate and add it to the system’s trusted root certificates (Mac: double-click it → Keychain Access → <b>Always Trust</b>; Windows: open it → Install Certificate → Local Machine → Trusted Root Certification Authorities).</li>
+      <li>Restart the browser and tap <b>Done — continue</b>.</li>
+    </ol></details>
+    <p class="row" style="margin-top:14px"><button class="btn-primary" data-recheck>Done — continue</button></p>
+    <p class="small c-red" data-still hidden>This device still doesn’t trust HQ. Check the last step (switching the certificate on), then try again. <button class="btn-ghost small" data-anyway>Continue anyway (shows a warning; some sensors may not work)</button></p>
+  </div>
+</main>
+<script type="module" src="/setup/setup.js"></script>
+</body>
+</html>

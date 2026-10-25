@@ -1,0 +1,8 @@
+.setup { max-width: 560px; margin: 0 auto; padding: 24px 16px 60px; display: grid; gap: 16px; }
+.setup-logo { display: block; margin: 0 auto; filter: drop-shadow(0 0 14px rgba(57, 255, 136, .4)); }
+.setup h1 { text-align: center; color: var(--green); letter-spacing: .2em; font-size: 1.05rem; }
+.setup h2 { margin-bottom: 8px; }
+.setup ol { padding-left: 20px; display: grid; gap: 8px; margin: 8px 0 0; }
+.setup details { border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.setup summary { cursor: pointer; font: 700 .85rem var(--mono); letter-spacing: .08em; color: var(--green); }
+.code-input { font-size: 1.6rem; letter-spacing: .3em; text-transform: uppercase; text-align: center; flex: 1; }

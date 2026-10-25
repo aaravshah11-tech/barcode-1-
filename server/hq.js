@@ -133,7 +133,7 @@ export class HQ extends EventEmitter {
     this.db.updateAgent(agent.id, { lastSeen: this.now() });
     if (!prev) this.logEvent({ kind: 'agent', agentId: agent.id, message: `${agentLabel(agent)} “${agent.codename}” online` });
     this.pushAgent(agent.id);
-    return { t: 'welcome', agentId: agent.id, codename: agent.codename, label: agentLabel(agent), name: agent.name, mission: agent.mission, settings: cleanSettings(agent.mission, agent.settings), fx: this.settings().fx };
+    return { t: 'welcome', now: this.now(), agentId: agent.id, codename: agent.codename, label: agentLabel(agent), name: agent.name, mission: agent.mission, settings: cleanSettings(agent.mission, agent.settings), fx: this.settings().fx };
   }
   agentOffline(agentId, conn) {
     const cur = this.online.get(agentId);
