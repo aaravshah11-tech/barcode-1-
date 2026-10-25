@@ -1,0 +1,23 @@
+{
+  "name": "sentinel-hq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SENTINEL: a spy-themed home command centre. Your computer is HQ; old phones and tablets become Agents.",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "cert": "node --disable-warning=ExperimentalWarning scripts/cert.mjs",
+    "autostart": "node scripts/autostart.mjs",
+    "reset-password": "node --disable-warning=ExperimentalWarning scripts/reset-password.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/unit/*.test.mjs",
+    "test:e2e": "node tests/run-e2e.mjs"
+  },
+  "dependencies": {
+    "web-push": "3.6.7",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
