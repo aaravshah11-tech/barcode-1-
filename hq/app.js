@@ -9,6 +9,8 @@ import { notifyEvent } from './alerts.js';
 import { lockScreen } from './lock.js';
 import { applyTheme } from '../shared/themes.js';
 import { sfx, sfxPrefs, setSfx, onSfx } from '../shared/sfx.js';
+import { openBuilder } from './builder.js';
+import { centroid, openingEnds, bbox } from '../shared/house.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
@@ -127,7 +129,7 @@ function launch() {
 }
 
 function apply(st) {
-  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {};
+  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house;
 }
 
 const started = Date.now();
@@ -157,8 +159,10 @@ function shell() {
     <div class="stat"><b data-stat="uptime">00:00:00</b><span>${MODE === 'hq' ? 'HQ uptime' : 'Link uptime'}</span></div>
   </div>
   <main class="cc">
-    ${panel('p-map radar-panel', 0.15, `<div class="panel-head"><h2>Tactical map</h2><span class="small muted mono hide-phone">3D house map arrives in a later upgrade</span></div>
-      <div class="radar-wrap"><canvas data-radar role="img"></canvas></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
+    ${panel('p-map radar-panel', 0.15, `<div class="panel-head"><h2>Tactical map</h2>
+        <div class="filters" role="group" aria-label="Map view"><button data-mapview="plan" aria-pressed="${S.mapView === 'plan'}">Plan</button><button data-mapview="radar" aria-pressed="${S.mapView !== 'plan'}">Radar</button></div>
+        ${MODE === 'hq' ? '<button class="small" data-build>🏠 Build my house</button>' : ''}</div>
+      <div class="radar-wrap"><canvas data-radar role="img" ${S.mapView === 'plan' ? 'hidden' : ''}></canvas><div class="plan" data-plan ${S.mapView === 'plan' ? '' : 'hidden'}></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
     <div class="col-l">
     ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
     ${panel('p-home', 0.35, '<div class="panel-head"><h2>Who’s home</h2></div><div class="people" data-peoplelist></div>')}
@@ -173,6 +177,8 @@ function shell() {
   </main>`;
   radar = new Radar($('[data-radar]'), { onPick: openAgent, fx: S.settings.fx });
   renderMute();
+  if (S.mapView === undefined) S.mapView = houseHasRooms() ? 'plan' : 'radar';
+  launchMapView();
   if (!shellWired) { app.addEventListener('click', onClick); shellWired = true; }
 }
 let shellWired = false;
@@ -187,6 +193,9 @@ async function onClick(e) {
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
   if ('lock' in b.dataset) { lockNow('Locked. HQ is still guarding the house.'); return; }
+  if ('build' in b.dataset) { openBuilder(S, { files: T.files, onClose: () => { S.mapView = houseHasRooms() ? 'plan' : S.mapView; launchMapView(); } }); return; }
+  if (b.dataset.mapview) { S.mapView = b.dataset.mapview; launchMapView(); return; }
+  if (b.dataset.planfloor) { S.planFloor = Number(b.dataset.planfloor); renderPlan(); return; }
   if (b.dataset.mode) {
     try { S.settings = await T.api('/settings', { method: 'PATCH', body: { mode: b.dataset.mode } }); renderTop(); renderPeople(); } catch (x) { toast(x.message, { kind: 'err' }); }
   } else if ('recruit' in b.dataset) recruit();
@@ -213,6 +222,7 @@ function onMsg(msg) {
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
   else if (msg.t === 'frame') liveFrame(msg);
+  else if (msg.t === 'house') { S.house = msg.house; renderPlan(); }
 }
 function settingsChanged() {
   applyTheme(S.settings.theme);
@@ -245,7 +255,34 @@ function addEvent(ev) {
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); }
+function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); }
+
+// ---------------- the floor plan on the map panel (the 3D map replaces this in the next upgrade) ----------------
+const houseHasRooms = () => !!S.house?.floors?.some((f) => f.rooms.length);
+function launchMapView() {
+  $$('[data-mapview]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mapview === (S.mapView || 'radar'))));
+  const c = $('[data-radar]'), p = $('[data-plan]');
+  if (c) c.hidden = S.mapView === 'plan';
+  if (p) p.hidden = S.mapView !== 'plan';
+  renderPlan();
+}
+function renderPlan() {
+  const box = $('[data-plan]');
+  if (!box || box.hidden) return;
+  const h = S.house;
+  if (!houseHasRooms()) {
+    box.innerHTML = `<div class="empty"><div class="big">NO HOUSE PLAN YET</div>${MODE === 'hq' ? 'Press <b>🏠 Build my house</b> to draw your rooms.' : 'Draw it on the HQ computer: 🏠 Build my house.'}</div>`;
+    return;
+  }
+  const fi = Math.min(S.planFloor || 0, h.floors.length - 1), f = h.floors[fi];
+  const pts = f.rooms.flatMap((r) => r.points);
+  const b = pts.length ? bbox(pts) : { minX: 0, minY: 0, w: 10, h: 10 }, pad = 0.6;
+  box.innerHTML = `${h.floors.length > 1 ? `<div class="filters plan-floors">${h.floors.map((x, i) => `<button data-planfloor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('')}</div>` : ''}
+    <svg viewBox="${b.minX - pad} ${b.minY - pad} ${b.w + pad * 2} ${b.h + pad * 2}" role="img" aria-label="Floor plan of ${esc(f.name)}">
+      ${f.rooms.map((r) => { const c = centroid(r.points); return `<g class="proom" data-proom="${r.id}"><polygon points="${r.points.join(' ')}"/><text x="${c[0]}" y="${c[1]}" style="font-size:${Math.max(b.w, b.h) / 38}px">${esc(r.name)}</text></g>`; }).join('')}
+      ${f.openings.map((o) => { const e = openingEnds(f, o); return e ? `<line x1="${e.a[0]}" y1="${e.a[1]}" x2="${e.b[0]}" y2="${e.b[1]}" class="op ${o.kind}"/>` : ''; }).join('')}
+    </svg>`;
+}
 
 function renderTop() {
   const t = S.threat || { level: 'GREEN', reason: '' };

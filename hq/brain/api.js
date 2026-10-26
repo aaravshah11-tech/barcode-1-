@@ -29,6 +29,14 @@ export function makeApi({ hq, db, auth }) {
 
     if (p === '/state' && m === 'GET') return hq.snapshot();
     if (p === '/settings' && m === 'PATCH') return hq.updateSettings(body);
+    if (p === '/house' && m === 'GET') return hq.house();
+    if (p === '/house' && m === 'PUT') {
+      const after = hq.saveHouse(body);
+      const count = (h) => h.floors.reduce((n, f) => n + f.rooms.length, 0);
+      // Logged once, when the builder is closed — not on every little edit.
+      if (url.searchParams.get('final')) hq.logEvent({ kind: 'system', message: `House plan updated: ${after.floors.length} floor${after.floors.length === 1 ? '' : 's'}, ${count(after)} room${count(after) === 1 ? '' : 's'}` });
+      return after;
+    }
     if (p === '/log' && m === 'GET') {
       const before = Number(url.searchParams.get('before')) || null;
       return db.events({ before, limit: Math.min(500, Number(url.searchParams.get('limit')) || 100), kind: url.searchParams.get('kind') || null });

@@ -9,8 +9,12 @@ const DB = 'sentinel-hq';
 function idb() {
   return new Promise((resolve) => {
     try {
-      const req = indexedDB.open(DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore('events', { keyPath: 'id' });
+      const req = indexedDB.open(DB, 2);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains('events')) d.createObjectStore('events', { keyPath: 'id' });
+        if (!d.objectStoreNames.contains('files')) d.createObjectStore('files'); // floor-plan pictures, 3D scans
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
     } catch { resolve(null); }
@@ -33,6 +37,7 @@ export async function openStore({ memory = false, storage = globalThis.localStor
   const db = memory ? null : await idb();
   let events = db ? (await all(db)).sort((a, b) => a.id - b.id) : [];
   const persistent = !!db || memory;
+  const memFiles = new Map();
 
   const saveMeta = () => { if (!memory) try { storage.setItem(META, JSON.stringify(meta)); } catch { /* storage full or blocked */ } };
   const put = (ev) => { if (db) try { db.transaction('events', 'readwrite').objectStore('events').put(ev); } catch { /* ignore */ } };
@@ -112,6 +117,20 @@ export async function openStore({ memory = false, storage = globalThis.localStor
       const gone = events.filter((e) => e.ts < cut).map((e) => e.id);
       if (gone.length) { events = events.filter((e) => e.ts >= cut); del(gone); }
       return gone.length;
+    },
+
+    // ---------- big files (floor-plan pictures, 3D scans) ----------
+    putFile(key, blob) {
+      if (!db) { memFiles.set(key, blob); return Promise.resolve(); }
+      return new Promise((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(blob, key); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error || new Error('Couldn’t save the file (storage full?)')); });
+    },
+    getFile(key) {
+      if (!db) return Promise.resolve(memFiles.get(key) || null);
+      return new Promise((resolve) => { const r = db.transaction('files').objectStore('files').get(key); r.onsuccess = () => resolve(r.result || null); r.onerror = () => resolve(null); });
+    },
+    deleteFile(key) {
+      if (!db) { memFiles.delete(key); return Promise.resolve(); }
+      return new Promise((resolve) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(key); tx.oncomplete = () => resolve(); tx.onerror = () => resolve(); });
     },
 
     // ---------- full backup (to move HQ to another computer/browser) ----------

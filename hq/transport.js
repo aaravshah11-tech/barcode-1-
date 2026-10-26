@@ -29,6 +29,7 @@ export async function startLocal({ onStatus }) {
   window.__hq = { hq, db, api: call }; // for the automated tests
   return {
     local: true,
+    files: { get: (k) => db.getFile(k), put: (k, b) => db.putFile(k, b), del: (k) => db.deleteFile(k) },
     api: async (path, { method = 'GET', body } = {}) => call(method, path, body ? structuredClone(body) : undefined, { remote: false }),
     onMessage: (f) => listeners.add(f),
   };

@@ -3,6 +3,7 @@
 import { computeThreat, ACTIVITY_KINDS } from '../../shared/threat.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
 import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
+import { sanitizeHouse, emptyHouse } from '../../shared/house.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = { fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15 };
@@ -57,6 +58,15 @@ export class HQ extends Emitter {
     return s;
   }
 
+  // ---------- the house (rooms, floors, doors, windows) ----------
+  house() { return this.db.getSetting('house', null) || emptyHouse(); }
+  saveHouse(h) {
+    const clean = sanitizeHouse(h);
+    this.db.setSetting('house', clean);
+    this.broadcast({ t: 'house', house: clean });
+    return clean;
+  }
+
   // ---------- snapshot for dashboards ----------
   agentView(a) {
     const on = this.online.get(a.id);
@@ -70,6 +80,7 @@ export class HQ extends Emitter {
       events: this.db.events({ limit: 150 }),
       threat: this.threat,
       settings: this.settings(),
+      house: this.house(),
       missions: MISSIONS,
       info: this.info,
       now: this.now(),
