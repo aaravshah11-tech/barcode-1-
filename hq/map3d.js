@@ -3,7 +3,7 @@
 // up when something happens. Built with Three.js (vendor/three).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { centroid, openingEnds, pointInPolygon, bbox } from '../shared/house.js';
+import { centroid, openingEnds, pointInPolygon, bbox, stepCount, OPENING_KINDS } from '../shared/house.js';
 
 const QUALITY = {
   low: { pixelRatio: 1, antialias: false, fps: 24, labels: false, faces: false },
@@ -116,6 +116,7 @@ export class Map3D {
       g.userData = { floorId: f.id, index: i, base: this.floorBase(i) };
       for (const r of f.rooms) g.add(this.roomObject(f, r));
       for (const o of f.openings) { const m = this.openingObject(f, o); if (m) g.add(m); }
+      for (const x of f.fixtures || []) g.add(this.fixtureObject(f, x));
       this.root.add(g);
       this.floorGroups.push(g);
     });
@@ -159,12 +160,52 @@ export class Map3D {
   openingObject(f, o) {
     const e = openingEnds(f, o);
     if (!e) return null;
-    const [y0, y1] = o.kind === 'door' ? [0, 2.0] : [0.9, 2.1];
+    const k = OPENING_KINDS[o.kind] || OPENING_KINDS.door;
+    const [y0, y1] = [k.bottom || 0, k.top];
     const pts = [[e.a, y0], [e.b, y0], [e.b, y1], [e.a, y1], [e.a, y0]].map(([[x, z], y]) => new THREE.Vector3(x, y, z));
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: o.kind === 'door' ? this.c.amber : this.c.window, transparent: true, opacity: 0.9 }));
+    const color = o.kind === 'window' ? this.c.window : o.kind === 'arch' ? this.c.muted : this.c.amber;
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
     line.userData = { openingId: o.id, roomId: o.roomId, kind: o.kind, floorId: f.id };
     this.openingLines.push(line);
     return line;
+  }
+
+  /** Structure: stairs climbing to the next floor, inner walls, pillars. Built in the part's own frame, then turned into place. */
+  fixtureObject(f, x) {
+    const g = new THREE.Group();
+    g.userData = { fixtureId: x.id, kind: x.kind };
+    const edgeMat = () => new THREE.LineBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.55 });
+    const faceMat = (o) => new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: o, side: THREE.DoubleSide, depthWrite: false });
+    const add = (geo, faces = 0.06) => { g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), edgeMat())); if (this.q.faces && faces) g.add(new THREE.Mesh(geo, faceMat(faces))); };
+    const rise = f.height + 0.25, n = stepCount(rise);
+    if (x.kind === 'stairs') {
+      // side profile of the flight (along, up), pulled out sideways to the stairs' width
+      const t = x.d / n, sh = new THREE.Shape();
+      sh.moveTo(0, 0);
+      for (let k = 0; k < n; k++) { sh.lineTo(k * t, ((k + 1) * rise) / n); sh.lineTo((k + 1) * t, ((k + 1) * rise) / n); }
+      sh.lineTo(x.d, 0); sh.lineTo(0, 0);
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: x.w, bevelEnabled: false });
+      geo.translate(0, 0, -x.w / 2);
+      // (along, up, across) → (across, up, back-to-front): the flight climbs towards the arrow
+      geo.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, x.d / 2, 0, 0, 0, 1));
+      add(geo, 0.1);
+    } else if (x.kind === 'spiral') {
+      const r = x.w / 2, turn = 1.5 * Math.PI;
+      const pole = new THREE.CylinderGeometry(0.06, 0.06, rise, 8); pole.translate(0, rise / 2, 0); add(pole, 0);
+      for (let k = 0; k < n; k++) {
+        const a = ((k + 0.5) / n) * turn, step = new THREE.BoxGeometry(r, 0.05, Math.max(0.15, (r * turn) / n));
+        step.translate(r / 2, ((k + 1) * rise) / n - 0.025, 0);
+        step.rotateY(Math.PI / 2 - a);
+        add(step, 0.12);
+      }
+    } else {
+      const h = f.height;
+      const geo = new THREE.BoxGeometry(x.w, h, x.d); geo.translate(0, h / 2, 0);
+      add(geo, x.kind === 'wall' ? 0.18 : 0.25);
+    }
+    g.rotation.y = -(x.rot * Math.PI) / 180;
+    g.position.set(x.x, 0, x.y);
+    return g;
   }
 
   /** Show all floors (-1) or just one; floors above the chosen one are hidden. */
@@ -224,7 +265,7 @@ export class Map3D {
     const red = ev.level === 'alert' || /nobody/.test(ev.message || '');
     const color = red ? this.c.red : ev.kind === 'light' ? new THREE.Color('#fff3a0') : this.c.amber;
     if (room && ['motion', 'door', 'light', 'knock', 'sound'].includes(ev.kind)) this.effects.push({ kind: 'room', mesh: this.roomMeshes.get(room.id)?.userData.floorMesh, color, t0: performance.now(), dur: ev.kind === 'motion' ? 4000 : 2500 });
-    if (ev.kind === 'door' && room) for (const l of this.openingLines) if (l.userData.roomId === room.id && l.userData.kind === 'door') this.effects.push({ kind: 'flash', obj: l, t0: performance.now(), dur: 2500 });
+    if (ev.kind === 'door' && room) for (const l of this.openingLines) if (l.userData.roomId === room.id && OPENING_KINDS[l.userData.kind]?.opens) this.effects.push({ kind: 'flash', obj: l, t0: performance.now(), dur: 2500 });
     if (ev.kind === 'sound' || ev.kind === 'knock') {
       for (let i = 0; i < 3; i++) {
         const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));

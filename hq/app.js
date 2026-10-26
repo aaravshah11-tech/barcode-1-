@@ -12,7 +12,7 @@ import { sfx, sfxPrefs, setSfx, onSfx } from '../shared/sfx.js';
 import { openBuilder } from './builder.js';
 import { icon } from '../shared/icons.js';
 import { MODES, MODE_INFO, suggestMode, ACTIVITY_KINDS } from '../shared/threat.js';
-import { centroid, openingEnds, bbox } from '../shared/house.js';
+import { centroid, openingEnds, bbox, fixtureLines } from '../shared/house.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
@@ -373,7 +373,9 @@ function renderPlan() {
   const b = pts.length ? bbox(pts) : { minX: 0, minY: 0, w: 10, h: 10 }, pad = 0.6;
   box.innerHTML = `${h.floors.length > 1 ? `<div class="filters plan-floors">${h.floors.map((x, i) => `<button data-planfloor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('')}</div>` : ''}
     <svg viewBox="${b.minX - pad} ${b.minY - pad} ${b.w + pad * 2} ${b.h + pad * 2}" role="img" aria-label="Floor plan of ${esc(f.name)}">
+      <defs><marker id="p-up" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="fx-head"/></marker></defs>
       ${f.rooms.map((r) => { const c = centroid(r.points); return `<g class="proom" data-proom="${r.id}"><polygon points="${r.points.join(' ')}"/><text x="${c[0]}" y="${c[1]}" style="font-size:${Math.max(b.w, b.h) / 38}px">${esc(r.name)}</text></g>`; }).join('')}
+      ${(f.fixtures || []).map((x) => { const L = fixtureLines(x, f.height + 0.25); return `<g class="fx ${x.kind}"><polygon points="${L.outline.join(' ')}"/>${L.lines.map(([a, c]) => `<line x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}"/>`).join('')}${L.arrow ? `<line class="fx-arrow" marker-end="url(#p-up)" x1="${L.arrow[0][0]}" y1="${L.arrow[0][1]}" x2="${L.arrow[1][0]}" y2="${L.arrow[1][1]}"/>` : ''}</g>`; }).join('')}
       ${f.openings.map((o) => { const e = openingEnds(f, o); return e ? `<line x1="${e.a[0]}" y1="${e.a[1]}" x2="${e.b[0]}" y2="${e.b[1]}" class="op ${o.kind}"/>` : ''; }).join('')}
     </svg>`;
 }

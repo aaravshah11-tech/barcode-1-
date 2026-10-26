@@ -142,7 +142,19 @@ body { background: transparent; }
 .plan .proom polygon { fill: rgba(var(--accent-rgb), .05); stroke: var(--green); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
 .plan .proom text, .b-canvas .room text { fill: var(--text); text-anchor: middle; dominant-baseline: middle; font-family: var(--mono); letter-spacing: .06em; pointer-events: none; }
 .plan .op, .b-canvas .op { stroke-width: 5px; vector-effect: non-scaling-stroke; stroke-linecap: butt; }
-.plan .op.door, .b-canvas .op.door { stroke: var(--amber); } .plan .op.window, .b-canvas .op.window { stroke: #9fdcff; }
+.plan .op.door, .b-canvas .op.door, .plan .op.sliding, .b-canvas .op.sliding, .plan .op.garage, .b-canvas .op.garage { stroke: var(--amber); } .plan .op.window, .b-canvas .op.window { stroke: #9fdcff; }
+.plan .op.sliding, .b-canvas .op.sliding { stroke-dasharray: 4 2; } .plan .op.garage, .b-canvas .op.garage { stroke-width: 7px; }
+.plan .op.arch, .b-canvas .op.arch { stroke: var(--muted); stroke-dasharray: 2 3; }
+/* structure: stairs, inner walls, pillars */
+.plan .fx polygon, .b-canvas .fx polygon { fill: rgba(var(--accent-rgb), .06); stroke: var(--text); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.plan .fx line, .b-canvas .fx line { stroke: var(--muted); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.plan .fx.wall polygon, .b-canvas .fx.wall polygon, .plan .fx.column polygon, .b-canvas .fx.column polygon { fill: var(--green); fill-opacity: .55; stroke: var(--green); }
+.plan .fx .fx-arrow, .b-canvas .fx .fx-arrow { stroke: var(--text); stroke-width: 1.6px; }
+.fx-head { fill: var(--text); }
+.b-canvas .fx { cursor: move; }
+.b-canvas .fx.sel polygon { stroke: var(--green); stroke-width: 3px; fill-opacity: .8; fill: rgba(var(--accent-rgb), .2); }
+.b-canvas .wall-draft { stroke-width: 5px; }
+.b-canvas .stairs-below { stroke: var(--amber); }
 .plan-floors { position: relative; z-index: 1; margin-bottom: 6px; }
 .radar-wrap .empty { position: absolute; inset: 0; display: grid; place-content: center; }
 .p-map .panel-head .filters button { min-height: 26px; }
@@ -158,7 +170,7 @@ body { background: transparent; }
 .b-main { display: grid; grid-template-columns: 92px 1fr 320px; min-height: 0; }
 .b-tools { display: grid; align-content: start; gap: 6px; padding: 10px 8px; border-right: 1px solid var(--line); overflow: auto; }
 .b-tools button { flex-direction: column; gap: 2px; padding: 8px 4px; min-height: 64px; font-size: .58rem; letter-spacing: .04em; text-transform: none; }
-.b-tools button span { font-size: 1.3rem; }
+.b-tools button svg { width: 22px; height: 22px; }
 .b-tools button[aria-pressed="true"] { border-color: var(--green); background: var(--green-dim); color: var(--text); }
 .b-canvas { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at center, rgba(var(--accent-rgb), .06), transparent 70%); }
 .b-canvas svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; outline: none; user-select: none; -webkit-user-select: none; }

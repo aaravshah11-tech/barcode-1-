@@ -56,3 +56,34 @@ test('templates make valid houses', () => {
     for (const f of h.floors) { assert.ok(f.rooms.length >= 4); assert.ok(f.openings.length >= 4); assert.ok(f.openings.every((o) => openingEnds(f, o))); }
   }
 });
+
+test('stairs, inner walls and pillars (structure only)', async () => {
+  const { fixtureCorners, fixtureLines, fixtureAt, stepCount, FIXTURE_KINDS, OPENING_KINDS } = await import('../../shared/house.js');
+  const h = sanitizeHouse({ floors: [{ rooms: [square], openings: [{ roomId: 'r1', edge: 0, kind: 'garage' }, { roomId: 'r1', edge: 1, kind: 'trapdoor' }],
+    fixtures: [{ kind: 'stairs', x: 1, y: 1.5, w: 0.9, d: 3, rot: 450 }, { kind: 'sofa', x: 1, y: 1 }, { kind: 'wall', x: 2, y: 1, w: 2, d: 0, rot: -90 }, { kind: 'column', x: 'x' }] }] });
+  const f = h.floors[0];
+  assert.deepEqual(f.openings.map((o) => o.kind), ['garage', 'door'], 'unknown opening kinds become doors');
+  assert.equal(f.openings[0].width, OPENING_KINDS.garage.width);
+  assert.deepEqual(f.fixtures.map((x) => x.kind), ['stairs', 'wall', 'column'], 'furniture is not allowed');
+  assert.equal(f.fixtures[0].rot, 90, 'rotation wraps to 0–359');
+  assert.equal(f.fixtures[1].rot, 270);
+  assert.equal(f.fixtures[1].d, 0.05, 'walls have a minimum thickness');
+  assert.equal(f.fixtures[2].w, FIXTURE_KINDS.column.w);
+  assert.deepEqual(sanitizeHouse({ floors: [{ rooms: [square] }] }).floors[0].fixtures, [], 'old saved houses still load');
+
+  const st = { kind: 'stairs', x: 0, y: 0, w: 1, d: 3, rot: 90 };
+  const c = fixtureCorners(st).map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+  assert.deepEqual(c, [[1.5, -0.5], [1.5, 0.5], [-1.5, 0.5], [-1.5, -0.5]], 'turned 90°: the flight runs left–right');
+  assert.equal(stepCount(2.75), 15);
+  const L = fixtureLines(st, 2.75);
+  assert.equal(L.lines.length, 14, 'one line between each pair of steps');
+  assert.ok(L.arrow[1][0] > L.arrow[0][0], 'turned 90° clockwise, the stairs go up towards +x');
+  assert.equal(fixtureAt({ fixtures: [st] }, [1.2, 0.3]), st);
+  assert.equal(fixtureAt({ fixtures: [st] }, [0, 0.8]), null);
+  assert.equal(fixtureLines({ kind: 'spiral', x: 0, y: 0, w: 2, d: 2, rot: 0 }).circle, true);
+});
+
+test('the 2-floor template comes with stairs', () => {
+  const h = sanitizeHouse(TEMPLATES.house.make());
+  assert.equal(h.floors[0].fixtures[0].kind, 'stairs');
+});

@@ -31,6 +31,12 @@ const P = {
   zoomout: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6"/>',
   phone: '<rect x="7" y="2" width="10" height="20" rx="1.5"/><path d="M11 18h2"/>',
   shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>',
+  stairs: '<path d="M3 20h5v-4h4v-4h4V8h5"/><path d="M3 20V4"/>',
+  wall: '<path d="M3 10h18M3 14h18"/><path d="M8 10v4M16 10v4"/>',
+  column: '<path d="M8 3h8M8 21h8M10 3v18M14 3v18"/>',
+  terminal: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="m7 9 3 3-3 3M12 15h5"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',
   alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
 };
 export const icon = (name, label = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${P[name] || ''}</svg>`;

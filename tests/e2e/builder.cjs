@@ -77,12 +77,46 @@ const SHOTS = process.argv[2] || '';
   await page.waitForTimeout(800);
   const after = (await house()).floors[0].rooms[0].points[0];
   check(after[1] > before[1] && after[0] === before[0], 'drag a room to move it (doors move with it)');
+
+  // Structure: stairs, an inner wall, a pillar; door types (no furniture)
+  const k2 = await page.locator('[data-room]').first().locator('polygon').boundingBox();
+  await page.click('[data-tool="stairs"]');
+  await page.mouse.click(k2.x + k2.width * 0.25, k2.y + k2.height * 0.8);
+  await page.waitForSelector('[data-fixture].stairs');
+  await page.waitForSelector('[data-fxturn]');
+  check((await page.textContent('.b-side')).includes('top floor'), 'add stairs: they say they need a floor above to lead to');
+  await page.click('[data-fxturn]');
+  await page.waitForFunction(() => window.__hq.hq.house().floors[0].fixtures?.[0]?.rot === 90, null, { timeout: 5000 });
+  check(true, 'Turn 90° rotates the stairs');
+  await page.selectOption('[data-fxkind]', 'spiral');
+  await page.waitForFunction(() => window.__hq.hq.house().floors[0].fixtures[0].kind === 'spiral', null, { timeout: 5000 });
+  await page.selectOption('[data-fxkind]', 'stairs');
+  check(true, 'stairs can be straight or spiral');
+  await page.click('[data-tool="wall"]');
+  await page.mouse.move(k2.x + k2.width * 0.6, k2.y + 10); await page.mouse.down(); await page.mouse.move(k2.x + k2.width * 0.6, k2.y + k2.height - 10, { steps: 6 }); await page.mouse.up();
+  await page.click('[data-tool="column"]');
+  await page.mouse.click(k2.x + k2.width * 0.85, k2.y + k2.height * 0.5);
+  await page.waitForFunction(() => { const f = window.__hq.hq.house().floors[0].fixtures || []; return f.length === 3 && f.some((x) => x.kind === 'wall' && x.w > 1) && f.some((x) => x.kind === 'column'); }, null, { timeout: 5000 });
+  check(true, 'drag an inner wall; click to place a pillar');
+  // move the stairs by dragging them
+  await page.click('[data-tool="select"]');
+  const sb = await page.locator('[data-fixture].stairs polygon').boundingBox();
+  const sx0 = (await house()).floors[0].fixtures[0].x;
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2); await page.mouse.down(); await page.mouse.move(sb.x + sb.width / 2 + 40, sb.y + sb.height / 2, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(800);
+  check((await house()).floors[0].fixtures[0].x > sx0, 'drag the stairs to move them');
+  await page.click('.op.door', { force: true });
+  await page.waitForSelector('[data-okind]');
+  await page.selectOption('[data-okind]', 'sliding');
+  await page.waitForFunction(() => window.__hq.hq.house().floors[0].openings.some((o) => o.kind === 'sliding'), null, { timeout: 5000 });
+  check(true, 'a door can become a sliding door (also archway / garage door)');
   await shot('builder-rooms');
 
   // Second floor
   await page.click('[data-addfloor]');
   await page.waitForFunction(() => document.querySelectorAll('[data-floor]').length === 2);
-  check(await page.$$eval('.ghost', (g) => g.length) === 2, 'new floor: the floor below shows faintly to line rooms up');
+  check(await page.$$eval('.ghost:not(.stairs-below)', (g) => g.length) === 2, 'new floor: the floor below shows faintly to line rooms up');
+  check(await page.$$eval('.stairs-below', (g) => g.length) === 1, 'new floor: the stairs coming up from below show, to line up the landing');
   await page.fill('[data-fname]', 'Upstairs'); await page.press('[data-fname]', 'Tab');
   await page.click('[data-tool="rect"]');
   await page.mouse.move(kitchen.x, kitchen.y + 60); await page.mouse.down(); await page.mouse.move(kitchen.x + 150, kitchen.y + 200, { steps: 6 }); await page.mouse.up();
@@ -129,6 +163,7 @@ const SHOTS = process.argv[2] || '';
   await page.waitForSelector('.builder', { state: 'detached' });
   await page.waitForFunction(() => window.__map3d?.roomMeshes.size === 3, null, { timeout: 15000 });
   check(true, 'Done: the house appears on the 3D map');
+  check(await page.evaluate(() => { let n = 0; window.__map3d.root.traverse((o) => { if (o.userData.fixtureId) n++; }); return n; }) === 3, '3D map shows the stairs, inner wall and pillar');
   await page.click('[data-mapview="plan"]');
   await page.waitForSelector('[data-plan] >> text=Kitchen');
   check(true, 'Done: the floor plan shows on the Tactical map');
