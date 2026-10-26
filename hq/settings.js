@@ -4,7 +4,7 @@ import { forgetViewer } from './transport.js';
 import { THEMES } from '../shared/themes.js';
 import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 
-const TABS = [['general', 'General'], ['phones', 'Phones'], ['alerts', 'Alerts']];
+const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
 export const registerTab = (id, render) => { extraTabs[id] = render; };
 const q3d = () => { try { return localStorage.getItem('sentinel.q3d') || 'medium'; } catch { return 'medium'; } };
@@ -27,6 +27,7 @@ export function openSettings(S, { tab = 'general', onChange } = {}) {
     s.body.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === t)));
     if (t === 'general') general(body, S, onChange);
     else if (t === 'phones') phones(body, S);
+    else if (t === 'security') security(body, S, onChange);
     else { await import('./alerts.js'); await extraTabs[t]?.(body, S); }
   };
   s.body.addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); });
@@ -44,7 +45,7 @@ function general(body, S, onChange) {
     <label class="field" style="margin-top:12px"><span>Sound volume (this device)</span><div class="row"><input type="range" min="0" max="100" step="5" value="${Math.round(sp.volume * 100)}" data-volume style="flex:1"><label class="row small" style="gap:6px"><input type="checkbox" data-muted ${sp.muted ? 'checked' : ''}> Mute</label></div></label>
     ${hr}
     <form data-general>
-      <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Scanlines, glitch, hologram flicker and typewriter effects (also used by Agents). Turn off on a slow computer.</span></label>
+      <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Display effects: faint grid, scan lines and typing text (also used by Agents). Turn off on a slow computer.</span></label>
       <label class="field"><span>Auto-lock after</span><select name="autoLockMin" style="max-width:220px">${[[5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [0, 'Never (not recommended)']].map(([v, l]) => `<option value="${v}" ${Number(st.autoLockMin) === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Without a tap, click or key for this long, HQ locks and asks for your codename + PIN. HQ keeps guarding the house while locked.</div></label>
       <label class="field"><span>Keep Mission Log entries for</span><div class="row"><input type="number" name="retentionDays" min="1" max="3650" value="${esc(st.retentionDays)}" style="max-width:120px"><span class="muted">days, then delete automatically</span></div></label>
       <button class="btn-primary">Save</button>
@@ -88,6 +89,48 @@ function general(body, S, onChange) {
     if (!f) return;
     if (!(await confirmBox('Restore this backup?', 'It replaces everything in this HQ (Agents, Mission Log, settings). The page reloads afterwards.', { ok: 'Restore', danger: true }))) return;
     try { await S.api('/restore', { method: 'POST', body: JSON.parse(await f.text()) }); location.reload(); } catch (x) { toast(x.message || 'That file couldn’t be read.', { kind: 'err' }); }
+  });
+}
+
+/** Security modes: when NIGHT is suggested, and the LOCKDOWN alarm protocol. */
+function security(body, S, onChange) {
+  const st = S.settings, a = st.alarm || {};
+  body.innerHTML = `
+    <h2 style="margin-bottom:8px">Security modes</h2>
+    <dl class="kv" style="margin-bottom:12px">
+      <dt>Home</dt><dd>Occupied. Activity is logged; nothing raises an alarm.</dd>
+      <dt>Away</dt><dd>Unoccupied. Any activity from any Agent is an intrusion (THREAT RED).</dd>
+      <dt>Night</dt><dd>Occupants asleep. Only Agents marked “Armed in NIGHT mode” raise THREAT RED. Untick it on bedroom Agents (Agent details).</dd>
+      <dt>Lockdown</dt><dd>Maximum alert. Everything is armed and Agents can sound the alarm.</dd>
+    </dl>
+    <form data-night class="row" style="align-items:flex-end">
+      <label class="field" style="margin:0"><span>Night starts</span><input type="time" name="nightStart" value="${esc(st.nightStart || '22:30')}"></label>
+      <label class="field" style="margin:0"><span>Night ends</span><input type="time" name="nightEnd" value="${esc(st.nightEnd || '07:00')}"></label>
+      <button>Save</button>
+    </form>
+    <p class="help">HQ suggests switching to NIGHT after this time, and back to HOME in the morning. After 3 hours with no activity in the day it suggests AWAY.</p>
+    ${hr}<h2 style="margin-bottom:8px">Alarm protocol (LOCKDOWN and PANIC)</h2>
+    <form data-alarm>
+      <label class="field row"><input type="checkbox" name="enabled" ${a.enabled ? 'checked' : ''}><span style="margin:0">Agents flash red when an armed sensor goes off in LOCKDOWN (PANIC always alerts them)</span></label>
+      <label class="field row"><input type="checkbox" name="siren" ${a.siren ? 'checked' : ''}><span style="margin:0">Sound a siren on the Agents too</span></label>
+      <label class="field"><span>Siren volume limit: <b data-vol>${a.volume}%</b></span><input type="range" name="volume" min="0" max="100" step="5" value="${a.volume}"></label>
+      <label class="field"><span>Alarm lasts (seconds)</span><input type="number" name="seconds" min="5" max="300" value="${a.seconds}" style="max-width:120px"></label>
+      <div class="row" style="align-items:flex-end"><label class="field" style="margin:0"><span>No siren from</span><input type="time" name="quietStart" value="${esc(a.quietStart || '')}"></label><label class="field" style="margin:0"><span>until</span><input type="time" name="quietEnd" value="${esc(a.quietEnd || '')}"></label></div>
+      <p class="help">During these hours Agents still flash, but stay silent.</p>
+      <div class="row"><button class="btn-primary">Save</button><button type="button" data-testalarm>Test on all Agents (4 s)</button></div>
+    </form>`;
+  $('[data-alarm] [name=volume]', body).addEventListener('input', (e) => { $('[data-vol]', body).textContent = `${e.target.value}%`; });
+  $('[data-night]', body).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { nightStart: e.target.nightStart.value, nightEnd: e.target.nightEnd.value } })); toast('Night hours saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
+  });
+  $('[data-alarm]', body).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { alarm: { enabled: f.enabled.checked, siren: f.siren.checked, volume: Number(f.volume.value), seconds: Number(f.seconds.value), quietStart: f.quietStart.value, quietEnd: f.quietEnd.value } } })); toast('Alarm protocol saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
+  });
+  $('[data-testalarm]', body).addEventListener('click', async () => {
+    try { const r = await S.api('/alarm/test', { method: 'POST' }); toast(r.agents ? `Test alarm sent to ${r.agents} Agent${r.agents === 1 ? '' : 's'}` : 'No Agents online to test.'); } catch (x) { toast(x.message, { kind: 'err' }); }
   });
 }
 

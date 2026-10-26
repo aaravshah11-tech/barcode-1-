@@ -1,12 +1,18 @@
 // HQ's brain (runs inside the HQ page): who's online, the Mission Log, the threat level,
 // recruiting, and signed orders to Agents. The dashboard, Agents and linked phones all talk to this.
-import { computeThreat, ACTIVITY_KINDS } from '../../shared/threat.js';
+import { computeThreat, ACTIVITY_KINDS, MODES, MODE_INFO, validMode, isArmed } from '../../shared/threat.js';
+import { inQuietHours } from '../../shared/alert-rules.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
 import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
 import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js';
 
 const DAY = 86400000;
-export const DEFAULT_SETTINGS = { fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15 };
+export const DEFAULT_SETTINGS = {
+  fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15,
+  nightStart: '22:30', nightEnd: '07:00', // when NIGHT is suggested (and the siren stays quiet)
+  alarm: { enabled: true, siren: true, volume: 60, seconds: 30, quietStart: '23:00', quietEnd: '07:00' }, // LOCKDOWN alarm protocol
+};
+const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
 const THEMES = ['mi6', 'classic', 'redops'];
 const PAIR_MINUTES = 10;
 
@@ -40,18 +46,35 @@ export class HQ extends Emitter {
 
   settings() {
     const s = { ...DEFAULT_SETTINGS, ...(this.db.getSetting('hq', {}) || {}) };
-    if (!['home', 'away'].includes(s.mode)) s.mode = 'home';
+    s.mode = validMode(s.mode);
+    s.alarm = { ...DEFAULT_SETTINGS.alarm, ...(s.alarm || {}) };
     return s;
   }
   updateSettings(patch) {
     const s = { ...this.settings() };
     if ('fx' in patch) s.fx = !!patch.fx;
     if ('retentionDays' in patch) s.retentionDays = Math.min(3650, Math.max(1, Math.round(Number(patch.retentionDays) || 30)));
-    if ('mode' in patch && ['home', 'away'].includes(patch.mode)) s.mode = patch.mode;
+    const prevMode = s.mode;
+    if ('mode' in patch && MODES.includes(patch.mode)) s.mode = patch.mode;
+    for (const k of ['nightStart', 'nightEnd']) if (k in patch) s[k] = time(patch[k], s[k]);
+    if (patch.alarm && typeof patch.alarm === 'object') {
+      const a = { ...s.alarm }, p = patch.alarm;
+      if ('enabled' in p) a.enabled = !!p.enabled;
+      if ('siren' in p) a.siren = !!p.siren;
+      if ('volume' in p) a.volume = Math.min(100, Math.max(0, Math.round(Number(p.volume) || 0)));
+      if ('seconds' in p) a.seconds = Math.min(300, Math.max(5, Math.round(Number(p.seconds) || 30)));
+      for (const k of ['quietStart', 'quietEnd']) if (k in p) a[k] = /^\d{2}:\d{2}$/.test(String(p[k])) ? p[k] : '';
+      s.alarm = a;
+    }
     if ('theme' in patch && THEMES.includes(patch.theme)) s.theme = patch.theme;
     if ('autoLockMin' in patch) s.autoLockMin = [0, 5, 15, 30, 60].includes(Number(patch.autoLockMin)) ? Number(patch.autoLockMin) : 15;
     this.db.setSetting('hq', s);
-    if ('mode' in patch) { this.logEvent({ kind: 'system', message: s.mode === 'away' ? 'Set to AWAY — nobody’s home' : 'Set to HOME' }); this.recomputeThreat(); }
+    if ('mode' in patch && s.mode !== prevMode) {
+      this.logEvent({ kind: 'system', level: s.mode === 'lockdown' ? 'alert' : 'info', message: `Security mode: ${s.mode.toUpperCase()}${patch.by ? ` (by ${String(patch.by).slice(0, 40)})` : ''} — ${MODE_INFO[s.mode].summary}` });
+      if (s.mode === 'lockdown') this.alarm({ reason: 'LOCKDOWN', siren: false, seconds: 8 });
+      if (prevMode === 'lockdown') this.standDown();
+      this.recomputeThreat();
+    }
     if ('fx' in patch || 'theme' in patch) for (const id of this.online.keys()) this.command(id, 'configure', { fx: s.fx, theme: s.theme });
     this.broadcast({ t: 'settings', settings: s });
     if ('retentionDays' in patch) this.prune();
@@ -209,7 +232,12 @@ export class HQ extends Emitter {
     if (!allowed.has(kind)) return null;
     const data = {};
     for (const [k, v] of Object.entries(e.data || {})) if (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 60)) data[k] = v;
-    return this.logEvent({ kind, agentId, level: e.level === 'alert' || e.level === 'warn' ? e.level : 'info', message: `${agentLabel(a)} ${a.codename}: ${String(e.message || kind).slice(0, 140)}`, data });
+    // Whether this counts as an intrusion depends on the security mode (and, at night, on the Agent).
+    const mode = this.settings().mode;
+    const armed = isArmed(mode, a, kind);
+    const ev = this.logEvent({ kind, agentId, level: armed ? 'alert' : e.level === 'warn' ? 'warn' : 'info', message: `${agentLabel(a)} ${a.codename}: ${String(e.message || kind).slice(0, 140)}`, data: { ...data, ...(armed ? { armed: mode } : {}) } });
+    if (armed && mode === 'lockdown') this.alarm({ reason: `INTRUSION — ${a.name || a.codename}` });
+    return ev;
   }
   /** Agents can only change their own on-screen zone choices (no images involved). */
   agentSetGrid(agentId, key, cells) {
@@ -230,6 +258,28 @@ export class HQ extends Emitter {
     for (const d of this.dashboards) d.send(text); // dashboards only — not INTEL SCREEN Agents
   }
 
+  // ---------- panic button & alarm protocol ----------
+  /** PANIC: straight to LOCKDOWN, every Agent alerted. */
+  panic(by = 'HQ') {
+    this.logEvent({ kind: 'system', level: 'alert', message: `PANIC raised by ${String(by).slice(0, 40)}` });
+    if (this.settings().mode !== 'lockdown') this.updateSettings({ mode: 'lockdown', by });
+    this.alarm({ reason: 'PANIC — LOCKDOWN', force: true });
+    return this.settings();
+  }
+  /** Tell every online Agent to flash red (and sound the siren, if allowed right now). */
+  alarm({ reason = 'ALARM', siren = true, seconds = null, force = false } = {}) {
+    const a = this.settings().alarm;
+    if (!a.enabled && !force) return false;
+    const quiet = inQuietHours(a.quietStart, a.quietEnd, new Date(this.now()));
+    const payload = { on: true, reason: String(reason).slice(0, 60), seconds: seconds || a.seconds, siren: siren && a.siren && !quiet, volume: a.volume / 100 };
+    let n = 0;
+    for (const id of this.online.keys()) if (this.command(id, 'alarm', payload)) n++;
+    if (siren) this.logEvent({ kind: 'system', level: 'alert', message: `Alarm protocol: ${n} Agent${n === 1 ? '' : 's'} alerted${payload.siren ? '' : quiet ? ' (siren silent — quiet hours)' : ' (no siren)'}` });
+    this.emit('alarm', payload);
+    return n;
+  }
+  standDown() { for (const id of this.online.keys()) this.command(id, 'alarm', { on: false }); this.logEvent({ kind: 'system', message: 'Alarm stood down' }); }
+
   // ---------- orders to Agents (signed) ----------
   command(agentId, action, payload = {}) {
     const o = this.online.get(agentId);
@@ -243,6 +293,7 @@ export class HQ extends Emitter {
     const changes = {};
     if (typeof patch.codename === 'string' && patch.codename.trim()) changes.codename = patch.codename.trim().toUpperCase().slice(0, 24);
     if (typeof patch.name === 'string') changes.name = patch.name.trim().slice(0, 40);
+    if (typeof patch.nightArmed === 'boolean') changes.nightArmed = patch.nightArmed;
     const mission = patch.mission && missionById(patch.mission) ? patch.mission : a.mission;
     if (mission !== a.mission) changes.mission = mission;
     if (patch.settings || mission !== a.mission) changes.settings = { ...a.settings, ...cleanSettings(mission, { ...a.settings, ...(patch.settings || {}) }) };

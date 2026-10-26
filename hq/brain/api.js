@@ -30,6 +30,9 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/state' && m === 'GET') return hq.snapshot();
     if (p === '/settings' && m === 'PATCH') return hq.updateSettings(body);
     if (p === '/house' && m === 'GET') return hq.house();
+    if (p === '/panic' && m === 'POST') return hq.panic(who.remote ? (who.label || 'a linked phone') : 'HQ');
+    if (p === '/alarm/stop' && m === 'POST') { hq.standDown(); return { ok: true }; }
+    if (p === '/alarm/test' && m === 'POST') return { agents: hq.alarm({ reason: 'ALARM TEST', seconds: 4, force: true }) };
     if (p === '/house' && m === 'PUT') {
       const after = hq.saveHouse(body);
       const count = (h) => h.floors.reduce((n, f) => n + f.rooms.length, 0);

@@ -3,10 +3,9 @@
 import { LOGO, reducedMotion } from './ui.js';
 import { sfx } from './sfx.js';
 
-const CHECKS = ['QUANTUM KEY EXCHANGE', 'AGENT NETWORK HANDSHAKE', 'SIGNAL INTEGRITY', 'MISSION LOG INDEX', 'THREAT MATRIX', 'HOLOGRAPHIC DISPLAY', 'PERIMETER SENSORS',
-  'SECURE COMMS RELAY', 'CIPHER ENGINE', 'BIOMETRIC SCANNER', 'SATELLITE UPLINK', 'COUNTERMEASURES'];
+const CHECKS = ['Cryptographic module', 'Session keys', 'Agent network', 'Mission log index', 'Site plan', 'Alerting service', 'Audit trail'];
 
-export function boot({ title = 'SENTINEL // HQ ONLINE', lines = null, key = 'sentinel.booted', fx = true } = {}) {
+export function boot({ title = 'Sentinel · Operational', lines = null, key = 'sentinel.booted', fx = true } = {}) {
   try { if (sessionStorage.getItem(key)) return Promise.resolve(); sessionStorage.setItem(key, '1'); } catch { /* private mode */ }
   const quick = !fx || reducedMotion();
   const checks = lines || CHECKS;
@@ -15,9 +14,9 @@ export function boot({ title = 'SENTINEL // HQ ONLINE', lines = null, key = 'sen
   el.setAttribute('role', 'status');
   el.setAttribute('aria-label', title);
   el.innerHTML = `<div class="boot-inner">${LOGO}
-    <div class="boot-bars mono" aria-hidden="true">${['DECRYPTING SECURE CHANNEL', 'LOADING INTEL', 'CALIBRATING SENSORS'].map((l) => `<div class="boot-bar"><span>${l}</span><i><b></b></i><em>0%</em></div>`).join('')}</div>
+    <div class="boot-bars mono" aria-hidden="true">${['Establishing secure session', 'Verifying integrity', 'Loading site data'].map((l) => `<div class="boot-bar"><span>${l}</span><i><b></b></i><em>0%</em></div>`).join('')}</div>
     <div class="boot-lines mono" aria-hidden="true"></div>
-    <div class="boot-title glitch mono">${title}</div><div class="boot-skip mono">TAP TO SKIP</div></div>`;
+    <div class="boot-title">${title}</div><div class="boot-skip">Tap to skip</div></div>`;
   document.body.appendChild(el);
   const out = el.querySelector('.boot-lines');
   return new Promise((resolve) => {
@@ -32,19 +31,19 @@ export function boot({ title = 'SENTINEL // HQ ONLINE', lines = null, key = 'sen
     // progress bars
     el.querySelectorAll('.boot-bar').forEach((bar, i) => {
       const b = bar.querySelector('b'), em = bar.querySelector('em');
-      const start = 150 + i * 260, len = 900 + i * 250;
+      const start = 100 + i * 180, len = 600 + i * 150;
       for (let s = 0; s <= 10; s++) later(() => { const pct = Math.min(100, Math.round(s * 10 + (s < 10 ? Math.random() * 6 : 0))); b.style.width = `${pct}%`; em.textContent = `${pct}%`; }, start + (len * s) / 10);
     });
     // system checks scrolling past
     checks.forEach((l, i) => later(() => {
       const row = document.createElement('div');
-      row.textContent = `> ${l} ${'.'.repeat(Math.max(3, 28 - l.length))} OK`;
+      row.textContent = `${l.padEnd(28, ' ')}OK`;
       out.appendChild(row);
       while (out.children.length > 6) out.firstChild.remove();
       sfx('type');
-    }, 300 + i * 150));
-    const end = 300 + checks.length * 150 + 200;
+    }, 200 + i * 110));
+    const end = 200 + checks.length * 110 + 300;
     later(() => { el.classList.add('boot-show-title'); sfx('granted'); }, end);
-    later(finish, end + 1300);
+    later(finish, end + 700);
   });
 }

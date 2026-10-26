@@ -53,7 +53,7 @@ export const MISSIONS = [
     id: 'panel', name: 'DOOR PANEL', glyph: '◎', needs: [], eventKinds: ['knock'],
     summary: 'Shows one big button. Pressing it alerts HQ — a DIY doorbell.',
     settings: [
-      { key: 'label', label: 'Button text', type: 'text', default: 'KNOCK KNOCK', max: 24 },
+      { key: 'label', label: 'Button text', type: 'text', default: 'CALL HQ', max: 24 },
       { key: 'cooldown', label: 'Cooldown', type: 'number', min: 1, max: 120, step: 1, default: 5, unit: 's' },
     ],
   },

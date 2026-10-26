@@ -120,7 +120,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
       } else if (role === 'viewer' && msg.t === 'api') {
         const path = String(msg.path || '');
         try {
-          const data = await api(String(msg.method || 'GET'), path, msg.body, { remote: true, session });
+          const data = await api(String(msg.method || 'GET'), path, msg.body, { remote: true, session, label: me?.label });
           send({ t: 'res', id: msg.id, ok: true, data });
           if (path === '/auth/unlock' && data?.session) { session = data.session; unlockDash(); }
           if (path === '/auth/lock') { session = null; hq.dashboards.delete(dash); }

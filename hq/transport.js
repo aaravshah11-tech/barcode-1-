@@ -30,7 +30,7 @@ export async function startLocal({ onStatus }) {
   const host = await startHost({ hq, api: call, auth, onStatus: (s) => { net = s; hq.info = { ...hq.info, net: s }; onStatus?.(s); } }).catch((e) => { onStatus?.({ state: 'offline', detail: e.message }); return null; });
   if (!host) hq.info = { ...hq.info, hqId: null };
   if (!db.persistent) onStatus?.({ state: net.state, detail: 'This browser won’t let HQ save its Mission Log (private window?). It will be lost when you close the page.' });
-  hq.logEvent({ kind: 'system', message: 'SENTINEL // HQ ONLINE' });
+  hq.logEvent({ kind: 'system', message: 'HQ session started' });
   window.__hq = { hq, db, api: call }; // for the automated tests
   return {
     local: true,

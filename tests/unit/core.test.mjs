@@ -6,7 +6,7 @@ import { openStore } from '../../hq/brain/store.js';
 import { HQ } from '../../hq/brain/hq.js';
 import { makeApi } from '../../hq/brain/api.js';
 import { makeAuth } from '../../hq/brain/auth.js';
-import { computeThreat } from '../../shared/threat.js';
+import { computeThreat, isArmed, suggestMode } from '../../shared/threat.js';
 import { sha256, hmac, signCommand, pickCodename, CODENAMES } from '../../shared/crypto.js';
 import { canonical } from '../../shared/canonical.js';
 import { cleanSettings, MISSIONS } from '../../shared/missions.js';
@@ -104,14 +104,66 @@ test('Agents: missions, settings, only expected events, removal', async () => {
   assert.equal(hq.agentByToken(token), null, 'old key no longer works');
 });
 
-test('threat level: HOME / AWAY', () => {
+test('security modes: who is armed, and the threat level', () => {
   const now = Date.now();
-  const ev = (kind, minsAgo) => ({ kind, ts: now - minsAgo * MIN, message: `${kind}!` });
+  const ev = (kind, minsAgo, level = 'info') => ({ kind, ts: now - minsAgo * MIN, message: `${kind}!`, level });
+  assert.equal(isArmed('home', {}, 'motion'), false);
+  assert.equal(isArmed('away', {}, 'door'), true);
+  assert.equal(isArmed('lockdown', { nightArmed: false }, 'sound'), true);
+  assert.equal(isArmed('night', {}, 'motion'), true, 'Agents are armed at night unless untticked');
+  assert.equal(isArmed('night', { nightArmed: false }, 'motion'), false, 'bedroom Agent not armed at night');
+  assert.equal(isArmed('away', {}, 'agent'), false, 'an Agent coming online is not an intrusion');
   assert.equal(computeThreat({ events: [], mode: 'home', now }).level, 'GREEN');
   assert.equal(computeThreat({ events: [ev('motion', 2)], mode: 'home', now }).level, 'AMBER');
   assert.equal(computeThreat({ events: [ev('motion', 8)], mode: 'home', now }).level, 'GREEN');
-  assert.equal(computeThreat({ events: [ev('motion', 8)], mode: 'away', now }).level, 'RED');
-  assert.equal(computeThreat({ events: [ev('agent', 1)], mode: 'away', now }).level, 'GREEN', 'Agent coming online is not activity');
+  assert.equal(computeThreat({ events: [ev('motion', 8, 'alert')], mode: 'away', now }).level, 'RED');
+  assert.match(computeThreat({ events: [ev('door', 1, 'alert')], mode: 'night', now }).reason, /NIGHT mode/);
+  assert.equal(computeThreat({ events: [ev('motion', 20, 'alert')], mode: 'away', now }).level, 'GREEN', 'RED fades after 15 minutes');
+  assert.equal(computeThreat({ events: [], mode: 'lockdown', now }).away, true);
+});
+
+test('mode suggestions: NIGHT late, HOME in the morning, AWAY after a quiet spell', () => {
+  const at = (h, m = 0) => new Date(2026, 0, 1, h, m);
+  assert.equal(suggestMode({ mode: 'home', now: at(23, 15) }).mode, 'night');
+  assert.equal(suggestMode({ mode: 'home', now: at(2) }).mode, 'night');
+  assert.equal(suggestMode({ mode: 'night', now: at(8) }).mode, 'home');
+  assert.equal(suggestMode({ mode: 'night', now: at(3) }), null);
+  assert.equal(suggestMode({ mode: 'home', now: at(14), lastActivity: at(10).getTime() }).mode, 'away');
+  assert.equal(suggestMode({ mode: 'home', now: at(14), lastActivity: at(13).getTime() }), null);
+  assert.equal(suggestMode({ mode: 'away', now: at(23, 30) }), null, 'AWAY is never nagged');
+});
+
+test('HQ: armed sensors raise alerts per mode; LOCKDOWN and PANIC trigger the alarm on Agents', async () => {
+  const { hq, db } = await mkHQ();
+  const { agentId, token } = hq.claimPairCode(hq.newPairCode().code);
+  const sent = [];
+  hq.agentOnline(db.agent(agentId), { token, sendRaw: (t) => sent.push(JSON.parse(t)), close() {} });
+  hq.updateAgent(agentId, { mission: 'motion' });
+  hq.agentEvent(agentId, { kind: 'motion', message: 'Motion detected' });
+  assert.equal(db.events({ kind: 'motion' })[0].level, 'info', 'HOME: logged, not an alarm');
+  hq.updateSettings({ mode: 'night' });
+  hq.agentEvent(agentId, { kind: 'motion', message: 'Motion detected' });
+  assert.equal(db.events({ kind: 'motion' })[0].level, 'alert', 'NIGHT: armed Agent → alert');
+  assert.equal(hq.threat.level, 'RED');
+  hq.updateAgent(agentId, { nightArmed: false });
+  hq.agentEvent(agentId, { kind: 'motion', message: 'Motion detected' });
+  assert.equal(db.events({ kind: 'motion' })[0].level, 'info', 'NIGHT: unarmed (bedroom) Agent → just logged');
+  sent.length = 0;
+  hq.updateSettings({ mode: 'lockdown' });
+  assert.ok(sent.some((m) => m.cmd?.action === 'alarm' && m.cmd.payload.on), 'entering LOCKDOWN flashes the Agents');
+  sent.length = 0;
+  hq.agentEvent(agentId, { kind: 'motion', message: 'Motion detected' });
+  const alarm = sent.find((m) => m.cmd?.action === 'alarm');
+  assert.ok(alarm && alarm.cmd.payload.reason.startsWith('INTRUSION'), 'activity in LOCKDOWN sounds the alarm');
+  hq.updateSettings({ alarm: { volume: 250, seconds: 1 } });
+  assert.equal(hq.settings().alarm.volume, 100); assert.equal(hq.settings().alarm.seconds, 5);
+  hq.updateSettings({ mode: 'home' });
+  assert.ok(sent.some((m) => m.cmd?.action === 'alarm' && !m.cmd.payload.on), 'leaving LOCKDOWN stands the alarm down');
+  hq.panic('Director phone');
+  assert.equal(hq.settings().mode, 'lockdown');
+  assert.ok(db.events({}).some((e) => e.message === 'PANIC raised by Director phone'));
+  hq.updateSettings({ mode: 'hack' });
+  assert.equal(hq.settings().mode, 'lockdown', 'unknown modes are ignored');
 });
 
 test('Mission Log: auto-delete after N days, CSV export, backup and restore', async () => {
@@ -141,6 +193,7 @@ test('API: what the Command Centre can do (and what linked phones can’t)', asy
   const api = makeApi({ hq, db, auth: makeAuth({ db }) });
   assert.equal((await api('PATCH', '/settings', { mode: 'away' })).mode, 'away');
   assert.equal((await api('PATCH', '/settings', { mode: 'hack' })).mode, 'away');
+  assert.equal((await api('PATCH', '/settings', { mode: 'night' })).mode, 'night');
   const p = await api('POST', '/pair', { role: 'agent' });
   const { agentId } = hq.claimPairCode(p.code);
   assert.equal((await api('PATCH', `/agents/${agentId}`, { mission: 'door' })).mission, 'door');
@@ -161,12 +214,13 @@ test('alerts: which events alert, quiet hours', () => {
   assert.equal(inQuietHours('22:00', '07:00', at(3)), true);
   assert.equal(inQuietHours('22:00', '07:00', at(7)), false);
   assert.equal(inQuietHours('13:00', '14:30', at(14, 15)), true);
-  assert.equal(ruleFor({ kind: 'motion', message: 'Motion' }, true).rule, 'awayMotion');
-  assert.equal(ruleFor({ kind: 'motion', message: 'Motion' }, false), null);
-  assert.equal(ruleFor({ kind: 'door', message: 'X: Door opened' }, false).rule, 'door');
-  assert.equal(ruleFor({ kind: 'door', message: 'X: Door closed' }, false), null);
-  assert.equal(ruleFor({ kind: 'knock', message: 'Knock' }, false).rule, 'knock');
-  assert.equal(ruleFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “HAWK” offline' }, false).rule, 'offline');
+  assert.equal(ruleFor({ kind: 'motion', message: 'Motion', level: 'alert' }).rule, 'awayMotion');
+  assert.equal(ruleFor({ kind: 'motion', message: 'Motion', level: 'info' }), null);
+  assert.equal(ruleFor({ kind: 'system', message: 'PANIC raised by HQ', level: 'alert' }).red, true);
+  assert.equal(ruleFor({ kind: 'door', message: 'X: Door opened' }).rule, 'door');
+  assert.equal(ruleFor({ kind: 'door', message: 'X: Door closed' }), null);
+  assert.equal(ruleFor({ kind: 'knock', message: 'Knock' }).rule, 'knock');
+  assert.equal(ruleFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “HAWK” offline' }).rule, 'offline');
 });
 
 test('Director login: hashed PIN, lockout, linked phones need a session', async () => {

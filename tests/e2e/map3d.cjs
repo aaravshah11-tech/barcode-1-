@@ -41,7 +41,7 @@ const SHOTS = process.argv[2] || '';
 
   // Place an Agent with the drawer button + a click on the map
   await page.click(`[data-agent="${cam.id}"]`);
-  check((await page.textContent('.drawer-grid')).includes('not on the map yet'), 'Agent drawer says it isn’t on the map yet');
+  check((await page.textContent('.drawer-grid')).includes('Not positioned'), 'Agent drawer says it isn’t on the map yet');
   await page.click('[data-place]');
   await page.waitForSelector('[data-maphint]:not([hidden])');
   await page.click('[data-floor3d="0"]');

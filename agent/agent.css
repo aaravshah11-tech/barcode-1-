@@ -2,25 +2,25 @@
 body { overflow-x: hidden; }
 /* The "this device is watching" banner — always on screen while it's an Agent, even when dimmed. */
 .banner-active { position: fixed; top: 0; left: 0; right: 0; z-index: 2600; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); text-align: center;
-  font: 800 .78rem var(--mono); letter-spacing: .14em; color: var(--on-accent); background: var(--green); box-shadow: 0 0 18px rgba(var(--accent-rgb), .5); }
-.banner-active.watching { background: var(--red); color: #fff; box-shadow: 0 0 18px rgba(255, 77, 77, .5); }
+  font: 600 .7rem var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--on-accent); background: var(--green); }
+.banner-active.watching { background: var(--red); color: #fff; }
 .banner-active.offline { background: var(--amber); color: #1a1000; }
 .agent-main { min-height: 100dvh; padding: 56px 16px 28px; padding-top: calc(48px + env(safe-area-inset-top)); display: grid; grid-template-rows: auto 1fr auto; gap: 14px; max-width: 760px; margin: 0 auto; }
 .id-card { display: flex; gap: 14px; align-items: center; }
 .id-card .logo { width: 54px; height: 54px; flex: none; }
-.id-card .who { font: 800 1.35rem var(--mono); letter-spacing: .12em; color: var(--green); }
+.id-card .who { font: 600 1.25rem var(--sans); letter-spacing: .1em; color: var(--text); }
 .id-card .who small { display: block; font-size: .7rem; color: var(--muted); letter-spacing: .16em; }
 .link-state { font: .78rem var(--mono); color: var(--muted); }
 .mission-area { display: grid; align-content: start; gap: 12px; min-height: 0; }
-.mission-title { font: 800 .85rem var(--mono); letter-spacing: .16em; color: var(--green); }
+.mission-title { font: 600 .72rem var(--sans); letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
 .foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font: .74rem var(--mono); color: var(--muted); }
 .foot .grow { flex: 1; }
 .big-msg { display: grid; place-items: center; text-align: center; gap: 14px; padding: 30px 10px; }
 .big-msg .logo { width: 110px; height: 110px; }
-.big-msg h1 { font: 800 1.1rem var(--mono); letter-spacing: .18em; color: var(--green); }
+.big-msg h1 { font: 600 1rem var(--sans); letter-spacing: .18em; color: var(--text); text-transform: uppercase; }
 .activate { position: fixed; inset: 0; z-index: 2500; background: rgba(5, 8, 7, .92); display: grid; place-items: center; text-align: center; padding: 24px; }
 .activate button { font-size: 1.1rem; padding: 18px 26px; }
-.readout { font: 800 clamp(2.4rem, 12vw, 4.6rem)/1 var(--mono); color: var(--green); text-shadow: 0 0 18px rgba(var(--accent-rgb), .45); }
+.readout { font: 800 clamp(2.4rem, 12vw, 4.6rem)/1 var(--mono); color: var(--text); }
 .readout small { font-size: .35em; color: var(--muted); }
 .meter { height: 12px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line-2); overflow: hidden; }
 .meter > div { height: 100%; background: var(--green); width: 0; transition: width .15s; }
@@ -64,5 +64,12 @@ body.intel-mode .agent-main { max-width: none; }
 .codes label { display: grid; gap: 4px; text-align: left; }
 .codes input { width: 170px; text-align: center; letter-spacing: .25em; font-size: 1.3rem; text-transform: uppercase; }
 .banner-active.live { font-weight: 800; letter-spacing: .14em; animation: livepulse 1.2s ease-in-out infinite; }
-@keyframes livepulse { 50% { box-shadow: 0 0 34px rgba(255, 77, 77, .9); } }
+@keyframes livepulse { 50% { background: #b9373b; } }
 @media (prefers-reduced-motion: reduce) { .banner-active.live { animation: none; } }
+
+/* alarm protocol (LOCKDOWN / PANIC) — the SENTINEL banner stays on top */
+.alarm-screen { position: fixed; inset: 0; z-index: 2500; display: grid; place-items: center; text-align: center; color: #fff; background: #7a1013; animation: alarmflash .9s steps(2) infinite; padding: 24px; }
+.alarm-title { font: 700 clamp(1.6rem, 8vw, 3.4rem)/1.1 var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.alarm-sub { margin-top: 10px; font: 600 .74rem var(--sans); letter-spacing: .3em; opacity: .85; }
+@keyframes alarmflash { 50% { background: #e5484d; } }
+@media (prefers-reduced-motion: reduce) { .alarm-screen { animation: none; background: #b9373b; } }

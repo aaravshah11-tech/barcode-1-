@@ -49,7 +49,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   await assign(cam.id, 'motion', { cooldown: 5 });
   await dash.click('[data-mode="away"]');
   await dash.waitForSelector('[data-threat].RED', { timeout: 20000 });
-  check((await dash.textContent('[data-reason]')).includes('while nobody’s home'), 'motion while nobody’s home → THREAT RED');
+  check((await dash.textContent('[data-reason]')).includes('AWAY mode'), 'motion in AWAY mode → THREAT RED');
   await dash.click('[data-mode="home"]');
   // Privacy: nothing that looks like a picture or audio ever went to HQ
   const camSent = await cam.sentNow();
@@ -121,9 +121,9 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   await bell.p.waitForFunction(() => document.querySelector('[data-knock]').textContent === 'RING HQ');
   await bell.p.click('[data-knock]');
   await bell.p.waitForSelector('text=HQ NOTIFIED');
-  await dash.waitForSelector('[data-log] >> text=Knock knock at Front door!');
-  check(true, 'DOOR PANEL: pressing the button alerts HQ (“Knock knock at Front door!”)');
-  await wall.p.waitForFunction(() => document.querySelector('[data-log]').textContent.includes('Knock knock'));
+  await dash.waitForSelector('[data-log] >> text=Door panel pressed at Front door');
+  check(true, 'DOOR PANEL: pressing the button alerts HQ (“Door panel pressed at Front door”)');
+  await wall.p.waitForFunction(() => document.querySelector('[data-log]').textContent.includes('Door panel pressed'));
   check(true, 'INTEL SCREEN updates live');
   await shot(bell.p, 'agent-panel');
   await shot(wall.p, 'agent-intel');

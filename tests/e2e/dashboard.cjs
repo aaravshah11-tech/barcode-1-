@@ -43,11 +43,11 @@ const SHOTS = process.argv[2] || '';
   check((await page.textContent('[data-scantext]')).includes('NIGHTOWL'), 'ACCESS GRANTED — welcome, codename');
   await page.waitForSelector('[data-threat]', { timeout: 10000 });
   check(true, 'Command Centre opens after login');
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('UPLINK ONLINE'), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK ONLINE'), null, { timeout: 15000 });
   check(true, 'HQ goes ONLINE (matchmaking server reached)');
   await page.waitForSelector('[data-threat].GREEN');
-  check((await page.textContent('[data-agents]')).includes('NO AGENTS YET'), 'empty Agents list explains how to recruit');
-  check((await page.textContent('[data-log]')).includes('SENTINEL // HQ ONLINE'), 'Mission Log: HQ ONLINE');
+  check((await page.textContent('[data-agents]')).includes('No agents deployed'), 'empty Agents list explains how to recruit');
+  check((await page.textContent('[data-log]')).includes('HQ session started'), 'Mission Log: HQ ONLINE');
   check(await page.evaluate(() => document.body.classList.contains('fx')), 'scanline effects on by default');
   check(await page.$$eval('.cc .panel', (p) => p.length) === 6, 'command-centre layout: map + 5 panels around it');
   await page.waitForTimeout(1200);
@@ -88,8 +88,8 @@ const SHOTS = process.argv[2] || '';
   // HOME / AWAY
   await page.click('[data-mode="away"]');
   await page.waitForSelector('[data-mode="away"][aria-pressed="true"]');
-  await page.waitForSelector('[data-log] >> text=Set to AWAY');
-  check((await page.textContent('[data-peoplelist]')).includes('AWAY'), 'AWAY switch saved, logged and shown');
+  await page.waitForSelector('[data-log] >> text=Security mode: AWAY');
+  check((await page.textContent('[data-peoplelist]')).toUpperCase().includes('AWAY'), 'AWAY switch saved, logged and shown');
   await page.click('[data-mode="home"]');
 
   // Recruit dialog
@@ -110,7 +110,7 @@ const SHOTS = process.argv[2] || '';
   check(true, 'effects can be switched off');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-export="csv"]')]);
   const csvText = require('fs').readFileSync(await csv.path(), 'utf8');
-  check(csv.suggestedFilename().endsWith('.csv') && csvText.includes('Set to AWAY'), 'Mission Log exports as CSV');
+  check(csv.suggestedFilename().endsWith('.csv') && csvText.includes('Security mode: AWAY'), 'Mission Log exports as CSV');
   const [bk] = await Promise.all([page.waitForEvent('download'), page.click('[data-backup]')]);
   const backup = JSON.parse(require('fs').readFileSync(await bk.path(), 'utf8'));
   check(backup.sentinel === 'hq-backup' && backup.events.length > 2, 'HQ backup downloads');
@@ -126,9 +126,9 @@ const SHOTS = process.argv[2] || '';
   // Data survives a reload (kept in this browser)
   await page.reload();
   await login(page, { codename: 'nightowl', pin: '13579' });
-  await page.waitForSelector('[data-log] >> text=Set to AWAY', { timeout: 15000 });
+  await page.waitForSelector('[data-log] >> text=Security mode: AWAY', { timeout: 15000 });
   check(true, 'Mission Log is still there after reloading the page');
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('UPLINK ONLINE'), null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK ONLINE'), null, { timeout: 30000 });
   check(true, 'HQ comes back ONLINE with the same HQ code after a reload');
 
   // A second HQ tab in the same browser is refused politely

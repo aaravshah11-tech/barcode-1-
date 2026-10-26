@@ -6,7 +6,7 @@ import { inQuietHours, ruleFor } from '../shared/alert-rules.js';
 
 const KEY = 'sentinel.alerts';
 export const RULES = [
-  { key: 'awayMotion', label: 'Motion, door or noise while nobody’s home (THREAT RED)', default: true },
+  { key: 'awayMotion', label: 'THREAT RED: an armed sensor goes off (AWAY, NIGHT, LOCKDOWN) or PANIC', default: true },
   { key: 'knock', label: 'Someone presses a DOOR PANEL', default: true },
   { key: 'door', label: 'A door is opened (even when someone’s home)', default: false },
   { key: 'sound', label: 'Loud sound (when someone’s home)', default: false },
@@ -28,7 +28,7 @@ if ('Notification' in window && Notification.permission === 'granted') registrat
 
 export async function notifyEvent(ev, S) {
   if (Date.now() - ev.ts > 60000) return; // only new things
-  const r = ruleFor(ev, S.settings.mode === 'away' || S.threat?.away);
+  const r = ruleFor(ev);
   if (!r) return;
   const p = prefs();
   if (!p[r.rule]) return;
@@ -75,7 +75,7 @@ function render(body, S) {
       : perm === 'denied' ? '<span class="c-red">Notifications are blocked for this site.</span> Allow them in the browser’s site settings (padlock icon), then reload.'
         : perm === 'unsupported' ? `<span class="c-amber">This browser can’t show notifications${ios ? ' unless SENTINEL is added to the Home Screen and opened from there' : ''}.</span> You’ll still get the on-screen flash and beep.`
           : 'Turn them on to hear about THREAT RED and the rest while SENTINEL is in the background.'}</p>
-    <div class="row">${perm === 'default' ? '<button class="btn-primary" data-allow>🔔 Turn on notifications</button>' : ''}<button data-test>Send a test alert</button></div>
+    <div class="row">${perm === 'default' ? '<button class="btn-primary" data-allow>Turn on notifications</button>' : ''}<button data-test>Send a test alert</button></div>
     <p class="small muted">Alerts work while SENTINEL is open on this device (it can be in a background tab on a computer). On a phone, keep SENTINEL open on screen — phones pause pages in the background.</p>
     <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
     <h2 style="margin-bottom:8px">Alert me about</h2>
@@ -96,7 +96,7 @@ function render(body, S) {
     render(body, S);
   });
   $('[data-test]', body).addEventListener('click', async () => {
-    const ok = await show('🛰 SENTINEL test alert', 'If you can read this, alerts work on this device.', 'test');
+    const ok = await show('SENTINEL test alert', 'If you can read this, alerts work on this device.', 'test');
     flash(); if (prefs().beep) siren();
     toast(ok ? 'Test alert sent' : 'Flash and beep only — notifications aren’t on for this device');
   });

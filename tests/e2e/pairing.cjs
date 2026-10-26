@@ -92,7 +92,7 @@ const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.
   await dash.click('[data-remove]');
   await dash.click('.sheet [data-ok]');
   await phone.waitForSelector('text=DISCONNECTED BY HQ', { timeout: 15000 });
-  await dash.waitForSelector('text=NO AGENTS YET');
+  await dash.waitForSelector('text=No agents deployed');
   check(true, 'Disconnect: the Agent stops and leaves the list');
   await phone.reload();
   await phone.waitForSelector('text=NOT RECRUITED');

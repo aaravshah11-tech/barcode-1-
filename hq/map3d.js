@@ -93,16 +93,11 @@ export class Map3D {
 
   buildGround() {
     this.ground.clear();
-    const grid = new THREE.GridHelper(80, 80, this.c.accent, this.c.accent);
-    grid.material.transparent = true; grid.material.opacity = 0.09; grid.material.depthWrite = false;
+    const grid = new THREE.GridHelper(80, 80, this.c.muted, this.c.muted);
+    grid.material.transparent = true; grid.material.opacity = 0.07; grid.material.depthWrite = false;
     grid.position.y = -0.01;
     this.ground.add(grid);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(18, 18.08, 96), new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.25, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2;
-    this.ground.add(ring);
-    this.sweep = new THREE.Mesh(new THREE.CircleGeometry(18, 48, 0, 0.6), new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
-    this.sweep.rotation.x = -Math.PI / 2;
-    this.ground.add(this.sweep);
+    this.sweep = null; // no radar sweep: a plain survey grid
   }
 
   // ---------- the house ----------
@@ -138,10 +133,10 @@ export class Map3D {
     const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
     geo.rotateX(Math.PI / 2); // lie flat: shape y → world z, extrude downwards…
     geo.translate(0, h, 0); // …then lift so it stands on the floor
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.85 }));
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.6 }));
     grp.add(edges);
     if (this.q.faces) {
-      const glass = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }));
+      const glass = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.02, side: THREE.DoubleSide, depthWrite: false }));
       grp.add(glass);
     }
     // the floor of the room: this is what glows when something happens there
@@ -154,7 +149,7 @@ export class Map3D {
     grp.userData.floorMesh = floor;
     if (this.q.labels) {
       const c = centroid(r.points);
-      const label = textSprite(r.name.toUpperCase(), this.c.accent, 0.5);
+      const label = textSprite(r.name.toUpperCase(), this.c.muted, 0.36);
       label.position.set(c[0], 0.35, c[1]);
       grp.add(label);
     }
@@ -198,18 +193,19 @@ export class Map3D {
       const col = !a.online ? this.c.muted : this.c.accent;
       const m = new THREE.Group();
       m.userData = { agentId: a.id, floorId: p.floorId, x: p.x, y: p.y };
-      const pin = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95 }));
+      // a plain position marker: a small square head on a thin stalk, with a ring on the floor
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), new THREE.MeshBasicMaterial({ color: col }));
       pin.position.y = 1.4; pin.userData.agentId = a.id;
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.2, 6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6 }));
-      beam.position.y = 0.7;
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.36, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.3, 6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5 }));
+      beam.position.y = 0.65;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.26, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
       // an invisible, bigger target so the marker is easy to click/tap
       const hit = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
       hit.position.y = 1.1; hit.userData.agentId = a.id;
       m.add(pin, beam, ring, hit);
-      const label = textSprite(a.codename, col, 0.42);
-      label.position.y = 1.95;
+      const label = textSprite(a.codename, col, 0.32);
+      label.position.y = 1.85;
       m.add(label);
       m.position.set(p.x, 0, p.y);
       fg.add(m);
@@ -348,7 +344,7 @@ export class Map3D {
     }
     if (this.fx && this.sweep) this.sweep.rotation.z -= dt * 1.2;
     const t = now / 1000;
-    for (const m of this.markers.values()) { m.children[0].rotation.y = t * 1.5; m.children[0].position.y = 1.4 + Math.sin(t * 2 + m.userData.x) * 0.06; }
+    void t; // markers stay still
     this.effects = this.effects.filter((fx) => {
       const k = (now - fx.t0) / fx.dur;
       if (k < 0) return true;
@@ -384,13 +380,13 @@ export class Map3D {
 /** A text label that always faces the camera. */
 function textSprite(text, color, height) {
   const c = document.createElement('canvas'), g = c.getContext('2d');
-  const font = '700 48px ui-monospace, Menlo, Consolas, monospace';
+  const font = '600 44px Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
   g.font = font;
   const w = Math.ceil(g.measureText(text).width) + 24;
   c.width = w; c.height = 64;
   g.font = font;
   g.fillStyle = `#${color.getHexString()}`;
-  g.shadowColor = g.fillStyle; g.shadowBlur = 10;
+  g.shadowBlur = 0;
   g.textBaseline = 'middle';
   g.fillText(text, 12, 34);
   const tex = new THREE.CanvasTexture(c);

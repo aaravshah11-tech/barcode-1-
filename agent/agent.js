@@ -204,6 +204,7 @@ function command(cmd) {
   else if (cmd.action === 'wake') wake();
   else if (cmd.action === 'reload') location.reload();
   else if (cmd.action === 'live') { if (p.on) startLive(); else stopLive(); }
+  else if (cmd.action === 'alarm') { if (p.on) alarmOn(p); else alarmOff(); }
   else if (cmd.action === 'disconnect') {
     stopped = true; save(null); stopMission(); link?.close();
     banner.hidden = true;
@@ -360,6 +361,35 @@ function tickDim() { if (dimEl.hidden) return; dimEl.querySelector('[data-dimclo
 function wake() { dimEl.hidden = true; armDimmer(); }
 dimEl.addEventListener('click', wake);
 addEventListener('pointerdown', () => { if (dimEl.hidden) armDimmer(); }, true);
+
+// ---------------- ALARM PROTOCOL (LOCKDOWN / PANIC): flash red, optional siren ----------------
+// Only HQ can start it (signed order). It stops by itself after the set time, or when HQ stands down.
+let alarmState = null;
+function alarmOn({ reason = 'ALARM', seconds = 30, siren = false, volume = 0.6 }) {
+  alarmOff();
+  wake();
+  const el = document.createElement('div');
+  el.className = 'alarm-screen';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `<div><div class="alarm-title">${esc(String(reason))}</div><div class="alarm-sub">SENTINEL ALARM PROTOCOL</div></div>`;
+  document.body.appendChild(el);
+  alarmState = { el, stopAt: Date.now() + Math.min(300, Math.max(3, seconds)) * 1000, timer: null };
+  navigator.vibrate?.([500, 200, 500, 200, 500]);
+  const tick = () => {
+    if (!alarmState) return;
+    if (Date.now() > alarmState.stopAt) return alarmOff();
+    if (siren && audio) {
+      const g = audio.createGain(), o = audio.createOscillator(), t = audio.currentTime;
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(700, t); o.frequency.linearRampToValueAtTime(1400, t + 0.45); o.frequency.linearRampToValueAtTime(700, t + 0.9);
+      g.gain.setValueAtTime(Math.min(1, Math.max(0, volume)) * 0.5, t); g.gain.setValueAtTime(0.0001, t + 0.9);
+      o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.92);
+    }
+    alarmState.timer = setTimeout(tick, 950);
+  };
+  tick();
+}
+function alarmOff() { if (!alarmState) return; clearTimeout(alarmState.timer); alarmState.el.remove(); alarmState = null; }
 
 // ---------------- find me: flash + beep ----------------
 let audio = null;

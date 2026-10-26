@@ -7,7 +7,7 @@ export function start(ctx) {
     <p class="mono" style="text-align:center;min-height:1.6em" data-said aria-live="assertive"></p>
     <p class="small muted" id="knock-help" style="text-align:center">Press once — HQ is told straight away.</p>`;
   const $ = (q) => ctx.root.querySelector(q);
-  const label = () => { $('[data-knock]').textContent = s.label || 'KNOCK KNOCK'; };
+  const label = () => { $('[data-knock]').textContent = s.label || 'CALL HQ'; };
   label();
   let last = 0, audio = null;
   const chime = () => {
@@ -21,7 +21,7 @@ export function start(ctx) {
     if (now - last < s.cooldown * 1000) { $('[data-said]').textContent = 'HQ already knows — please wait.'; return; }
     last = now;
     const where = ctx.agent().name;
-    ctx.report('knock', `Knock knock${where ? ` at ${where}` : ''}!`, {}, 'warn');
+    ctx.report('knock', `Door panel pressed${where ? ` at ${where}` : ''}`, {}, 'warn');
     chime();
     navigator.vibrate?.(120);
     $('[data-said]').textContent = 'HQ NOTIFIED ✓';

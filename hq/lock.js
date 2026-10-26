@@ -18,14 +18,14 @@ export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
     const setup = !st.setup;
     if (setup && remote) { root.innerHTML = frame('<p>The Director hasn’t been set up yet. Do that on the HQ computer first.</p>'); return; }
     root.innerHTML = frame(`
-      <p class="small muted" style="text-align:center;margin:0 0 14px">${setup ? 'FIRST CONTACT. Choose your Director codename and a PIN.<br>You’ll need them every time you open HQ.' : reason ? esc(reason) : 'IDENTIFY YOURSELF, DIRECTOR.'}</p>
+      <p class="small muted" style="margin:0 0 16px">${setup ? 'No operator enrolled. Choose a Director codename and PIN — you’ll need both every time HQ is opened.' : reason ? esc(reason) : 'Restricted system. Enter your operator codename and PIN.'}</p>
       <form data-login autocomplete="off">
-        <label class="field"><span>Codename</span><input name="codename" maxlength="24" autocapitalize="characters" spellcheck="false" required autofocus class="mono" style="text-transform:uppercase;letter-spacing:.18em"></label>
+        <label class="field"><span>Operator codename</span><input name="codename" maxlength="24" autocapitalize="characters" spellcheck="false" required autofocus style="text-transform:uppercase;letter-spacing:.12em"></label>
         <label class="field"><span>PIN</span><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required class="mono pin" autocomplete="${setup ? 'new-password' : 'current-password'}"></label>
         ${setup ? '<label class="field"><span>PIN again</span><input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required class="mono pin" autocomplete="new-password"></label>' : ''}
         <div class="scanner" data-scanner hidden><div class="scan-icons">${FINGERPRINT}${EYE}</div><div class="scan-line"></div><div class="scan-text mono" data-scantext>VERIFYING IDENTITY…</div></div>
         <p class="c-red small mono" data-err role="alert"></p>
-        <button class="btn-primary" style="width:100%">${setup ? 'ENROL DIRECTOR' : 'AUTHENTICATE'}</button>
+        <button class="btn-primary" style="width:100%">${setup ? 'Enrol director' : 'Authenticate'}</button>
       </form>
       ${setup ? '<p class="small muted" style="margin-top:12px">PIN = 4 to 8 digits. It’s stored only as a scrambled hash on this computer. After 5 wrong tries, login locks for a minute (longer each time).</p>' : ''}`);
     const form = $('[data-login]', root), err = $('[data-err]', root), scanner = $('[data-scanner]', root), text = $('[data-scantext]', root);
@@ -37,7 +37,7 @@ export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
       if (setup && pin !== form.pin2.value) { err.textContent = 'The two PINs don’t match.'; return; }
       const btn = form.querySelector('button');
       btn.disabled = true;
-      scanner.hidden = false; scanner.className = 'scanner'; text.textContent = setup ? 'ENROLLING BIOMETRICS…' : 'VERIFYING IDENTITY…';
+      scanner.hidden = false; scanner.className = 'scanner'; text.textContent = setup ? 'ENROLLING OPERATOR…' : 'VERIFYING CREDENTIALS…';
       sfx('scan');
       const minWait = new Promise((r) => setTimeout(r, 1300));
       try {
@@ -59,4 +59,4 @@ export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
   });
 }
 
-const frame = (inner) => `<div class="gate"><div class="hud-bg"></div><div class="panel hud-in login-panel">${LOGO}<h1 class="mono glitch login-title">SENTINEL // SECURE ACCESS</h1>${inner}</div></div>`;
+const frame = (inner) => `<div class="gate"><div class="hud-bg"></div><div class="panel hud-in login-panel">${LOGO}<h1 class="login-title">Sentinel · Secure access</h1>${inner}<p class="small" style="margin:16px 0 0;color:var(--dim)">All access attempts are logged.</p></div></div>`;
