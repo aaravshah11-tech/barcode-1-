@@ -73,3 +73,10 @@ body.intel-mode .agent-main { max-width: none; }
 .alarm-sub { margin-top: 10px; font: 600 .74rem var(--sans); letter-spacing: .3em; opacity: .85; }
 @keyframes alarmflash { 50% { background: #e5484d; } }
 @media (prefers-reduced-motion: reduce) { .alarm-screen { animation: none; background: #b9373b; } }
+
+/* comms: a message from HQ */
+.comms-screen { position: fixed; inset: 0; z-index: 2400; display: grid; place-items: center; background: rgba(6, 9, 13, .94); padding: 24px; padding-top: 48px; }
+.comms-card { width: min(640px, 100%); border: 1px solid var(--line-2); border-left: 4px solid var(--green); background: var(--panel); padding: 20px 22px; }
+.comms-head { font: 600 .66rem var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.comms-text { font: 600 clamp(1.4rem, 6vw, 2.6rem)/1.25 var(--sans); margin: 16px 0 22px; color: var(--text); overflow-wrap: anywhere; }
+.comms-card button { width: 100%; min-height: 52px; }

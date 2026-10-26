@@ -7,6 +7,7 @@ import { HQ } from './brain/hq.js';
 import { makeApi } from './brain/api.js';
 import { startHost } from './brain/host.js';
 import { makeAuth } from './brain/auth.js';
+import { startNetmon } from './brain/netmon.js';
 import { dial } from '../shared/link.js';
 
 export async function startLocal({ onStatus }) {
@@ -23,6 +24,9 @@ export async function startLocal({ onStatus }) {
   const db = await openStore();
   const hq = new HQ({ db }).start();
   const auth = makeAuth({ db, idleMin: () => hq.settings().autoLockMin });
+  const netmon = startNetmon({ hq, db });
+  hq.netSummary = () => netmon.summary();
+  hq.netmon = netmon;
   const call = makeApi({ hq, db, auth });
   const listeners = new Set();
   hq.dashboards.add({ send: (text) => { const msg = JSON.parse(text); listeners.forEach((f) => f(msg)); } });
@@ -31,7 +35,7 @@ export async function startLocal({ onStatus }) {
   if (!host) hq.info = { ...hq.info, hqId: null };
   if (!db.persistent) onStatus?.({ state: net.state, detail: 'This browser won’t let HQ save its Mission Log (private window?). It will be lost when you close the page.' });
   hq.logEvent({ kind: 'system', message: 'HQ session started' });
-  window.__hq = { hq, db, api: call }; // for the automated tests
+  window.__hq = { hq, db, api: call, netmon }; // for the automated tests
   return {
     local: true,
     files: { get: (k) => db.getFile(k), put: (k, b) => db.putFile(k, b), del: (k) => db.deleteFile(k) },

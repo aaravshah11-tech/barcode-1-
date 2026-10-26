@@ -8,7 +8,7 @@ import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
-  fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15,
+  fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15, speedEvery: 0,
   nightStart: '22:30', nightEnd: '07:00', // when NIGHT is suggested (and the siren stays quiet)
   alarm: { enabled: true, siren: true, volume: 60, seconds: 30, quietStart: '23:00', quietEnd: '07:00' }, // LOCKDOWN alarm protocol
 };
@@ -57,6 +57,7 @@ export class HQ extends Emitter {
     const prevMode = s.mode;
     if ('mode' in patch && MODES.includes(patch.mode)) s.mode = patch.mode;
     for (const k of ['nightStart', 'nightEnd']) if (k in patch) s[k] = time(patch[k], s[k]);
+    if ('speedEvery' in patch) s.speedEvery = [0, 1, 6, 24].includes(Number(patch.speedEvery)) ? Number(patch.speedEvery) : 0;
     if (patch.alarm && typeof patch.alarm === 'object') {
       const a = { ...s.alarm }, p = patch.alarm;
       if ('enabled' in p) a.enabled = !!p.enabled;
@@ -104,6 +105,8 @@ export class HQ extends Emitter {
       threat: this.threat,
       settings: this.settings(),
       house: this.house(),
+      net: this.netSummary?.() || null,
+      messages: this.messages || [],
       missions: MISSIONS,
       info: this.info,
       now: this.now(),
@@ -193,6 +196,10 @@ export class HQ extends Emitter {
     this.online.set(agent.id, { conn, sendRaw: conn.sendRaw, close: conn.close, token: conn.token, mission: agent.mission, status: {}, connectedAt: this.now() });
     this.db.updateAgent(agent.id, { lastSeen: this.now() });
     if (!prev) this.logEvent({ kind: 'agent', agentId: agent.id, message: `${agentLabel(agent)} “${agent.codename}” online` });
+    // messages that arrived while it was away
+    const waiting = (this.pending?.get(agent.id) || []).filter((m) => this.now() - m.ts < 1800000);
+    this.pending?.delete(agent.id);
+    if (waiting.length) setTimeout(() => waiting.forEach((m) => this.command(agent.id, 'message', m)), 500);
     this.pushAgent(agent.id);
     return { t: 'welcome', now: this.now(), agentId: agent.id, codename: agent.codename, label: agentLabel(agent), name: agent.name, mission: agent.mission, settings: cleanSettings(agent.mission, agent.settings), fx: this.settings().fx, theme: this.settings().theme };
   }
@@ -216,6 +223,7 @@ export class HQ extends Emitter {
     if (typeof status.visible === 'boolean') clean.visible = status.visible;
     if (typeof status.state === 'string') clean.state = status.state.slice(0, 80);
     if (typeof status.level === 'number') clean.level = Math.round(status.level * 10) / 10; // e.g. sound dB or brightness %
+    if (typeof status.rtt === 'number') clean.rtt = Math.max(0, Math.min(60000, Math.round(status.rtt))); // link round-trip time (ms)
     o.status = { ...o.status, ...clean, at: this.now() };
     const patch = { lastSeen: this.now() };
     if ('battery' in clean) patch.battery = clean.battery;
@@ -256,6 +264,46 @@ export class HQ extends Emitter {
     if (!msg) return;
     const text = JSON.stringify(msg);
     for (const d of this.dashboards) d.send(text); // dashboards only — not INTEL SCREEN Agents
+  }
+
+  // ---------- comms: messages to Agents ----------
+  /**
+   * Send a message to one Agent, every Agent ('all') or every Agent in a room ('room:<id>').
+   * Offline Agents get it when they reconnect (within 30 minutes).
+   */
+  sendMessage({ target = 'all', text = '', speak = false, from = 'HQ' } = {}) {
+    text = String(text).replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (!text) return null;
+    const agents = this.db.agents();
+    let list = [], label = '';
+    if (target === 'all') { list = agents; label = 'all Agents'; }
+    else if (String(target).startsWith('room:')) {
+      const roomId = String(target).slice(5);
+      const room = this.house().floors.flatMap((f) => f.rooms).find((r) => r.id === roomId);
+      list = agents.filter((a) => a.place?.roomId === roomId);
+      label = room ? room.name : 'that room';
+    } else { list = agents.filter((a) => a.id === target); label = list[0] ? `${agentLabel(list[0])} ${list[0].codename}` : ''; }
+    if (!list.length) return null;
+    const msg = { id: newId(), text, speak: !!speak, from: String(from).slice(0, 40), ts: this.now() };
+    this.pending ||= new Map();
+    let delivered = 0;
+    for (const a of list) {
+      if (this.command(a.id, 'message', msg)) delivered++;
+      else this.pending.set(a.id, [...(this.pending.get(a.id) || []).filter((m) => this.now() - m.ts < 1800000), msg]);
+    }
+    this.messages = [{ ...msg, label, to: list.map((a) => a.id), acks: [] }, ...(this.messages || [])].slice(0, 20);
+    this.logEvent({ kind: 'comms', message: `Message to ${label}: “${text}”${delivered < list.length ? ` (${list.length - delivered} offline — will be delivered when they reconnect)` : ''}` });
+    this.broadcast({ t: 'comms', messages: this.messages });
+    return { id: msg.id, delivered, queued: list.length - delivered };
+  }
+  /** An Agent's screen confirmed it saw a message. */
+  agentAck(agentId, msgId) {
+    const m = (this.messages || []).find((x) => x.id === msgId);
+    const a = this.db.agent(agentId);
+    if (!m || !a || m.acks.includes(agentId)) return;
+    m.acks.push(agentId);
+    this.logEvent({ kind: 'comms', agentId, message: `${agentLabel(a)} ${a.codename} acknowledged: “${m.text.slice(0, 60)}”` });
+    this.broadcast({ t: 'comms', messages: this.messages });
   }
 
   // ---------- panic button & alarm protocol ----------

@@ -179,6 +179,7 @@ async function onMessage(msg) {
     return command(msg.cmd);
   }
   if (msg.t === 'pong') return;
+  if (msg.t === 'hqping') { send({ t: 'hqpong', ts: msg.ts }); return; }
   if (msg.t === 'state') lastState = msg;
   mission.inst?.onHq?.(msg); // INTEL SCREEN gets the dashboard's live updates
 }
@@ -205,6 +206,7 @@ function command(cmd) {
   else if (cmd.action === 'reload') location.reload();
   else if (cmd.action === 'live') { if (p.on) startLive(); else stopLive(); }
   else if (cmd.action === 'alarm') { if (p.on) alarmOn(p); else alarmOff(); }
+  else if (cmd.action === 'message') showMessage(p);
   else if (cmd.action === 'disconnect') {
     stopped = true; save(null); stopMission(); link?.close();
     banner.hidden = true;
@@ -361,6 +363,28 @@ function tickDim() { if (dimEl.hidden) return; dimEl.querySelector('[data-dimclo
 function wake() { dimEl.hidden = true; armDimmer(); }
 dimEl.addEventListener('click', wake);
 addEventListener('pointerdown', () => { if (dimEl.hidden) armDimmer(); }, true);
+
+// ---------------- COMMS: a message from HQ, full screen (read aloud if asked) ----------------
+const shownMsgs = new Set();
+function showMessage({ id, text = '', from = 'HQ', speak = false, ts = Date.now() }) {
+  if (!id || shownMsgs.has(id)) return;
+  shownMsgs.add(id);
+  wake();
+  document.querySelector('.comms-screen')?.remove();
+  const el = document.createElement('div');
+  el.className = 'comms-screen';
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-label', 'Message from HQ');
+  el.innerHTML = `<div class="comms-card"><div class="comms-head">Incoming transmission · ${esc(String(from))} · ${new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
+    <p class="comms-text">${esc(String(text))}</p><button class="btn-primary" data-ack>Acknowledge</button></div>`;
+  document.body.appendChild(el);
+  navigator.vibrate?.([120, 80, 120]);
+  if (audio) { const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime; o.frequency.setValueAtTime(880, t); o.frequency.setValueAtTime(1320, t + 0.12); g.gain.setValueAtTime(0.15, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.32); }
+  if (speak && 'speechSynthesis' in window) {
+    try { const u = new SpeechSynthesisUtterance(String(text)); u.lang = 'en-GB'; u.rate = 0.95; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch { /* speech not available */ }
+  }
+  el.querySelector('[data-ack]').addEventListener('click', () => { send({ t: 'ack', id }); el.remove(); try { speechSynthesis.cancel(); } catch { /* ignore */ } });
+}
 
 // ---------------- ALARM PROTOCOL (LOCKDOWN / PANIC): flash red, optional siren ----------------
 // Only HQ can start it (signed order). It stops by itself after the set time, or when HQ stands down.

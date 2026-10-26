@@ -42,6 +42,7 @@ function general(body, S, onChange) {
     <h2 style="margin-bottom:8px">Look &amp; sound</h2>
     <div class="themes" role="group" aria-label="Theme">${THEMES.map(([k, l]) => `<button type="button" class="theme-chip t-${k}" data-theme="${k}" aria-pressed="${st.theme === k}"><i></i>${esc(l)}</button>`).join('')}</div>
     <label class="field" style="margin-top:12px"><span>3D map quality (this device)</span><select data-q3d style="max-width:260px">${[['low', 'Low — smooth on older laptops'], ['medium', 'Medium'], ['high', 'High — sharpest']].map(([k, l]) => `<option value="${k}" ${q3d() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    ${local ? `<label class="field" style="margin-top:12px"><span>Automatic internet speed test</span><select data-speedevery style="max-width:260px">${[[0, 'Off (run it by hand)'], [24, 'Once a day'], [6, 'Every 6 hours'], [1, 'Every hour (uses ~250 MB a day)']].map(([v, l]) => `<option value="${v}" ${Number(st.speedEvery || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Each test downloads about 8 MB and uploads 2 MB.</div></label>` : ''}
     <label class="field" style="margin-top:12px"><span>Sound volume (this device)</span><div class="row"><input type="range" min="0" max="100" step="5" value="${Math.round(sp.volume * 100)}" data-volume style="flex:1"><label class="row small" style="gap:6px"><input type="checkbox" data-muted ${sp.muted ? 'checked' : ''}> Mute</label></div></label>
     ${hr}
     <form data-general>
@@ -72,6 +73,7 @@ function general(body, S, onChange) {
   body.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', async () => {
     try { const s = await S.api('/settings', { method: 'PATCH', body: { theme: b.dataset.theme } }); onChange?.(s); body.querySelectorAll('[data-theme]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); sfx('granted'); } catch (x) { toast(x.message, { kind: 'err' }); }
   }));
+  $('[data-speedevery]', body)?.addEventListener('change', async (e) => { try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { speedEvery: Number(e.target.value) } })); toast('Speed test schedule saved'); } catch (x) { toast(x.message, { kind: 'err' }); } });
   $('[data-q3d]', body).addEventListener('change', (e) => { try { localStorage.setItem('sentinel.q3d', e.target.value); } catch { /* ignore */ } window.__map3d?.setQuality(e.target.value); toast('3D quality saved for this device'); });
   $('[data-volume]', body).addEventListener('change', (e) => { setSfx({ volume: Number(e.target.value) / 100, muted: false }); $('[data-muted]', body).checked = false; sfx('beep'); });
   $('[data-muted]', body).addEventListener('change', (e) => setSfx({ muted: e.target.checked }));

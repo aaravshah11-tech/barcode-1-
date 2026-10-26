@@ -49,7 +49,7 @@ const SHOTS = process.argv[2] || '';
   check((await page.textContent('[data-agents]')).includes('No agents deployed'), 'empty Agents list explains how to recruit');
   check((await page.textContent('[data-log]')).includes('HQ session started'), 'Mission Log: HQ ONLINE');
   check(await page.evaluate(() => document.body.classList.contains('fx')), 'scanline effects on by default');
-  check(await page.$$eval('.cc .panel', (p) => p.length) === 6, 'command-centre layout: map + 5 panels around it');
+  check(await page.$$eval('.cc .panel', (p) => p.length) === 7, 'command-centre layout: map + 6 panels around it');
   await page.waitForTimeout(1200);
   await shot('dashboard-empty');
 

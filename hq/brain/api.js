@@ -30,6 +30,12 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/state' && m === 'GET') return hq.snapshot();
     if (p === '/settings' && m === 'PATCH') return hq.updateSettings(body);
     if (p === '/house' && m === 'GET') return hq.house();
+    if (p === '/net/speedtest' && m === 'POST') { if (!hq.netmon) throw fail(409, 'Speed tests run on the HQ computer.'); return hq.netmon.speedTest(); }
+    if (p === '/comms' && m === 'POST') {
+      const r = hq.sendMessage({ target: String(body.target || 'all'), text: body.text, speak: body.speak, from: who.remote ? (who.label || 'a linked phone') : 'HQ' });
+      if (!r) throw fail(400, 'Type a message, and pick an Agent (or a room with Agents in it).');
+      return r;
+    }
     if (p === '/panic' && m === 'POST') return hq.panic(who.remote ? (who.label || 'a linked phone') : 'HQ');
     if (p === '/alarm/stop' && m === 'POST') { hq.standDown(); return { ok: true }; }
     if (p === '/alarm/test' && m === 'POST') return { agents: hq.alarm({ reason: 'ALARM TEST', seconds: 4, force: true }) };

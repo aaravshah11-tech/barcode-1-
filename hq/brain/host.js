@@ -52,7 +52,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
 
   function handle(conn) {
     conns.add(conn);
-    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, frame = null, session = null;
+    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, frame = null, session = null, rttTimer = null;
     const unlockDash = () => { hq.dashboards.add(dash); send(hq.snapshot()); };
     const send = (obj) => { if (conn.open) try { conn.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
     const close = () => { try { conn.close(); } catch { /* ignore */ } };
@@ -85,6 +85,10 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
           clearTimeout(offlineTimers.get(a.id)); offlineTimers.delete(a.id);
           conn2 = { token: String(msg.token), sendRaw: (text) => send(text), close };
           send(hq.agentOnline(a, conn2));
+          // measure the link's round-trip time now and then (shown in Agent diagnostics)
+          const pingAgent = () => send({ t: 'hqping', ts: Date.now() });
+          setTimeout(pingAgent, 1500);
+          rttTimer = setInterval(pingAgent, 20000);
           if (a.mission === 'intel') send(hq.snapshot());
           if (msg.status) hq.agentStatus(a.id, msg.status);
           return;
@@ -108,6 +112,8 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
         if (msg.t === 'status') hq.agentStatus(me.id, msg);
         else if (msg.t === 'event') hq.agentEvent(me.id, msg);
         else if (msg.t === 'grid') hq.agentSetGrid(me.id, String(msg.key || ''), msg.cells);
+        else if (msg.t === 'ack') hq.agentAck(me.id, String(msg.id || ''));
+        else if (msg.t === 'hqpong' && typeof msg.ts === 'number') hq.agentStatus(me.id, { rtt: Date.now() - msg.ts });
         else if (msg.t === 'frame') {
           // Live view pictures arrive in pieces; put them back together (never stored).
           if (typeof msg.error === 'string') return hq.agentFrame(me.id, { error: msg.error });
@@ -133,7 +139,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
 
     const gone = () => {
       if (!conns.delete(conn)) return;
-      clearTimeout(deny); clearInterval(watch);
+      clearTimeout(deny); clearInterval(watch); clearInterval(rttTimer);
       if (dash) hq.dashboards.delete(dash);
       if (role === 'agent') {
         const aid = me.id, c = conn2;

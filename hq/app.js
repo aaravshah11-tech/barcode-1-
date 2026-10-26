@@ -132,7 +132,7 @@ function launch() {
 }
 
 function apply(st) {
-  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house;
+  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || [];
 }
 
 const started = Date.now();
@@ -173,8 +173,16 @@ function shell() {
     <div class="col-l">
     ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
     ${panel('p-home', 0.35, '<div class="panel-head"><h2>Security</h2></div><div data-peoplelist></div>')}
-    ${panel('p-net', 0.45, '<div class="panel-head"><h2>Network</h2></div><dl class="kv netinfo" data-network></dl>')}
+    ${panel('p-net', 0.45, '<div class="panel-head"><h2>Network</h2></div><dl class="kv netinfo" data-network></dl><div data-netchart></div><div data-netextra></div>')}
     </div><div class="col-r">
+    ${panel('p-comms', 0.3, `<div class="panel-head"><h2>Comms</h2></div>
+      <form data-comms class="comms-form">
+        <select name="target" aria-label="Send to" data-commstarget></select>
+        <input name="text" maxlength="200" placeholder="Message, e.g. Dinner is ready" required autocomplete="off">
+        <div class="row" style="justify-content:space-between"><label class="row small" style="gap:6px"><input type="checkbox" name="speak" checked> Read aloud on the Agent</label><button class="btn-primary">Transmit</button></div>
+        <div class="quick">${['Dinner is ready', 'Lights out in 10 minutes', 'Leaving in 5 minutes', 'Come downstairs'].map((q) => `<button type="button" class="small" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+      </form>
+      <ol class="sent" data-sent></ol>`)}
     ${panel('p-intel', 0.3, '<div class="panel-head"><h2>Situation</h2></div><div data-intel></div>')}
     ${panel('p-log', 0.4, `<div class="panel-head"><h2>Mission Log</h2></div>
       <div class="filters" role="group" aria-label="Filter" style="margin-bottom:8px">${[['all', 'All'], ['alerts', 'Alerts'], ['motion', 'Motion'], ['door', 'Door'], ['agent', 'Agents']].map(([k, l]) => `<button data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div>
@@ -210,6 +218,8 @@ async function onClick(e) {
   if ('fit3d' in b.dataset) { map3d?.frame(map3d.floorSel); return; }
   if (b.dataset.planfloor) { S.planFloor = Number(b.dataset.planfloor); renderPlan(); return; }
   if ('panic' in b.dataset) return panic();
+  if (b.dataset.quick) { const f = $('[data-comms]'); f.text.value = b.dataset.quick; f.text.focus(); return; }
+  if ('speedtest' in b.dataset) { b.disabled = true; b.textContent = 'Testing…'; try { const r = await T.api('/net/speedtest', { method: 'POST' }); toast(`Speed test: ${r.down} Mbps down${r.up != null ? ` · ${r.up} Mbps up` : ''}`); } catch (x) { toast(x.message, { kind: 'err' }); } renderNetwork(); return; }
   if ('standdown' in b.dataset) { try { await T.api('/alarm/stop', { method: 'POST' }); toast('Alarm stood down on all Agents'); } catch (x) { toast(x.message, { kind: 'err' }); } return; }
   if (b.dataset.dismiss) { S.dismissed = { ...(S.dismissed || {}), [b.dataset.dismiss]: Date.now() }; renderPeople(); return; }
   if (b.dataset.mode) {
@@ -241,6 +251,9 @@ function onMsg(msg) {
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
   else if (msg.t === 'frame') liveFrame(msg);
+  else if (msg.t === 'net') { S.net = msg.net; renderNetwork(); }
+  else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
+  else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
   else if (msg.t === 'house') { S.house = msg.house; renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); }
 }
 let agents3dTimer = null;
@@ -278,7 +291,7 @@ function addEvent(ev) {
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); }
+function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); }
 
 // ---------------- the floor plan on the map panel (the 3D map replaces this in the next upgrade) ----------------
 const houseHasRooms = () => !!S.house?.floors?.some((f) => f.rooms.length);
@@ -391,13 +404,14 @@ function agentCard(a) {
     <span class="dot ${a.online ? (recentLevel(a.id) ? 'warn' : 'on') : ''}"></span>
     <span class="a-name"><small>${esc(a.label)}</small>${esc(a.codename)}${a.name ? ` <small>· ${esc(a.name)}</small>` : ''}</span>
     <span class="a-mission">${m ? `${m.glyph} ${esc(m.name)}` : ''}</span>
-    <span class="a-sub"><span>${a.online ? '<span class="c-green">ONLINE</span>' : 'OFFLINE'}</span><span data-ago="${a.online ? (st.at || a.lastSeen || '') : (a.lastSeen || '')}">last signal ${ago(a.online ? st.at || a.lastSeen : a.lastSeen)}</span>${batt ? `<span class="batt">▮ ${batt}</span>` : ''}${level ? `<span>${level}</span>` : ''}${st.state ? `<span>${esc(st.state)}</span>` : ''}</span>
+    <span class="a-sub"><span>${a.online ? '<span class="c-green">ONLINE</span>' : 'OFFLINE'}</span><span data-ago="${a.online ? (st.at || a.lastSeen || '') : (a.lastSeen || '')}">last signal ${ago(a.online ? st.at || a.lastSeen : a.lastSeen)}</span>${batt ? `<span class="batt">▮ ${batt}</span>` : ''}${level ? `<span>${level}</span>` : ''}${a.online && st.rtt != null ? `<span class="mono">${st.rtt} ms</span>` : ''}${st.state ? `<span>${esc(st.state)}</span>` : ''}</span>
   </button>`;
 }
 
 function renderAgents() {
   const box = $('[data-agents]');
   if (!box) return;
+  renderComms();
   if (!box.dataset.drag) { box.dataset.drag = '1'; box.addEventListener('dragstart', (e) => { const id = e.target.closest('[data-agent]')?.dataset.agent; if (id) { e.dataTransfer.setData('text/sentinel-agent', id); e.dataTransfer.effectAllowed = 'move'; if (S.mapView !== '3d' && houseHasRooms()) { S.mapView = '3d'; launchMapView(); } } }); }
   $('[data-count]').textContent = S.agents.length ? `(${S.agents.filter((a) => a.online).length}/${S.agents.length} online)` : '';
   box.innerHTML = S.agents.length ? S.agents.map(agentCard).join('')
@@ -474,18 +488,81 @@ function countUp(el, to, suffix = '') {
   requestAnimationFrame(step);
 }
 
-// ---------------- network panel ----------------
+// ---------------- network panel: internet health, speed tests, Agent links ----------------
 function renderNetwork() {
   const box = $('[data-network]');
   if (!box) return;
-  const on = S.agents.filter((a) => a.online).length;
+  const n = S.net || {};
+  const sp = n.speed?.at(-1);
   const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
-  box.innerHTML = row('UPLINK', `<span class="${net.state === 'online' ? 'c-green' : net.state === 'connecting' ? 'c-amber' : 'c-red'}">${esc((net.state || '').toUpperCase())}</span>`)
-    + row('INTERNET', navigator.onLine === false ? '<span class="c-red">OFFLINE</span>' : '<span class="c-green">CONNECTED</span>')
-    + row('AGENTS LINKED', `${on} / ${S.agents.length}`)
-    + (MODE === 'hq' && S.info.hqId ? row('HQ CODE', `<span class="mono c-green">${esc(hqCode())}</span>`) : '')
-    + row('CHANNEL', 'ENCRYPTED · PEER-TO-PEER');
+  const links = S.agents.filter((a) => a.online);
+  box.innerHTML = row('Uplink', `<span class="${net.state === 'online' ? 'c-green' : net.state === 'connecting' ? 'c-amber' : 'c-red'}">${esc(net.state === 'online' ? 'Online' : net.state === 'connecting' ? 'Connecting' : 'Offline')}</span>${MODE === 'hq' && S.info.hqId ? ` <span class="muted">· HQ code ${esc(hqCode())}</span>` : ''}`)
+    + row('Internet', n.online == null ? '<span class="muted">checking…</span>' : n.online ? `<span class="c-green">Connected</span> <span class="muted mono">${n.latency} ms</span>` : '<span class="c-red">Down</span>')
+    + row('Uptime 24 h', n.uptime24h == null ? '—' : `<span class="mono">${n.uptime24h}%</span>${n.outages?.length ? ` <span class="muted">· ${n.outages.length} outage${n.outages.length === 1 ? '' : 's'}</span>` : ''}`)
+    + row('Speed', sp ? `<span class="mono">${sp.down} ↓${sp.up != null ? ` · ${sp.up} ↑` : ''} Mbps</span> <span class="muted">${esc(ago(sp.t))}</span>` : '<span class="muted">not tested yet</span>');
+  const chart = $('[data-netchart]');
+  if (chart) chart.innerHTML = latencyChart(n.recent || []);
+  const extra = $('[data-netextra]');
+  if (extra) extra.innerHTML = `
+    <div class="row" style="margin-top:8px">${MODE === 'hq' ? `<button class="small" data-speedtest ${S.netTesting ? 'disabled' : ''}>${S.netTesting ? 'Testing…' : 'Run speed test'}</button>` : ''}</div>
+    ${links.length ? `<table class="links"><caption class="sr-only">Agent links</caption><thead><tr><th>Agent</th><th>Link</th><th>Battery</th></tr></thead><tbody>${links.map((a) => `<tr><td>${esc(a.codename)}</td><td class="mono">${a.status?.rtt != null ? `${a.status.rtt} ms` : '—'}</td><td class="mono">${typeof a.status?.battery === 'number' ? `${Math.round(a.status.battery * 100)}%` : '—'}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${n.outages?.length ? `<p class="small muted" style="margin:8px 0 0">Last outage: ${esc(new Date(n.outages[0].from).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }))}${n.outages[0].to ? `, ${Math.max(1, Math.round((n.outages[0].to - n.outages[0].from) / 60000))} min` : ' — ongoing'}</p>` : ''}
+    <p class="small" style="margin:8px 0 0;color:var(--dim)">Wi-Fi device scanning isn’t possible from a web page.</p>`;
 }
+
+/** Internet latency over the last 2 hours: one line, gaps (and red ticks) where the internet was down. Hover for values. */
+function latencyChart(samples) {
+  if (samples.length < 2) return '<p class="small muted" style="margin:6px 0">Latency chart appears after a few minutes of checks.</p>';
+  const W = 300, H = 64, pad = 2, t1 = samples.at(-1).t, t0 = t1 - 120 * 60000;
+  const vals = samples.filter((p) => p.ms != null).map((p) => p.ms);
+  const max = Math.max(50, ...vals) * 1.15;
+  const x = (t) => pad + ((t - t0) / (t1 - t0)) * (W - pad * 2), y = (ms) => H - 6 - (ms / max) * (H - 14);
+  let d = '', pen = false;
+  for (const p of samples) { if (p.ms == null) { pen = false; continue; } d += `${pen ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.ms).toFixed(1)}`; pen = true; }
+  const down = samples.filter((p) => p.ms == null).map((p) => `<rect x="${(x(p.t) - 1.5).toFixed(1)}" y="${H - 4}" width="3" height="4" class="down"/>`).join('');
+  return `<figure class="netchart" data-points='${esc(JSON.stringify(samples.map((p) => [p.t, p.ms])))}'>
+    <figcaption class="small muted">Internet latency · last 2 h · max ${Math.round(max / 1.15)} ms</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Internet latency over the last 2 hours"><line x1="0" x2="${W}" y1="${H - 6}" y2="${H - 6}" class="axis"/><path d="${d}" class="lat"/>${down}<line class="cross" x1="0" x2="0" y1="0" y2="${H}" hidden/></svg>
+    <div class="tip mono" hidden></div></figure>`;
+}
+document.addEventListener('pointermove', (e) => {
+  const fig = e.target.closest?.('.netchart');
+  document.querySelectorAll('.netchart .tip').forEach((t) => { if (!fig || !fig.contains(t)) t.hidden = true; });
+  if (!fig) return;
+  const pts = JSON.parse(fig.dataset.points), svg = fig.querySelector('svg'), r = svg.getBoundingClientRect();
+  const t1 = pts.at(-1)[0], t0 = t1 - 120 * 60000, t = t0 + ((e.clientX - r.left) / r.width) * (t1 - t0);
+  const p = pts.reduce((best, q) => (Math.abs(q[0] - t) < Math.abs(best[0] - t) ? q : best), pts[0]);
+  const cross = svg.querySelector('.cross'), tip = fig.querySelector('.tip');
+  const cx = ((p[0] - t0) / (t1 - t0)) * 300;
+  cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.hidden = false;
+  tip.hidden = false;
+  tip.textContent = `${new Date(p[0]).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · ${p[1] == null ? 'down' : `${p[1]} ms`}`;
+  tip.style.left = `${Math.min(r.width - 90, Math.max(0, e.clientX - r.left - 40))}px`;
+});
+
+// ---------------- comms panel ----------------
+function renderComms() {
+  const sel = $('[data-commstarget]');
+  if (sel) {
+    const keep = sel.value;
+    const rooms = (S.house?.floors || []).flatMap((f) => f.rooms.filter((r) => S.agents.some((a) => a.place?.roomId === r.id)).map((r) => [`room:${r.id}`, `Room: ${r.name}`]));
+    sel.innerHTML = `<option value="all">All Agents</option>${rooms.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}${S.agents.map((a) => `<option value="${esc(a.id)}">${esc(`${a.label} ${a.codename}${a.name ? ` · ${a.name}` : ''}`)}</option>`).join('')}`;
+    if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  }
+  const ol = $('[data-sent]');
+  if (ol) ol.innerHTML = (S.messages || []).slice(0, 4).map((m) => `<li><span class="grow">“${esc(m.text)}” <span class="muted">→ ${esc(m.label)}</span></span><span class="small ${m.acks.length >= m.to.length ? 'c-green' : 'muted'}">${m.acks.length}/${m.to.length} ack</span></li>`).join('');
+}
+document.addEventListener('submit', async (e) => {
+  if (!e.target.matches('[data-comms]')) return;
+  e.preventDefault();
+  const f = e.target;
+  try {
+    const r = await T.api('/comms', { method: 'POST', body: { target: f.target.value, text: f.text.value, speak: f.speak.checked } });
+    toast(r.queued ? `Transmitted to ${r.delivered}; ${r.queued} offline (delivered when they reconnect)` : `Transmitted to ${r.delivered} Agent${r.delivered === 1 ? '' : 's'}`);
+    f.text.value = '';
+    sfx('blip');
+  } catch (x) { toast(x.message, { kind: 'err' }); }
+});
 
 // ---------------- intel panel: local time + world clocks ----------------
 const WORLD = [['LONDON', 'Europe/London'], ['NEW YORK', 'America/New_York'], ['TOKYO', 'Asia/Tokyo'], ['SYDNEY', 'Australia/Sydney']];
