@@ -5,12 +5,27 @@ import { missionById } from '../../shared/missions.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
-export function makeApi({ hq, db }) {
-  /** method, path (e.g. '/agents/abc'), body. `who.remote` = a linked phone (no backups/restores from there). */
+export function makeApi({ hq, db, auth }) {
+  /**
+   * method, path (e.g. '/agents/abc'), body.
+   * `who.remote` = a linked phone: it must log in with codename + PIN first (`who.session`),
+   * and can't make backups/restores or set up the Director.
+   */
   return async function api(method, path, body = {}, who = {}) {
     const url = new URL(path, 'https://hq');
     const p = url.pathname, m = method.toUpperCase();
     body ||= {};
+
+    // ----- login -----
+    if (p === '/auth/status' && m === 'GET') return auth.status();
+    if (p === '/auth/setup' && m === 'POST') { if (who.remote) throw fail(403, 'Set up the Director on the HQ computer.'); const r = await auth.setup(body); hq.logEvent({ kind: 'system', message: `Director ${r.codename} enrolled` }); return r; }
+    if (p === '/auth/unlock' && m === 'POST') {
+      try { const r = await auth.unlock(body); hq.logEvent({ kind: 'system', message: `${r.codename} logged in${who.remote ? ' from a linked phone' : ''}` }); return r; }
+      catch (e) { if (e.status === 401 || e.status === 429) hq.logEvent({ kind: 'system', level: 'warn', message: `Failed login attempt${who.remote ? ' from a linked phone' : ''}` }); throw e; }
+    }
+    if (p === '/auth/lock' && m === 'POST') { auth.lock(who.session || body.session); return { ok: true }; }
+    if (who.remote && !auth.valid(who.session)) throw fail(401, 'Locked — log in with your codename and PIN.');
+    if (p === '/auth/change' && m === 'POST') return auth.change(body);
 
     if (p === '/state' && m === 'GET') return hq.snapshot();
     if (p === '/settings' && m === 'PATCH') return hq.updateSettings(body);

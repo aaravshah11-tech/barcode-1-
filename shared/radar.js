@@ -2,6 +2,14 @@
 const TAU = Math.PI * 2;
 const hash = (s) => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 const COLORS = { on: '#39ff88', off: '#4d6b5a', warn: '#ffb627', alert: '#ff4d4d' };
+let ACC = '57,255,136';
+/** Follow the current theme's colours (CLASSIC / MI6 / RED OPS). */
+export function themeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  ACC = (cs.getPropertyValue('--accent-rgb') || '57,255,136').trim().replace(/\s+/g, '');
+  COLORS.on = cs.getPropertyValue('--green').trim() || COLORS.on;
+  COLORS.alert = cs.getPropertyValue('--red').trim() || COLORS.alert;
+}
 
 export class Radar {
   constructor(canvas, { onPick = null, fx = true } = {}) {
@@ -9,6 +17,7 @@ export class Radar {
     this.g = canvas.getContext('2d');
     this.onPick = onPick;
     this.fx = fx;
+    themeColors();
     this.agents = [];
     this.pulses = []; // { id, color, t0 }
     this.lit = new Map(); // id -> brightness 0..1
@@ -70,26 +79,26 @@ export class Radar {
     if (R <= 10) return;
     // background disc
     const bg = g.createRadialGradient(cx, cy, 0, cx, cy, R);
-    bg.addColorStop(0, 'rgba(57,255,136,0.07)'); bg.addColorStop(1, 'rgba(57,255,136,0.015)');
+    bg.addColorStop(0, `rgba(${ACC},0.07)`); bg.addColorStop(1, `rgba(${ACC},0.015)`);
     g.fillStyle = bg; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.fill();
     // rings + crosshair
-    g.strokeStyle = 'rgba(57,255,136,0.22)'; g.lineWidth = 1;
+    g.strokeStyle = `rgba(${ACC},0.22)`; g.lineWidth = 1;
     for (let i = 1; i <= 4; i++) { g.beginPath(); g.arc(cx, cy, (R * i) / 4, 0, TAU); g.stroke(); }
-    g.strokeStyle = 'rgba(57,255,136,0.5)'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke();
-    g.strokeStyle = 'rgba(57,255,136,0.14)'; g.lineWidth = 1;
+    g.strokeStyle = `rgba(${ACC},0.5)`; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke();
+    g.strokeStyle = `rgba(${ACC},0.14)`; g.lineWidth = 1;
     g.beginPath(); g.moveTo(cx - R, cy); g.lineTo(cx + R, cy); g.moveTo(cx, cy - R); g.lineTo(cx, cy + R); g.stroke();
     for (let d = 0; d < 360; d += 10) { const a = (d / 360) * TAU; const l = d % 30 ? 4 : 9; g.beginPath(); g.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); g.lineTo(cx + Math.cos(a) * (R - l), cy + Math.sin(a) * (R - l)); g.stroke(); }
     // sweep (a fading wedge behind the beam)
     const sweepLen = 0.9;
     if (g.createConicGradient) {
       const cg = g.createConicGradient(this.angle - sweepLen, cx, cy);
-      cg.addColorStop(0, 'rgba(57,255,136,0)'); cg.addColorStop(sweepLen / TAU, 'rgba(57,255,136,0.32)'); cg.addColorStop(sweepLen / TAU + 0.0001, 'rgba(57,255,136,0)'); cg.addColorStop(1, 'rgba(57,255,136,0)');
+      cg.addColorStop(0, `rgba(${ACC},0)`); cg.addColorStop(sweepLen / TAU, `rgba(${ACC},0.32)`); cg.addColorStop(sweepLen / TAU + 0.0001, `rgba(${ACC},0)`); cg.addColorStop(1, `rgba(${ACC},0)`);
       g.fillStyle = cg; g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, this.angle - sweepLen, this.angle); g.closePath(); g.fill();
     }
-    g.strokeStyle = 'rgba(57,255,136,0.85)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(this.angle) * R, cy + Math.sin(this.angle) * R); g.stroke();
+    g.strokeStyle = `rgba(${ACC},0.85)`; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(this.angle) * R, cy + Math.sin(this.angle) * R); g.stroke();
     // HQ in the middle
-    g.fillStyle = '#39ff88'; g.beginPath(); g.arc(cx, cy, 4, 0, TAU); g.fill();
-    g.font = '700 10px ui-monospace, Menlo, monospace'; g.fillStyle = 'rgba(57,255,136,0.7)'; g.fillText('HQ', cx + 7, cy - 6);
+    g.fillStyle = COLORS.on; g.beginPath(); g.arc(cx, cy, 4, 0, TAU); g.fill();
+    g.font = '700 10px ui-monospace, Menlo, monospace'; g.fillStyle = `rgba(${ACC},0.7)`; g.fillText('HQ', cx + 7, cy - 6);
 
     // blips
     const passed = (ang) => { const norm = (x) => ((x % TAU) + TAU) % TAU; const a = norm(ang), p = norm(prevAngle), n = norm(this.angle); return p <= n ? a > p && a <= n : a > p || a <= n; };

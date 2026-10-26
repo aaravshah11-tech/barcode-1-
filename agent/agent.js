@@ -7,6 +7,7 @@ import { missionById, cleanSettings } from '../shared/missions.js';
 import { boot } from '../shared/boot.js';
 import { dial } from '../shared/link.js';
 import { openCamera, activeCamera } from './lib/camera.js';
+import { applyTheme } from '../shared/themes.js';
 
 const KEY = 'sentinel.agent';
 const main = document.getElementById('main');
@@ -212,6 +213,7 @@ function command(cmd) {
 
 function applyConfig(c) {
   if (typeof c.fx === 'boolean') { fx = c.fx; document.body.classList.toggle('fx', fx); }
+  if (c.theme) applyTheme(c.theme);
   if (typeof c.name === 'string') { creds.name = c.name; save(creds); }
   if (c.codename) { creds.codename = c.codename; save(creds); const el = document.querySelector('[data-codename]'); if (el) el.textContent = c.codename; }
   if (c.mission) runMission(c.mission, c.settings || {});

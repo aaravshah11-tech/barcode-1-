@@ -6,6 +6,7 @@ import { openStore } from './brain/store.js';
 import { HQ } from './brain/hq.js';
 import { makeApi } from './brain/api.js';
 import { startHost } from './brain/host.js';
+import { makeAuth } from './brain/auth.js';
 import { dial } from '../shared/link.js';
 
 export async function startLocal({ onStatus }) {
@@ -16,11 +17,12 @@ export async function startLocal({ onStatus }) {
   }
   const db = await openStore();
   const hq = new HQ({ db }).start();
-  const call = makeApi({ hq, db });
+  const auth = makeAuth({ db, idleMin: () => hq.settings().autoLockMin });
+  const call = makeApi({ hq, db, auth });
   const listeners = new Set();
   hq.dashboards.add({ send: (text) => { const msg = JSON.parse(text); listeners.forEach((f) => f(msg)); } });
   let net = { state: 'connecting' };
-  const host = await startHost({ hq, api: call, onStatus: (s) => { net = s; hq.info = { ...hq.info, net: s }; onStatus?.(s); } }).catch((e) => { onStatus?.({ state: 'offline', detail: e.message }); return null; });
+  const host = await startHost({ hq, api: call, auth, onStatus: (s) => { net = s; hq.info = { ...hq.info, net: s }; onStatus?.(s); } }).catch((e) => { onStatus?.({ state: 'offline', detail: e.message }); return null; });
   if (!host) hq.info = { ...hq.info, hqId: null };
   if (!db.persistent) onStatus?.({ state: net.state, detail: 'This browser won’t let HQ save its Mission Log (private window?). It will be lost when you close the page.' });
   hq.logEvent({ kind: 'system', message: 'SENTINEL // HQ ONLINE' });
@@ -57,7 +59,11 @@ export function linkPhone(hqId, code, label) {
 }
 
 /** A linked phone's view of HQ. Reconnects by itself. */
-export function startRemote({ onStatus, onDenied }) {
+const SESSION_KEY = 'sentinel.viewer.session';
+const getSession = () => { try { return sessionStorage.getItem(SESSION_KEY) || ''; } catch { return ''; } };
+const setSession = (v) => { try { if (v) sessionStorage.setItem(SESSION_KEY, v); else sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } };
+
+export function startRemote({ onStatus, onDenied, onLocked }) {
   const creds = load();
   const listeners = new Set();
   const pending = new Map();
@@ -66,11 +72,12 @@ export function startRemote({ onStatus, onDenied }) {
   function connect() {
     onStatus?.({ state: 'connecting' });
     dial(creds.hqId, {
-      onOpen: () => { link.send({ t: 'viewer', token: creds.token }); },
+      onOpen: () => { link.send({ t: 'viewer', token: creds.token, session: getSession() }); },
       onMessage: (m) => {
         lastMsg = Date.now();
         if (m.t === 'pong') return;
         if (m.t === 'denied') { save(null); onDenied?.(m.reason); return; }
+        if (m.t === 'locked') { setSession(''); onStatus?.({ state: 'online' }); onLocked?.(); return; }
         if (m.t === 'res') { const p = pending.get(m.id); if (p) { pending.delete(m.id); if (m.ok) p.resolve(m.data); else p.reject(Object.assign(new Error(m.error), { status: m.status })); } return; }
         if (m.t === 'state') { retry = 1000; onStatus?.({ state: 'online' }); }
         listeners.forEach((f) => f(m));
@@ -97,6 +104,7 @@ export function startRemote({ onStatus, onDenied }) {
     local: false,
     api: (path, { method = 'GET', body } = {}) => new Promise((resolve, reject) => {
       const id = ++seq;
+      if (path === '/auth/unlock' || path === '/auth/lock') { const orig = resolve; resolve = (d) => { setSession(path === '/auth/unlock' ? d?.session : ''); orig(d); }; }
       if (!link?.send({ t: 'api', id, method, path, body })) return reject(new Error('Not connected to HQ right now.'));
       pending.set(id, { resolve, reject });
       setTimeout(() => { if (pending.delete(id)) reject(new Error('HQ didn’t answer.')); }, 15000);

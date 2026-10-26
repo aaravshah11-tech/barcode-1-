@@ -5,6 +5,7 @@ import nodeCrypto from 'node:crypto';
 import { openStore } from '../../hq/brain/store.js';
 import { HQ } from '../../hq/brain/hq.js';
 import { makeApi } from '../../hq/brain/api.js';
+import { makeAuth } from '../../hq/brain/auth.js';
 import { computeThreat } from '../../shared/threat.js';
 import { sha256, hmac, signCommand, pickCodename, CODENAMES } from '../../shared/crypto.js';
 import { canonical } from '../../shared/canonical.js';
@@ -137,7 +138,7 @@ test('Mission Log: auto-delete after N days, CSV export, backup and restore', as
 
 test('API: what the Command Centre can do (and what linked phones can’t)', async () => {
   const { hq, db } = await mkHQ();
-  const api = makeApi({ hq, db });
+  const api = makeApi({ hq, db, auth: makeAuth({ db }) });
   assert.equal((await api('PATCH', '/settings', { mode: 'away' })).mode, 'away');
   assert.equal((await api('PATCH', '/settings', { mode: 'hack' })).mode, 'away');
   const p = await api('POST', '/pair', { role: 'agent' });
@@ -148,7 +149,7 @@ test('API: what the Command Centre can do (and what linked phones can’t)', asy
   await assert.rejects(api('POST', `/agents/${agentId}/command`, { action: 'selfdestruct' }), /Unknown command/);
   assert.match((await api('GET', '/export?format=csv')).text, /recruited/);
   assert.ok(!(await api('GET', '/export?format=json')).text.includes('tokenHash'), 'export never includes keys');
-  await assert.rejects(api('GET', '/backup', {}, { remote: true }), /only be made on the HQ computer/);
+  await assert.rejects(api('GET', '/backup', {}, { remote: true }), /Locked/, 'linked phones must log in first');
   assert.ok((await api('GET', '/backup')).text.includes('hq-backup'));
   await assert.rejects(api('GET', '/nope'), /Not found/);
 });
@@ -166,4 +167,39 @@ test('alerts: which events alert, quiet hours', () => {
   assert.equal(ruleFor({ kind: 'door', message: 'X: Door closed' }, false), null);
   assert.equal(ruleFor({ kind: 'knock', message: 'Knock' }, false).rule, 'knock');
   assert.equal(ruleFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “HAWK” offline' }, false).rule, 'offline');
+});
+
+test('Director login: hashed PIN, lockout, linked phones need a session', async () => {
+  const now = { t: Date.now() };
+  const { hq, db } = await mkHQ(now);
+  const auth = makeAuth({ db, now: () => now.t, idleMin: () => 15 });
+  const api = makeApi({ hq, db, auth });
+  assert.equal((await api('GET', '/auth/status')).setup, false);
+  await assert.rejects(api('POST', '/auth/setup', { codename: 'falcon', pin: '12' }), /4–8 digits/);
+  await assert.rejects(api('POST', '/auth/setup', { codename: 'falcon', pin: '1234' }, { remote: true }), /HQ computer/);
+  assert.equal((await api('POST', '/auth/setup', { codename: 'falcon', pin: '4321' })).codename, 'FALCON');
+  await assert.rejects(api('POST', '/auth/setup', { codename: 'x', pin: '9999' }), /already/);
+  assert.ok(!JSON.stringify(db.getSetting('director')).includes('4321'), 'the PIN itself is never stored');
+
+  // a linked phone sees nothing until it logs in
+  await assert.rejects(api('GET', '/state', {}, { remote: true }), /Locked/);
+  const ok = await api('POST', '/auth/unlock', { codename: 'Falcon', pin: '4321' }, { remote: true });
+  assert.ok(ok.session);
+  assert.equal((await api('GET', '/state', {}, { remote: true, session: ok.session })).t, 'state');
+  now.t += 16 * 60000;
+  await assert.rejects(api('GET', '/state', {}, { remote: true, session: ok.session }), /Locked/, 'session ends after 15 min idle');
+
+  // wrong PINs: 5 tries then locked, even with the right PIN
+  for (let i = 0; i < 4; i++) await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '0000' }), /tries left/);
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '0000' }), /Locked for 1 min/);
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' }), /Too many wrong tries/);
+  now.t += 61000;
+  assert.ok((await api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' })).session, 'works again after the lockout');
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'RAVEN', pin: '4321' }), /DENIED/, 'wrong codename');
+  assert.ok(db.events({}).some((e) => /Failed login attempt/.test(e.message)), 'failed logins are logged');
+
+  // change PIN
+  await api('POST', '/auth/change', { codename: 'falcon', pin: '4321', newPin: '777777' });
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' }));
+  assert.ok((await api('POST', '/auth/unlock', { codename: 'FALCON', pin: '777777' })).session);
 });

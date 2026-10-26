@@ -5,7 +5,8 @@ import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickC
 import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
 
 const DAY = 86400000;
-export const DEFAULT_SETTINGS = { fx: true, retentionDays: 30, mode: 'home' };
+export const DEFAULT_SETTINGS = { fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15 };
+const THEMES = ['mi6', 'classic', 'redops'];
 const PAIR_MINUTES = 10;
 
 class Emitter {
@@ -46,9 +47,11 @@ export class HQ extends Emitter {
     if ('fx' in patch) s.fx = !!patch.fx;
     if ('retentionDays' in patch) s.retentionDays = Math.min(3650, Math.max(1, Math.round(Number(patch.retentionDays) || 30)));
     if ('mode' in patch && ['home', 'away'].includes(patch.mode)) s.mode = patch.mode;
+    if ('theme' in patch && THEMES.includes(patch.theme)) s.theme = patch.theme;
+    if ('autoLockMin' in patch) s.autoLockMin = [0, 5, 15, 30, 60].includes(Number(patch.autoLockMin)) ? Number(patch.autoLockMin) : 15;
     this.db.setSetting('hq', s);
     if ('mode' in patch) { this.logEvent({ kind: 'system', message: s.mode === 'away' ? 'Set to AWAY — nobody’s home' : 'Set to HOME' }); this.recomputeThreat(); }
-    if ('fx' in patch) for (const id of this.online.keys()) this.command(id, 'configure', { fx: s.fx });
+    if ('fx' in patch || 'theme' in patch) for (const id of this.online.keys()) this.command(id, 'configure', { fx: s.fx, theme: s.theme });
     this.broadcast({ t: 'settings', settings: s });
     if ('retentionDays' in patch) this.prune();
     return s;
@@ -157,7 +160,7 @@ export class HQ extends Emitter {
     this.db.updateAgent(agent.id, { lastSeen: this.now() });
     if (!prev) this.logEvent({ kind: 'agent', agentId: agent.id, message: `${agentLabel(agent)} “${agent.codename}” online` });
     this.pushAgent(agent.id);
-    return { t: 'welcome', now: this.now(), agentId: agent.id, codename: agent.codename, label: agentLabel(agent), name: agent.name, mission: agent.mission, settings: cleanSettings(agent.mission, agent.settings), fx: this.settings().fx };
+    return { t: 'welcome', now: this.now(), agentId: agent.id, codename: agent.codename, label: agentLabel(agent), name: agent.name, mission: agent.mission, settings: cleanSettings(agent.mission, agent.settings), fx: this.settings().fx, theme: this.settings().theme };
   }
   agentOffline(agentId, conn) {
     const cur = this.online.get(agentId);
@@ -238,7 +241,7 @@ export class HQ extends Emitter {
     const o = this.online.get(id);
     if (o) {
       o.mission = b.mission;
-      this.command(id, 'configure', { codename: b.codename, name: b.name, mission: b.mission, settings: cleanSettings(b.mission, b.settings), fx: this.settings().fx });
+      this.command(id, 'configure', { codename: b.codename, name: b.name, mission: b.mission, settings: cleanSettings(b.mission, b.settings), fx: this.settings().fx, theme: this.settings().theme });
       if (b.mission === 'intel') o.sendRaw(JSON.stringify(this.snapshot()));
     }
     this.pushAgent(id);

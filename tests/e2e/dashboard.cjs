@@ -1,7 +1,7 @@
 // HQ page: front page → START HQ, boot, online, HOME/AWAY, settings, export, backup, recruit QR, one HQ per browser.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startWorld, launch, check, finish } = require('./helpers.cjs');
+const { startWorld, launch, login, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
@@ -19,17 +19,71 @@ const SHOTS = process.argv[2] || '';
   check((await page.textContent('h1')).includes('SENTINEL'), 'front page loads');
   await shot('front-page');
   await page.click('[data-start]');
-  await page.waitForSelector('.boot');
-  check(true, 'START HQ → boot animation plays (no password, no install)');
-  await page.waitForSelector('.boot', { state: 'detached', timeout: 8000 });
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('HQ ONLINE'), null, { timeout: 15000 });
+  await page.waitForSelector('.boot-bar');
+  check(true, 'START HQ → boot sequence with decrypting bars (no install)');
+  await page.waitForTimeout(1200);
+  await shot('boot');
+  await page.waitForSelector('.boot', { state: 'detached', timeout: 10000 });
+  // First time: enrol the Director (codename + PIN)
+  await page.waitForSelector('[data-login] [name=pin2]');
+  check(await page.evaluate(() => document.documentElement.dataset.theme) === 'mi6', 'default theme is MI6 hologram');
+  await page.fill('[name=codename]', 'nightowl');
+  await page.fill('[name=pin]', '13579');
+  await page.fill('[name=pin2]', '97531');
+  await page.click('[data-login] button');
+  await page.waitForSelector('text=don’t match');
+  await page.fill('[name=pin2]', '13579');
+  await shot('login-setup');
+  await page.click('[data-login] button');
+  await page.waitForSelector('[data-scanner]:not([hidden])');
+  check(true, 'fingerprint / retina scan animation plays');
+  await page.waitForSelector('text=ACCESS GRANTED');
+  await page.waitForTimeout(300);
+  await shot('login-granted');
+  check((await page.textContent('[data-scantext]')).includes('NIGHTOWL'), 'ACCESS GRANTED — welcome, codename');
+  await page.waitForSelector('[data-threat]', { timeout: 10000 });
+  check(true, 'Command Centre opens after login');
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('UPLINK ONLINE'), null, { timeout: 15000 });
   check(true, 'HQ goes ONLINE (matchmaking server reached)');
   await page.waitForSelector('[data-threat].GREEN');
   check((await page.textContent('[data-agents]')).includes('NO AGENTS YET'), 'empty Agents list explains how to recruit');
   check((await page.textContent('[data-log]')).includes('SENTINEL // HQ ONLINE'), 'Mission Log: HQ ONLINE');
   check(await page.evaluate(() => document.body.classList.contains('fx')), 'scanline effects on by default');
-  await page.waitForTimeout(600);
+  check(await page.$$eval('.cc .panel', (p) => p.length) === 6, 'command-centre layout: map + 5 panels around it');
+  await page.waitForTimeout(1200);
   await shot('dashboard-empty');
+
+  // Themes
+  await page.click('[data-settings]');
+  await page.click('[data-theme="redops"]');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'redops');
+  check(true, 'theme picker: RED OPS');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(800);
+  await shot('theme-redops');
+  await page.click('[data-settings]');
+  await page.click('[data-theme="classic"]');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  await shot('theme-classic');
+  await page.click('[data-settings]');
+  await page.click('[data-theme="mi6"]');
+  await page.keyboard.press('Escape');
+
+  // Lock, wrong PIN, right PIN
+  await page.click('[data-lock]');
+  await page.waitForSelector('[data-login]');
+  check(!(await page.$('[data-agents]')), 'locking hides everything');
+  await page.fill('[name=codename]', 'NIGHTOWL'); await page.fill('[name=pin]', '0000');
+  await page.click('[data-login] button');
+  await page.waitForSelector('text=ACCESS DENIED');
+  await page.waitForSelector('text=tries left');
+  check(true, 'wrong PIN → ACCESS DENIED (tries left shown)');
+  await page.waitForSelector('[data-login] button:not([disabled])');
+  await page.fill('[name=pin]', '13579');
+  await page.click('[data-login] button');
+  await page.waitForSelector('[data-threat]', { timeout: 10000 });
+  check((await page.textContent('[data-log]')).includes('Failed login attempt'), 'failed login is written in the Mission Log');
 
   // HOME / AWAY
   await page.click('[data-mode="away"]');
@@ -71,9 +125,10 @@ const SHOTS = process.argv[2] || '';
 
   // Data survives a reload (kept in this browser)
   await page.reload();
+  await login(page, { codename: 'nightowl', pin: '13579' });
   await page.waitForSelector('[data-log] >> text=Set to AWAY', { timeout: 15000 });
   check(true, 'Mission Log is still there after reloading the page');
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('HQ ONLINE'), null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('UPLINK ONLINE'), null, { timeout: 30000 });
   check(true, 'HQ comes back ONLINE with the same HQ code after a reload');
 
   // A second HQ tab in the same browser is refused politely

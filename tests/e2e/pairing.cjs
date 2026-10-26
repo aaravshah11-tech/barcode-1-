@@ -2,7 +2,7 @@
 // Wi-Fi drop, HQ page reloaded, unknown devices refused, disconnect, typing the codes by hand.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startWorld, launch, openHQ, check, finish } = require('./helpers.cjs');
+const { startWorld, launch, openHQ, login, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36' };
 const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.textContent || '');
@@ -72,6 +72,7 @@ const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.
 
   // HQ page reloaded (or the computer restarted): the Agent reconnects on its own
   await dash.reload();
+  await login(dash);
   await phone.waitForFunction(() => document.querySelector('[data-banner]').textContent.includes('RECONNECTING'), null, { timeout: 30000 }).catch(() => {});
   await dash.waitForSelector('[data-threat]', { timeout: 15000 });
   await phone.waitForFunction(() => document.querySelector('[data-banner]').textContent.includes('SENTINEL AGENT ACTIVE'), null, { timeout: 60000 });

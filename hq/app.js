@@ -6,6 +6,9 @@ import { missionById } from '../shared/missions.js';
 import { openSettings } from './settings.js';
 import { startLocal, startRemote, linkPhone, viewerCreds } from './transport.js';
 import { notifyEvent } from './alerts.js';
+import { lockScreen } from './lock.js';
+import { applyTheme } from '../shared/themes.js';
+import { sfx, sfxPrefs, setSfx, onSfx } from '../shared/sfx.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
@@ -15,24 +18,66 @@ let radar = null;
 // ---------------- connect to HQ's brain ----------------
 let T = null; // transport: { api, onMessage, local }
 let net = { state: 'connecting' };
+let unlocked = false;
 
 async function start() {
-  app.innerHTML = gateHtml('<p class="mono muted" style="text-align:center">CONNECTING…</p>');
+  app.innerHTML = gateHtml('<p class="mono muted" style="text-align:center">ESTABLISHING SECURE CHANNEL…</p>');
   try {
-    if (MODE === 'hq') T = await startLocal({ onStatus: setNet });
-    else {
+    if (MODE === 'hq') {
+      T = await startLocal({ onStatus: setNet });
+      apply(await T.api('/state'));
+      T.onMessage(onMsg);
+    } else {
       const p = new URLSearchParams(location.hash.slice(1));
       if (p.get('link') && p.get('hq')) return linkScreen(p.get('hq'), p.get('link'));
       if (!viewerCreds()) return notLinked();
-      T = startRemote({ onStatus: setNet, onDenied: (why) => notLinked(why) });
+      // A linked phone sees nothing until HQ says "locked" (show the login) or sends the state (still logged in).
+      await new Promise((resolve) => {
+        T = startRemote({ onStatus: setNet, onDenied: (why) => notLinked(why), onLocked: () => { if (unlocked) lockNow('Your session ended. Log in again.'); else resolve(); } });
+        T.onMessage((m) => { if (m.t === 'state') { apply(m); if (!unlocked && !S.ready) { S.ready = true; resolve(); } } });
+      });
+      T.onMessage(onMsg);
     }
   } catch (x) {
     app.innerHTML = gateHtml(`<p>${esc(x.message)}</p>`);
     return;
   }
-  main();
+  applyTheme(S.settings.theme);
+  document.body.classList.toggle('fx', S.settings.fx);
+  await boot({ fx: S.settings.fx });
+  if (!S.ready || MODE === 'hq') await unlock();
+  launch();
 }
-const gateHtml = (inner) => `<div class="gate"><div class="panel">${LOGO}<h1 class="mono glitch" style="text-align:center;letter-spacing:.2em;color:var(--green)">SENTINEL // HQ</h1><div style="margin-top:14px">${inner}</div></div></div>`;
+const gateHtml = (inner) => `<div class="gate"><div class="hud-bg"></div><div class="panel hud-in login-panel">${LOGO}<h1 class="mono glitch login-title">SENTINEL // HQ</h1><div>${inner}</div></div></div>`;
+
+/** Show the codename + PIN screen until the Director logs in. */
+async function unlock(reason = '') {
+  unlocked = false;
+  radar?.destroy(); radar = null;
+  await lockScreen(app, T.api, { remote: MODE === 'remote', reason });
+  if (MODE === 'remote') apply(await waitForState());
+  unlocked = true;
+}
+const waitForState = () => new Promise((resolve) => { const f = (m) => { if (m.t === 'state') { T.onMessage.off?.(f); resolve(m); } }; T.onMessage(f); setTimeout(() => resolve(S.snapshot || { ...S }), 4000); });
+
+/** Lock the Command Centre (after inactivity, or by hand). HQ keeps guarding the house meanwhile. */
+async function lockNow(reason = 'Locked.') {
+  if (!unlocked) return;
+  unlocked = false;
+  closeAllSheets();
+  try { await T.api('/auth/lock', { method: 'POST', body: {} }); } catch { /* fine */ }
+  await unlock(reason);
+  launch();
+}
+function closeAllSheets() { $$('.sheet-backdrop').forEach((b) => b.remove()); drawer = null; S.open = null; liveView = null; }
+
+// Auto-lock after the chosen minutes without a tap, click or key.
+let lastActive = Date.now();
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, () => { lastActive = Date.now(); }, { capture: true, passive: true });
+setInterval(() => {
+  const min = S.settings.autoLockMin;
+  if (unlocked && min && Date.now() - lastActive > min * 60000) lockNow(`Auto-locked after ${min} min without activity.`);
+}, 10000);
 
 function notLinked(why = '') {
   app.innerHTML = gateHtml(`${why ? `<p class="c-red small">${esc(why)}</p>` : ''}
@@ -56,10 +101,13 @@ function linkScreen(hqId, code) {
 const guessDevice = () => { const ua = navigator.userAgent; return /iPhone/.test(ua) ? 'My iPhone' : /iPad/.test(ua) ? 'My iPad' : /Android/.test(ua) ? 'My phone' : 'My laptop'; };
 
 function setNet(s) {
+  const was = net.state;
   net = s;
   const el = $('[data-net]');
+  if (was !== s.state && unlocked) { if (s.state === 'online') sfx('beep'); else if (s.state === 'offline') sfx('warn'); }
+  renderNetwork();
   if (!el) return;
-  const label = { online: MODE === 'hq' ? 'HQ ONLINE' : 'LINKED', connecting: 'CONNECTING', offline: 'OFFLINE', taken: 'IN USE ELSEWHERE' }[s.state] || s.state;
+  const label = { online: MODE === 'hq' ? 'UPLINK ONLINE' : 'LINKED', connecting: 'CONNECTING', offline: 'OFFLINE', taken: 'IN USE ELSEWHERE' }[s.state] || s.state;
   el.innerHTML = `<span class="dot ${s.state === 'online' ? 'on' : s.state === 'connecting' ? 'warn' : 'alert'}"></span>${label}`;
   el.title = s.detail || '';
   const r = $('[data-reason]');
@@ -67,27 +115,14 @@ function setNet(s) {
 }
 
 // ---------------- the Command Centre ----------------
-async function main() {
-  let state;
-  try { state = await T.api('/state'); } catch (x) {
-    app.innerHTML = gateHtml(`<p>${esc(x.message)}</p><p class="small muted">Is the HQ page open on the HQ computer? Retrying…</p>`);
-    T.onMessage((m) => { if (m.t === 'state' && !state) { state = m; launch(state); } });
-    return;
-  }
-  launch(state);
-}
-let launched = false;
-async function launch(state) {
-  if (launched) return;
-  launched = true;
-  apply(state);
-  T.onMessage(onMsg);
-  document.body.classList.toggle('fx', S.settings.fx);
-  await boot({ fx: S.settings.fx });
+let ticker = null;
+function launch() {
   shell();
   renderAll();
   setNet(net);
-  setInterval(tick, 1000);
+  clearInterval(ticker);
+  ticker = setInterval(tick, 1000);
+  tick();
   if (MODE === 'hq') keepAwake();
 }
 
@@ -95,48 +130,67 @@ function apply(st) {
   S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {};
 }
 
+const started = Date.now();
 function shell() {
+  const panel = (cls, d, inner, label = '') => `<section class="panel hud-in ${cls}" style="--d:${d}s" ${label ? `aria-label="${label}"` : ''}>${inner}</section>`;
   app.innerHTML = `
-  <header class="top">
-    ${LOGO}<div class="brand glitch">SENTINEL <small>// HQ</small></div>
+  <div class="hud-bg"></div>
+  <header class="top hud-in" style="--d:0s">
+    ${LOGO}<div class="brand glitch">SENTINEL <small>// ${MODE === 'hq' ? 'HQ' : 'FIELD LINK'}</small></div>
     <span class="threat" data-threat aria-live="polite"></span>
     <span class="spacer"></span>
     <span class="net" data-net></span>
-    <div class="presence" role="group" aria-label="Is anyone home?">
+    <div class="presence" role="group" aria-label="Security mode">
       <button data-mode="home">HOME</button><button data-mode="away" class="away">AWAY</button>
     </div>
     <span class="clock" data-clock></span>
-    <button class="btn-primary" data-recruit>＋ Recruit</button>
-    <button class="icon-btn" data-settings aria-label="Settings">⚙</button>
+    <button class="icon-btn" data-mute aria-label="Sound on/off" title="Sound on/off"></button>
+    <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">⛶</button>
+    <button class="icon-btn" data-lock aria-label="Lock" title="Lock HQ">🔒</button>
+    ${MODE === 'hq' ? '<button class="btn-primary" data-recruit>＋ Recruit</button>' : ''}
+    <button class="icon-btn" data-settings aria-label="Settings" title="Settings">⚙</button>
   </header>
-  <main class="grid">
-    <div class="col">
-      <section class="panel radar-panel" aria-label="Radar">
-        <div class="radar-wrap"><canvas data-radar role="img"></canvas></div>
-        <p class="threat-reason" data-reason></p>
-      </section>
-      <section class="panel"><div class="panel-head"><h2>Who’s home</h2></div><div class="people" data-peoplelist></div></section>
-    </div>
-    <div class="col">
-      <section class="panel"><div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div></section>
-      <section class="panel"><div class="panel-head"><h2>Mission Log</h2>
-        <div class="filters" role="group" aria-label="Filter">${[['all', 'All'], ['alerts', 'Alerts'], ['motion', 'Motion'], ['door', 'Door'], ['agent', 'Agents']].map(([k, l]) => `<button data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div></div>
-        <ol class="log" data-log aria-live="polite"></ol>
-        <div class="row" style="justify-content:center;margin-top:8px"><button class="btn-ghost small" data-older>Load older</button></div>
-      </section>
+  <div class="stats hud-in" style="--d:.05s">
+    <div class="stat"><b data-stat="online">0</b><span>Agents online</span></div>
+    <div class="stat"><b data-stat="events">0</b><span>Events today</span></div>
+    <div class="stat"><b data-stat="alerts">0</b><span>Alerts today</span></div>
+    <div class="stat"><b data-stat="uptime">00:00:00</b><span>${MODE === 'hq' ? 'HQ uptime' : 'Link uptime'}</span></div>
+  </div>
+  <main class="cc">
+    ${panel('p-map radar-panel', 0.15, `<div class="panel-head"><h2>Tactical map</h2><span class="small muted mono hide-phone">3D house map arrives in a later upgrade</span></div>
+      <div class="radar-wrap"><canvas data-radar role="img"></canvas></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
+    <div class="col-l">
+    ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
+    ${panel('p-home', 0.35, '<div class="panel-head"><h2>Who’s home</h2></div><div class="people" data-peoplelist></div>')}
+    ${panel('p-net', 0.45, '<div class="panel-head"><h2>Network</h2></div><dl class="kv netinfo" data-network></dl>')}
+    </div><div class="col-r">
+    ${panel('p-intel', 0.3, '<div class="panel-head"><h2>Intel</h2></div><div data-intel></div>')}
+    ${panel('p-log', 0.4, `<div class="panel-head"><h2>Mission Log</h2></div>
+      <div class="filters" role="group" aria-label="Filter" style="margin-bottom:8px">${[['all', 'All'], ['alerts', 'Alerts'], ['motion', 'Motion'], ['door', 'Door'], ['agent', 'Agents']].map(([k, l]) => `<button data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div>
+      <ol class="log" data-log aria-live="polite"></ol>
+      <div class="row" style="justify-content:center;margin-top:8px"><button class="btn-ghost small" data-older>Load older</button></div>`)}
     </div>
   </main>`;
   radar = new Radar($('[data-radar]'), { onPick: openAgent, fx: S.settings.fx });
-  app.addEventListener('click', onClick);
+  renderMute();
+  if (!shellWired) { app.addEventListener('click', onClick); shellWired = true; }
 }
+let shellWired = false;
+
+function renderMute() { const b = $('[data-mute]'); if (b) { const p = sfxPrefs(); b.textContent = p.muted || !p.volume ? '🔇' : '🔊'; b.setAttribute('aria-pressed', String(!p.muted)); } }
+onSfx(renderMute);
 
 async function onClick(e) {
   const b = e.target.closest('button');
   if (!b) return;
+  sfx('click');
+  if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
+  if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
+  if ('lock' in b.dataset) { lockNow('Locked. HQ is still guarding the house.'); return; }
   if (b.dataset.mode) {
     try { S.settings = await T.api('/settings', { method: 'PATCH', body: { mode: b.dataset.mode } }); renderTop(); renderPeople(); } catch (x) { toast(x.message, { kind: 'err' }); }
   } else if ('recruit' in b.dataset) recruit();
-  else if ('settings' in b.dataset) openSettings(S, { onChange: (s) => { S.settings = s; document.body.classList.toggle('fx', s.fx); radar?.setFx(s.fx); } });
+  else if ('settings' in b.dataset) openSettings(S, { onChange: (s) => { S.settings = s; settingsChanged(); } });
   else if (b.dataset.agent) openAgent(b.dataset.agent);
   else if (b.dataset.filter) { S.filter = b.dataset.filter; $$('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderLog(); }
   else if ('older' in b.dataset) {
@@ -154,11 +208,23 @@ function onMsg(msg) {
   if (msg.t === 'state') { apply(msg); renderAll(); }
   else if (msg.t === 'agent') { upsert(msg.agent); renderAgents(); if (S.open === msg.agent.id) refreshDrawer(); }
   else if (msg.t === 'agentRemoved') { S.agents = S.agents.filter((a) => a.id !== msg.id); renderAgents(); }
-  else if (msg.t === 'event') { addEvent(msg.event); notifyEvent(msg.event, S); }
+  else if (msg.t === 'event') { addEvent(msg.event); renderStats(); if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S); }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
-  else if (msg.t === 'settings') { S.settings = msg.settings; renderTop(); renderPeople(); document.body.classList.toggle('fx', S.settings.fx); radar?.setFx(S.settings.fx); }
+  else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
   else if (msg.t === 'frame') liveFrame(msg);
+}
+function settingsChanged() {
+  applyTheme(S.settings.theme);
+  document.body.classList.toggle('fx', S.settings.fx);
+  radar?.setFx(S.settings.fx);
+  renderTop(); renderPeople();
+}
+function eventSound(ev) {
+  if (Date.now() - ev.ts > 10000) return;
+  if (ev.level === 'alert' || ev.kind === 'threat' && /RED/.test(ev.message)) sfx('alert');
+  else if (ev.level === 'warn') sfx('warn');
+  else sfx('blip');
 }
 function upsert(a) { const i = S.agents.findIndex((x) => x.id === a.id); if (i >= 0) S.agents[i] = a; else S.agents.push(a); S.agents.sort((x, y) => x.number - y.number); }
 
@@ -175,10 +241,11 @@ function addEvent(ev) {
   typewrite(li.querySelector('[data-msg]'), li.querySelector('[data-msg]').dataset.text, { fx: S.settings.fx });
   while (ol.children.length > 300) ol.lastChild.remove();
   renderRadar();
+  renderStats();
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); }
+function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); }
 
 function renderTop() {
   const t = S.threat || { level: 'GREEN', reason: '' };
@@ -217,6 +284,8 @@ function renderAgents() {
   box.innerHTML = S.agents.length ? S.agents.map(agentCard).join('')
     : '<div class="empty"><div class="big">NO AGENTS YET</div>Press <b>＋ Recruit</b> and scan the QR code with an old phone or tablet.</div>';
   renderRadar();
+  renderStats();
+  renderNetwork();
 }
 
 const KIND = { motion: 'MOTION', door: 'DOOR', sound: 'SOUND', light: 'LIGHT', knock: 'KNOCK', agent: 'AGENT', system: 'SYSTEM', threat: 'THREAT', arrival: 'HOME', departure: 'AWAY', recon: 'RECON' };
@@ -245,6 +314,56 @@ function tick() {
   const c = $('[data-clock]');
   if (c) c.textContent = clock(Date.now());
   $$('[data-ago]').forEach((el) => { const t = Number(el.dataset.ago); el.textContent = `last signal ${ago(t)}`; });
+  const up = $('[data-stat="uptime"]');
+  if (up) { const t = Math.floor((Date.now() - started) / 1000); up.textContent = [t / 3600, (t / 60) % 60, t % 60].map((x) => String(Math.floor(x)).padStart(2, '0')).join(':'); }
+  renderIntel();
+}
+
+// ---------------- stats strip (numbers tick up) ----------------
+function renderStats() {
+  const today = new Date().setHours(0, 0, 0, 0);
+  const todays = S.events.filter((e) => e.ts >= today);
+  countUp($('[data-stat="online"]'), S.agents.filter((a) => a.online).length, `/${S.agents.length}`);
+  countUp($('[data-stat="events"]'), todays.length);
+  countUp($('[data-stat="alerts"]'), todays.filter((e) => e.level !== 'info').length);
+}
+function countUp(el, to, suffix = '') {
+  if (!el) return;
+  const from = Number(el.dataset.v || 0);
+  el.dataset.v = to;
+  if (from === to || !S.settings.fx) { el.textContent = `${to}${suffix}`; return; }
+  const t0 = performance.now(), dur = 700;
+  const step = (now) => { const k = Math.min(1, (now - t0) / dur); el.textContent = `${Math.round(from + (to - from) * (1 - (1 - k) ** 3))}${suffix}`; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
+// ---------------- network panel ----------------
+function renderNetwork() {
+  const box = $('[data-network]');
+  if (!box) return;
+  const on = S.agents.filter((a) => a.online).length;
+  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  box.innerHTML = row('UPLINK', `<span class="${net.state === 'online' ? 'c-green' : net.state === 'connecting' ? 'c-amber' : 'c-red'}">${esc((net.state || '').toUpperCase())}</span>`)
+    + row('INTERNET', navigator.onLine === false ? '<span class="c-red">OFFLINE</span>' : '<span class="c-green">CONNECTED</span>')
+    + row('AGENTS LINKED', `${on} / ${S.agents.length}`)
+    + (MODE === 'hq' && S.info.hqId ? row('HQ CODE', `<span class="mono c-green">${esc(hqCode())}</span>`) : '')
+    + row('CHANNEL', 'ENCRYPTED · PEER-TO-PEER');
+}
+
+// ---------------- intel panel: local time + world clocks ----------------
+const WORLD = [['LONDON', 'Europe/London'], ['NEW YORK', 'America/New_York'], ['TOKYO', 'Asia/Tokyo'], ['SYDNEY', 'Australia/Sydney']];
+function renderIntel() {
+  const box = $('[data-intel]');
+  if (!box) return;
+  const now = new Date();
+  const t = (tz) => now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+  if (!box.firstChild) {
+    box.innerHTML = `<div class="intel-time mono" data-itime></div><div class="small muted mono" data-idate></div>
+      <div class="world">${WORLD.map(([n, tz]) => `<div><span>${n}</span><b class="mono" data-tz="${tz}"></b></div>`).join('')}</div>`;
+  }
+  box.querySelector('[data-itime]').textContent = now.toLocaleTimeString('en-GB');
+  box.querySelector('[data-idate]').textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+  box.querySelectorAll('[data-tz]').forEach((el) => { el.textContent = t(el.dataset.tz); });
 }
 
 // ---------------- one Agent ----------------

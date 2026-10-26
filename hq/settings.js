@@ -1,6 +1,8 @@
 // Command Centre settings: General (effects, Mission Log, export, backup), Phones (see HQ from anywhere), Alerts.
 import { esc, $, toast, sheet, confirmBox, qrSvg, ago } from '../shared/ui.js';
 import { forgetViewer } from './transport.js';
+import { THEMES } from '../shared/themes.js';
+import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 
 const TABS = [['general', 'General'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
@@ -33,11 +35,25 @@ export function openSettings(S, { tab = 'general', onChange } = {}) {
 
 function general(body, S, onChange) {
   const st = S.settings, local = S.mode === 'hq';
+  const sp = sfxPrefs();
   body.innerHTML = `
+    <h2 style="margin-bottom:8px">Look &amp; sound</h2>
+    <div class="themes" role="group" aria-label="Theme">${THEMES.map(([k, l]) => `<button type="button" class="theme-chip t-${k}" data-theme="${k}" aria-pressed="${st.theme === k}"><i></i>${esc(l)}</button>`).join('')}</div>
+    <label class="field" style="margin-top:12px"><span>Sound volume (this device)</span><div class="row"><input type="range" min="0" max="100" step="5" value="${Math.round(sp.volume * 100)}" data-volume style="flex:1"><label class="row small" style="gap:6px"><input type="checkbox" data-muted ${sp.muted ? 'checked' : ''}> Mute</label></div></label>
+    ${hr}
     <form data-general>
-      <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Scanlines, glitch and typewriter effects (also used by Agents)</span></label>
+      <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Scanlines, glitch, hologram flicker and typewriter effects (also used by Agents). Turn off on a slow computer.</span></label>
+      <label class="field"><span>Auto-lock after</span><select name="autoLockMin" style="max-width:220px">${[[5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [0, 'Never (not recommended)']].map(([v, l]) => `<option value="${v}" ${Number(st.autoLockMin) === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Without a tap, click or key for this long, HQ locks and asks for your codename + PIN. HQ keeps guarding the house while locked.</div></label>
       <label class="field"><span>Keep Mission Log entries for</span><div class="row"><input type="number" name="retentionDays" min="1" max="3650" value="${esc(st.retentionDays)}" style="max-width:120px"><span class="muted">days, then delete automatically</span></div></label>
       <button class="btn-primary">Save</button>
+    </form>
+    ${hr}<h2 style="margin-bottom:8px">Director codename &amp; PIN</h2>
+    <form data-pin class="pin-form" autocomplete="off">
+      <input name="codename" placeholder="Current codename" required class="mono" style="text-transform:uppercase">
+      <input name="pin" type="password" inputmode="numeric" placeholder="Current PIN" required class="mono">
+      <input name="newCodename" placeholder="New codename (optional)" class="mono" style="text-transform:uppercase">
+      <input name="newPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" placeholder="New PIN (optional)" class="mono">
+      <button>Change</button>
     </form>
     ${hr}<h2 style="margin-bottom:8px">Export the Mission Log</h2>
     <div class="row"><button data-export="csv">⇩ CSV (spreadsheet)</button><button data-export="json">⇩ JSON</button></div>
@@ -48,7 +64,17 @@ function general(body, S, onChange) {
     <div class="row"><button data-backup>⇩ Back up HQ</button><label class="btn" style="cursor:pointer">⇧ Restore a backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>` : ''}`;
   $('[data-general]', body).addEventListener('submit', async (e) => {
     e.preventDefault();
-    try { const s = await S.api('/settings', { method: 'PATCH', body: { fx: e.target.fx.checked, retentionDays: Number(e.target.retentionDays.value) } }); onChange?.(s); toast('Settings saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
+    try { const s = await S.api('/settings', { method: 'PATCH', body: { fx: e.target.fx.checked, retentionDays: Number(e.target.retentionDays.value), autoLockMin: Number(e.target.autoLockMin.value) } }); onChange?.(s); toast('Settings saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
+  });
+  body.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', async () => {
+    try { const s = await S.api('/settings', { method: 'PATCH', body: { theme: b.dataset.theme } }); onChange?.(s); body.querySelectorAll('[data-theme]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); sfx('granted'); } catch (x) { toast(x.message, { kind: 'err' }); }
+  }));
+  $('[data-volume]', body).addEventListener('change', (e) => { setSfx({ volume: Number(e.target.value) / 100, muted: false }); $('[data-muted]', body).checked = false; sfx('beep'); });
+  $('[data-muted]', body).addEventListener('change', (e) => setSfx({ muted: e.target.checked }));
+  $('[data-pin]', body).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try { const r = await S.api('/auth/change', { method: 'POST', body: { codename: f.codename.value, pin: f.pin.value, newCodename: f.newCodename.value, newPin: f.newPin.value } }); f.reset(); toast(`Saved. Director codename: ${r.codename}`); } catch (x) { toast(x.message, { kind: 'err' }); }
   });
   body.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', async () => {
     try { download(await S.api(`/export?format=${b.dataset.export}`)); } catch (x) { toast(x.message, { kind: 'err' }); }

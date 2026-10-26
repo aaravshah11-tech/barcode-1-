@@ -20,7 +20,7 @@ export function hqId() {
  * Starts listening. `api(method, path, body, who)` answers linked phones.
  * onStatus({ state: 'connecting'|'online'|'offline'|'taken', detail }) keeps the dashboard informed.
  */
-export async function startHost({ hq, api, onStatus = () => {} }) {
+export async function startHost({ hq, api, auth, onStatus = () => {} }) {
   const Peer = await loadPeerJs();
   const id = hqId();
   const offlineTimers = new Map();
@@ -52,7 +52,8 @@ export async function startHost({ hq, api, onStatus = () => {} }) {
 
   function handle(conn) {
     conns.add(conn);
-    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, frame = null;
+    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, frame = null, session = null;
+    const unlockDash = () => { hq.dashboards.add(dash); send(hq.snapshot()); };
     const send = (obj) => { if (conn.open) try { conn.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
     const close = () => { try { conn.close(); } catch { /* ignore */ } };
     const deny = setTimeout(() => { if (!role) close(); }, 10000);
@@ -96,8 +97,8 @@ export async function startHost({ hq, api, onStatus = () => {} }) {
           role = 'viewer'; me = v;
           hq.db.updateViewer(v.id, { lastSeen: Date.now() });
           dash = { send: (text) => send(text), viewerId: v.id };
-          hq.dashboards.add(dash);
-          send(hq.snapshot());
+          // Nothing is shown until the codename + PIN are entered (or a recent login is still valid).
+          if (auth.valid(String(msg.session || ''))) { session = String(msg.session); unlockDash(); } else send({ t: 'locked' });
           return;
         }
         return close();
@@ -117,7 +118,16 @@ export async function startHost({ hq, api, onStatus = () => {} }) {
           if (frame.got === n) { hq.agentFrame(me.id, { data: frame.parts.join('') }); frame = null; }
         }
       } else if (role === 'viewer' && msg.t === 'api') {
-        try { send({ t: 'res', id: msg.id, ok: true, data: await api(String(msg.method || 'GET'), String(msg.path || ''), msg.body, { remote: true }) }); } catch (e) { send({ t: 'res', id: msg.id, ok: false, status: e.status || 500, error: e.message }); }
+        const path = String(msg.path || '');
+        try {
+          const data = await api(String(msg.method || 'GET'), path, msg.body, { remote: true, session });
+          send({ t: 'res', id: msg.id, ok: true, data });
+          if (path === '/auth/unlock' && data?.session) { session = data.session; unlockDash(); }
+          if (path === '/auth/lock') { session = null; hq.dashboards.delete(dash); }
+        } catch (e) {
+          send({ t: 'res', id: msg.id, ok: false, status: e.status || 500, error: e.message });
+          if (e.status === 401 && path !== '/auth/unlock') { hq.dashboards.delete(dash); send({ t: 'locked' }); }
+        }
       }
     });
 

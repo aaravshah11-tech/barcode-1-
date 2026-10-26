@@ -2,7 +2,7 @@
 body { overflow-x: hidden; }
 /* The "this device is watching" banner — always on screen while it's an Agent, even when dimmed. */
 .banner-active { position: fixed; top: 0; left: 0; right: 0; z-index: 2600; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); text-align: center;
-  font: 800 .78rem var(--mono); letter-spacing: .14em; color: #031208; background: var(--green); box-shadow: 0 0 18px rgba(57, 255, 136, .5); }
+  font: 800 .78rem var(--mono); letter-spacing: .14em; color: var(--on-accent); background: var(--green); box-shadow: 0 0 18px rgba(var(--accent-rgb), .5); }
 .banner-active.watching { background: var(--red); color: #fff; box-shadow: 0 0 18px rgba(255, 77, 77, .5); }
 .banner-active.offline { background: var(--amber); color: #1a1000; }
 .agent-main { min-height: 100dvh; padding: 56px 16px 28px; padding-top: calc(48px + env(safe-area-inset-top)); display: grid; grid-template-rows: auto 1fr auto; gap: 14px; max-width: 760px; margin: 0 auto; }
@@ -20,7 +20,7 @@ body { overflow-x: hidden; }
 .big-msg h1 { font: 800 1.1rem var(--mono); letter-spacing: .18em; color: var(--green); }
 .activate { position: fixed; inset: 0; z-index: 2500; background: rgba(5, 8, 7, .92); display: grid; place-items: center; text-align: center; padding: 24px; }
 .activate button { font-size: 1.1rem; padding: 18px 26px; }
-.readout { font: 800 clamp(2.4rem, 12vw, 4.6rem)/1 var(--mono); color: var(--green); text-shadow: 0 0 18px rgba(57, 255, 136, .45); }
+.readout { font: 800 clamp(2.4rem, 12vw, 4.6rem)/1 var(--mono); color: var(--green); text-shadow: 0 0 18px rgba(var(--accent-rgb), .45); }
 .readout small { font-size: .35em; color: var(--muted); }
 .meter { height: 12px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line-2); overflow: hidden; }
 .meter > div { height: 100%; background: var(--green); width: 0; transition: width .15s; }
@@ -28,7 +28,7 @@ body { overflow-x: hidden; }
 .cam-wrap { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line-2); background: #000; aspect-ratio: 4 / 3; }
 .cam-wrap video, .cam-wrap canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
 .zone-grid { position: absolute; inset: 0; display: grid; }
-.zone-grid button { border: 1px solid rgba(57, 255, 136, .25); border-radius: 0; background: transparent; min-height: 0; padding: 0; }
+.zone-grid button { border: 1px solid rgba(var(--accent-rgb), .25); border-radius: 0; background: transparent; min-height: 0; padding: 0; }
 .zone-grid button[aria-pressed="true"] { background: rgba(255, 77, 77, .45); border-color: rgba(255, 77, 77, .6); }
 .zone-grid.view button { pointer-events: none; }
 .zone-grid.view button[aria-pressed="false"] { border-color: transparent; }
@@ -38,10 +38,10 @@ body { overflow-x: hidden; }
 .knock:active { transform: scale(.97); background: rgba(57,255,136,.3); }
 /* dimmer + find-me flash */
 .dim { position: fixed; inset: 0; z-index: 2400; background: rgba(0, 0, 0, .9); display: grid; place-content: center; text-align: center; gap: 8px; cursor: pointer; }
-.dim-clock { font-size: 2.2rem; color: rgba(57, 255, 136, .35); letter-spacing: .1em; }
+.dim-clock { font-size: 2.2rem; color: rgba(var(--accent-rgb), .35); letter-spacing: .1em; }
 .find { position: fixed; inset: 0; z-index: 2700; display: grid; place-items: center; animation: findflash .5s steps(1) infinite; }
 .find-text { font-size: clamp(2rem, 14vw, 6rem); font-weight: 900; text-align: center; color: #000; }
-@keyframes findflash { 0% { background: #39ff88; } 50% { background: #ffffff; } }
+@keyframes findflash { 0% { background: var(--green); } 50% { background: #ffffff; } }
 @media (prefers-reduced-motion: reduce) { .find { animation-duration: 1.2s; } }
 /* INTEL SCREEN */
 .intel { display: grid; gap: 12px; }

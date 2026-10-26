@@ -50,11 +50,25 @@ exports.launch = (chromium, extra = []) => chromium.launch({ args: [...WEBRTC, .
 /** Calls HQ's API from the HQ page (the same thing its buttons do). */
 exports.hqApi = (page) => (method, p, body) => page.evaluate(([m, pa, b]) => window.__hq.api(m, pa, b), [method, p, body]);
 
-/** Opens HQ and waits for it to be online. */
+/** Gets past the boot sequence and the codename + PIN screen (enrolling the Director the first time). */
+exports.login = async (page, { codename = 'TESTER', pin = '2468' } = {}) => {
+  await page.waitForSelector('.boot, [data-login], [data-threat]', { timeout: 20000 });
+  if (await page.$('.boot')) { await page.click('.boot').catch(() => {}); await page.waitForSelector('.boot', { state: 'detached' }); }
+  await page.waitForSelector('[data-login], [data-threat]', { timeout: 20000 });
+  if (!(await page.$('[data-login]'))) return;
+  await page.fill('[data-login] [name=codename]', codename);
+  await page.fill('[data-login] [name=pin]', pin);
+  if (await page.$('[data-login] [name=pin2]')) await page.fill('[data-login] [name=pin2]', pin);
+  await page.click('[data-login] button');
+  await page.waitForSelector('[data-threat]', { timeout: 20000 });
+};
+
+/** Opens HQ, logs in and waits for it to be online. */
 exports.openHQ = async (page, world) => {
   await page.goto(world.hqUrl);
+  await exports.login(page);
   await page.waitForSelector('[data-threat]', { timeout: 15000 });
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('HQ ONLINE'), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.includes('UPLINK ONLINE'), null, { timeout: 15000 });
 };
 
 /** Recruits a new Agent in `ctx` with a fresh code from HQ. */
