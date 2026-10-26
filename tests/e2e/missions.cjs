@@ -1,44 +1,36 @@
 // Missions on a real (headless) Agent with a fake camera and synthetic motion sensors.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startHQ, check, finish } = require('./helpers.cjs');
+const helpers = require('./helpers.cjs');
+const { startWorld, openHQ, hqApi, check, finish } = helpers;
 const video = require('./video.cjs');
 const SHOTS = process.argv[2] || '';
-const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true, permissions: ['accelerometer', 'gyroscope'] };
+const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, permissions: ['accelerometer', 'gyroscope'] };
 
 (async () => {
-  const hq = await startHQ();
+  const world = await startWorld();
   const errors = [];
   const browsers = [];
-  const launch = async (file) => { const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', ...(file ? [`--use-file-for-fake-video-capture=${file}`] : []), `--use-file-for-fake-audio-capture=${video.tone()}`] }); browsers.push(b); return b; };
+  const launch = async (file) => { const b = await helpers.launch(chromium, [...(file ? [`--use-file-for-fake-video-capture=${file}`] : []), `--use-file-for-fake-audio-capture=${video.tone()}`]); browsers.push(b); return b; };
   const watch = (p, who) => p.on('pageerror', (e) => errors.push(`[${who}] ${e.message}`));
   const shot = (p, n) => SHOTS && p.screenshot({ path: path.join(SHOTS, `${n}.png`) });
 
   const main = await launch(video.moving());
-  const dashCtx = await main.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1360, height: 860 } });
-  const dash = await dashCtx.newPage();
+  const dash = await (await main.newContext({ viewport: { width: 1360, height: 860 } })).newPage();
   watch(dash, 'hq');
   dash.on('console', (m) => { if (m.type() === 'error') errors.push(`[hq console] ${m.text()}`); });
-  await dash.goto(hq.url + '/');
-  await dash.fill('[name=pw]', 'secret1'); await dash.fill('[name=pw2]', 'secret1'); await dash.click('[data-gate] button');
-  await dash.waitForSelector('[data-threat]', { timeout: 10000 });
-  const api = (p, opts) => dashCtx.request.fetch(hq.url + p, opts).then((r) => r.json());
+  await openHQ(dash, world);
+  const call = hqApi(dash);
 
-  // Recruit an Agent and log every message it sends to HQ.
+  // Recruit an Agent; `sent()` lists every message it has sent to HQ.
   const recruit = async (browser, who) => {
-    const { code } = await api('/api/pair', { method: 'POST' });
-    const ctx = await browser.newContext(PHONE);
-    const p = await ctx.newPage();
-    watch(p, who);
-    const sent = [];
-    p.on('websocket', (ws) => ws.on('framesent', (f) => sent.push(String(f.payload))));
-    await p.goto(`${hq.url}/agent/#pair=${code}`);
-    await p.waitForFunction(() => window.__agent?.connected, null, { timeout: 15000 });
-    const id = (await api('/api/state')).agents.at(-1).id;
-    return { p, id, sent };
+    const r = await helpers.recruit(dash, await browser.newContext(PHONE), world);
+    watch(r.p, who);
+    return { ...r, sentNow: () => r.p.evaluate(() => window.__agent.sent.slice()) };
   };
-  const assign = (id, mission, settings) => api(`/api/agents/${id}`, { method: 'PATCH', data: { mission, settings } });
-  const events = async (kind) => (await api(`/api/log?kind=${kind}&limit=100`));
+  const assign = (id, mission, settings) => call('PATCH', `/agents/${id}`, { mission, settings });
+  const events = (kind) => call('GET', `/log?kind=${kind}&limit=100`);
+  const state = () => call('GET', '/state');
 
   // ---------- MOTION WATCH ----------
   const cam = await recruit(main, 'motion');
@@ -60,15 +52,16 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   check((await dash.textContent('[data-reason]')).includes('while nobody’s home'), 'motion while nobody’s home → THREAT RED');
   await dash.click('[data-mode="home"]');
   // Privacy: nothing that looks like a picture or audio ever went to HQ
-  const biggest = Math.max(...cam.sent.map((s) => s.length));
-  check(biggest < 2000 && !cam.sent.some((s) => /data:image|data:audio|base64|blob:/i.test(s)), `Agent → HQ messages are tiny text events only (largest ${biggest} bytes)`);
+  const camSent = await cam.sentNow();
+  const biggest = Math.max(...camSent.map((s) => s.length));
+  check(biggest < 2000 && !camSent.some((s) => /data:image|data:audio|base64|blob:/i.test(s)), `Agent → HQ messages are tiny text events only (largest ${biggest} bytes)`);
   // Ignore zones: block the whole view on the Agent → no more motion
   await cam.p.click('[data-zones]');
   for (let i = 0; i < 48; i++) await cam.p.click(`[data-cell="${i}"]`);
   await shot(cam.p, 'agent-zones');
   await cam.p.click('[data-zones]');
   await dash.waitForFunction(async () => true);
-  const zoned = (await api('/api/state')).agents.find((a) => a.id === cam.id);
+  const zoned = (await state()).agents.find((a) => a.id === cam.id);
   check(zoned.settings.ignore.length === 48, 'ignore zones picked on the Agent are saved at HQ (just the grid squares)');
   await new Promise((r) => setTimeout(r, 1500));
   const before = (await events('motion')).length;
@@ -110,7 +103,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   await swing(-70);
   await dash.waitForSelector('[data-log] >> text=Door closed', { timeout: 10000 });
   check(true, 'door swings back → “Door closed”');
-  check(!door.sent.some((s) => /data:|base64/i.test(s)), 'door Agent sends events only');
+  check(!(await door.sentNow()).some((s) => /data:|base64/i.test(s)), 'door Agent sends events only');
 
   // ---------- INTEL SCREEN (wall display) ----------
   const wall = await recruit(main, 'intel');
@@ -122,7 +115,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
 
   // ---------- DOOR PANEL ----------
   const bell = await recruit(main, 'panel');
-  await api(`/api/agents/${bell.id}`, { method: 'PATCH', data: { name: 'Front door' } });
+  await call('PATCH', `/agents/${bell.id}`, { name: 'Front door' });
   await assign(bell.id, 'panel', { label: 'RING HQ', cooldown: 3 });
   await bell.p.waitForSelector('[data-knock]');
   await bell.p.waitForFunction(() => document.querySelector('[data-knock]').textContent === 'RING HQ');
@@ -151,9 +144,9 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
     throw e;
   });
   check(true, 'SOUND LEVEL: a noise above the limit → “Loud sound: NN dB”');
-  check(!ear.sent.some((x) => x.length > 2000 || /data:|base64|blob:/i.test(x)), 'sound Agent sends numbers only — no audio');
+  check(!(await ear.sentNow()).some((x) => x.length > 2000 || /data:|base64|blob:/i.test(x)), 'sound Agent sends numbers only — no audio');
   let reading;
-  for (let i = 0; i < 30 && typeof reading !== 'number'; i++) { reading = (await api('/api/state')).agents.find((a) => a.id === ear.id).status?.level; if (typeof reading !== 'number') await ear.p.waitForTimeout(200); }
+  for (let i = 0; i < 30 && typeof reading !== 'number'; i++) { reading = (await state()).agents.find((a) => a.id === ear.id).status?.level; if (typeof reading !== 'number') await ear.p.waitForTimeout(200); }
   check(typeof reading === 'number', `dashboard shows the live dB reading (${reading} dB)`);
   await shot(ear.p, 'agent-sound');
 
@@ -171,6 +164,5 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
   check(await ear.p.evaluate(() => !document.querySelector('[data-banner]').classList.contains('watching')), 'back to STANDBY: microphone released, banner no longer red');
 
   check(!(await dash.$('.toast.err')), 'no error messages on the dashboard');
-  await finish(null, hq, errors, 'missions');
-  for (const b of browsers) await b.close();
+  await finish(browsers, world, errors, 'missions');
 })().catch((e) => { console.error(e); process.exit(1); });
