@@ -16,6 +16,7 @@ const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
 const S = { agents: [], events: [], threat: null, settings: { fx: true, mode: 'home' }, missions: [], info: {}, filter: 'all', open: null, mode: MODE, api: (...a) => T.api(...a) };
 let radar = null;
+const HAS_GL = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
 
 // ---------------- connect to HQ's brain ----------------
 let T = null; // transport: { api, onMessage, local }
@@ -160,9 +161,12 @@ function shell() {
   </div>
   <main class="cc">
     ${panel('p-map radar-panel', 0.15, `<div class="panel-head"><h2>Tactical map</h2>
-        <div class="filters" role="group" aria-label="Map view"><button data-mapview="plan" aria-pressed="${S.mapView === 'plan'}">Plan</button><button data-mapview="radar" aria-pressed="${S.mapView !== 'plan'}">Radar</button></div>
+        <div class="filters" role="group" aria-label="Map view">${HAS_GL ? '<button data-mapview="3d">3D</button>' : ''}<button data-mapview="plan">Plan</button><button data-mapview="radar">Radar</button></div>
         ${MODE === 'hq' ? '<button class="small" data-build>🏠 Build my house</button>' : ''}</div>
-      <div class="radar-wrap"><canvas data-radar role="img" ${S.mapView === 'plan' ? 'hidden' : ''}></canvas><div class="plan" data-plan ${S.mapView === 'plan' ? '' : 'hidden'}></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
+      <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
+        <div class="map3d" data-map3d hidden></div>
+        <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="grow"></span><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">⇕ Explode</button><button class="small" data-fit3d title="Show the whole house">⤢</button></div>
+        <div class="map-hint mono" data-maphint hidden></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
     <div class="col-l">
     ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
     ${panel('p-home', 0.35, '<div class="panel-head"><h2>Who’s home</h2></div><div class="people" data-peoplelist></div>')}
@@ -177,7 +181,8 @@ function shell() {
   </main>`;
   radar = new Radar($('[data-radar]'), { onPick: openAgent, fx: S.settings.fx });
   renderMute();
-  if (S.mapView === undefined) S.mapView = houseHasRooms() ? 'plan' : 'radar';
+  map3d?.destroy(); map3d = null;
+  if (S.mapView === undefined) S.mapView = houseHasRooms() ? (HAS_GL ? '3d' : 'plan') : 'radar';
   launchMapView();
   if (!shellWired) { app.addEventListener('click', onClick); shellWired = true; }
 }
@@ -187,14 +192,19 @@ function renderMute() { const b = $('[data-mute]'); if (b) { const p = sfxPrefs(
 onSfx(renderMute);
 
 async function onClick(e) {
+  const li = e.target.closest('[data-evagent]');
+  if (li) return flyToAgent(li.dataset.evagent);
   const b = e.target.closest('button');
   if (!b) return;
   sfx('click');
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
   if ('lock' in b.dataset) { lockNow('Locked. HQ is still guarding the house.'); return; }
-  if ('build' in b.dataset) { openBuilder(S, { files: T.files, onClose: () => { S.mapView = houseHasRooms() ? 'plan' : S.mapView; launchMapView(); } }); return; }
+  if ('build' in b.dataset) { openBuilder(S, { files: T.files, onClose: () => { if (houseHasRooms()) S.mapView = HAS_GL ? '3d' : 'plan'; launchMapView(); } }); return; }
   if (b.dataset.mapview) { S.mapView = b.dataset.mapview; launchMapView(); return; }
+  if (b.dataset.floor3d) { map3d?.showFloor(Number(b.dataset.floor3d)); renderFloorButtons(); return; }
+  if ('explode' in b.dataset) { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); map3d?.setExplode(on); return; }
+  if ('fit3d' in b.dataset) { map3d?.frame(map3d.floorSel); return; }
   if (b.dataset.planfloor) { S.planFloor = Number(b.dataset.planfloor); renderPlan(); return; }
   if (b.dataset.mode) {
     try { S.settings = await T.api('/settings', { method: 'PATCH', body: { mode: b.dataset.mode } }); renderTop(); renderPeople(); } catch (x) { toast(x.message, { kind: 'err' }); }
@@ -215,17 +225,21 @@ async function onClick(e) {
 // ---------------- live updates from HQ ----------------
 function onMsg(msg) {
   if (msg.t === 'state') { apply(msg); renderAll(); }
-  else if (msg.t === 'agent') { upsert(msg.agent); renderAgents(); if (S.open === msg.agent.id) refreshDrawer(); }
-  else if (msg.t === 'agentRemoved') { S.agents = S.agents.filter((a) => a.id !== msg.id); renderAgents(); }
-  else if (msg.t === 'event') { addEvent(msg.event); renderStats(); if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S); }
+  else if (msg.t === 'agent') { upsert(msg.agent); renderAgents(); if (S.open === msg.agent.id) refreshDrawer(); agents3d(); }
+  else if (msg.t === 'agentRemoved') { S.agents = S.agents.filter((a) => a.id !== msg.id); renderAgents(); agents3d(); }
+  else if (msg.t === 'event') { addEvent(msg.event); renderStats(); map3d?.event(msg.event); if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S); }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
   else if (msg.t === 'frame') liveFrame(msg);
-  else if (msg.t === 'house') { S.house = msg.house; renderPlan(); }
+  else if (msg.t === 'house') { S.house = msg.house; renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); }
 }
+let agents3dTimer = null;
+function agents3d() { clearTimeout(agents3dTimer); agents3dTimer = setTimeout(() => map3d?.setAgents(S.agents), 150); }
 function settingsChanged() {
+  const themeWas = document.documentElement.dataset.theme;
   applyTheme(S.settings.theme);
+  if (map3d) { map3d.fx = S.settings.fx; if (themeWas !== S.settings.theme) map3d.setTheme(); }
   document.body.classList.toggle('fx', S.settings.fx);
   radar?.setFx(S.settings.fx);
   renderTop(); renderPeople();
@@ -259,12 +273,70 @@ function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople();
 
 // ---------------- the floor plan on the map panel (the 3D map replaces this in the next upgrade) ----------------
 const houseHasRooms = () => !!S.house?.floors?.some((f) => f.rooms.length);
-function launchMapView() {
+async function launchMapView() {
+  if (S.mapView === '3d' && !HAS_GL) S.mapView = 'plan';
   $$('[data-mapview]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mapview === (S.mapView || 'radar'))));
-  const c = $('[data-radar]'), p = $('[data-plan]');
-  if (c) c.hidden = S.mapView === 'plan';
-  if (p) p.hidden = S.mapView !== 'plan';
+  const c = $('[data-radar]'), p = $('[data-plan]'), m = $('[data-map3d]'), ui = $('[data-map3dui]');
+  if (!c) return;
+  c.hidden = S.mapView !== 'radar';
+  p.hidden = S.mapView !== 'plan';
+  m.hidden = ui.hidden = S.mapView !== '3d';
   renderPlan();
+  if (S.mapView === '3d') await start3d();
+}
+
+// ---------------- the 3D house map ----------------
+let map3d = null, map3dLoading = null;
+async function start3d() {
+  if (map3d || map3dLoading) return map3dLoading;
+  const box = $('[data-map3d]');
+  map3dLoading = (async () => {
+    try {
+      const { Map3D, getQuality } = await import('./map3d.js');
+      if (!box.isConnected) return;
+      map3d = new Map3D(box, {
+        fx: S.settings.fx, quality: getQuality(),
+        onPick: (id) => openAgent(id),
+        onPlace: (id, floorId, x, y) => placeAgent(id, floorId, x, y),
+      });
+      map3d.setHouse(S.house);
+      map3d.setAgents(S.agents);
+      renderFloorButtons();
+      if (MODE === 'hq' && S.house.model && T.files) T.files.get('model').then((f) => map3d?.setModel(f, S.house.model));
+    } catch (x) { console.error(x); toast(`3D map couldn’t start: ${x.message}. Showing the plan instead.`, { kind: 'err' }); S.mapView = 'plan'; map3d = null; launchMapView(); }
+    finally { map3dLoading = null; }
+  })();
+  return map3dLoading;
+}
+function renderFloorButtons() {
+  const box = $('[data-floorbtns]');
+  if (!box || !S.house) return;
+  const sel = map3d?.floorSel ?? -1;
+  box.innerHTML = (S.house.floors.length > 1 ? `<button data-floor3d="-1" aria-pressed="${sel < 0}">All floors</button>` : '') + S.house.floors.map((f, i) => `<button data-floor3d="${i}" aria-pressed="${sel === i || (sel < 0 && S.house.floors.length === 1)}">${esc(f.name)}</button>`).join('');
+}
+async function placeAgent(id, floorId, x, y) {
+  hint('');
+  try { const a = await T.api(`/agents/${id}/place`, { method: 'PUT', body: { floorId, x, y } }); upsert(a); map3d?.setAgents(S.agents); sfx('granted'); toast(`${a.codename} placed on the map`); } catch (x) { toast(x.message, { kind: 'err' }); }
+}
+/** Mission Log entry clicked: fly the 3D camera to where it happened. */
+async function flyToAgent(id) {
+  const a = S.agents.find((x) => x.id === id);
+  if (!a) return;
+  if (!a.place || !houseHasRooms() || !HAS_GL) return openAgent(id);
+  if (S.mapView !== '3d') { S.mapView = '3d'; await launchMapView(); }
+  if (map3d?.flyTo(id)) { sfx('scan'); $('.p-map')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+function hint(text) { const h = $('[data-maphint]'); if (h) { h.textContent = text; h.hidden = !text; } }
+/** Start "place on map": the next click on the 3D map puts the Agent there. */
+async function startPlacing(a) {
+  if (!houseHasRooms()) return toast(MODE === 'hq' ? 'Build your house first: 🏠 Build my house.' : 'Build the house on the HQ computer first.');
+  drawer?.close();
+  S.mapView = '3d';
+  await launchMapView();
+  if (!map3d) return;
+  map3d.placeMode(a.id);
+  hint(`CLICK WHERE ${a.codename} IS · or drag its card from the Agents list onto the map`);
+  $('.p-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function renderPlan() {
   const box = $('[data-plan]');
@@ -306,7 +378,7 @@ function agentCard(a) {
   const st = a.status || {};
   const batt = a.online && typeof st.battery === 'number' ? `${Math.round(st.battery * 100)}%${st.charging ? '⚡' : ''}` : '';
   const level = a.online && typeof st.level === 'number' ? (a.mission === 'sound' ? `${Math.round(st.level)} dB` : a.mission === 'light' ? `${Math.round(st.level)}% light` : '') : '';
-  return `<button class="agent ${a.online ? '' : 'offline'}" data-agent="${esc(a.id)}">
+  return `<button class="agent ${a.online ? '' : 'offline'}" data-agent="${esc(a.id)}" draggable="true">
     <span class="dot ${a.online ? (recentLevel(a.id) ? 'warn' : 'on') : ''}"></span>
     <span class="a-name"><small>${esc(a.label)}</small>${esc(a.codename)}${a.name ? ` <small>· ${esc(a.name)}</small>` : ''}</span>
     <span class="a-mission">${m ? `${m.glyph} ${esc(m.name)}` : ''}</span>
@@ -317,6 +389,7 @@ function agentCard(a) {
 function renderAgents() {
   const box = $('[data-agents]');
   if (!box) return;
+  if (!box.dataset.drag) { box.dataset.drag = '1'; box.addEventListener('dragstart', (e) => { const id = e.target.closest('[data-agent]')?.dataset.agent; if (id) { e.dataTransfer.setData('text/sentinel-agent', id); e.dataTransfer.effectAllowed = 'move'; if (S.mapView !== '3d' && houseHasRooms()) { S.mapView = '3d'; launchMapView(); } } }); }
   $('[data-count]').textContent = S.agents.length ? `(${S.agents.filter((a) => a.online).length}/${S.agents.length} online)` : '';
   box.innerHTML = S.agents.length ? S.agents.map(agentCard).join('')
     : '<div class="empty"><div class="big">NO AGENTS YET</div>Press <b>＋ Recruit</b> and scan the QR code with an old phone or tablet.</div>';
@@ -329,6 +402,7 @@ const KIND = { motion: 'MOTION', door: 'DOOR', sound: 'SOUND', light: 'LIGHT', k
 const matchesFilter = (e) => S.filter === 'all' || (S.filter === 'alerts' ? e.level !== 'info' : S.filter === 'agent' ? e.kind === 'agent' : e.kind === S.filter);
 function logItem(e, fresh = false) {
   const li = document.createElement('li');
+  if (e.agentId) { li.dataset.evagent = e.agentId; li.tabIndex = 0; li.title = 'Show on the map'; }
   li.innerHTML = `<time datetime="${new Date(e.ts).toISOString()}">${esc(dayClock(e.ts))}</time><span class="${esc(e.level)}"><span class="k">[${KIND[e.kind] || e.kind.toUpperCase()}]</span><span data-msg data-text="${esc(e.message)}">${fresh ? '' : esc(e.message)}</span></span>`;
   return li;
 }
@@ -430,8 +504,15 @@ function liveHtml(a) {
     <dt>Last signal</dt><dd>${esc(ago(a.online ? st.at || a.lastSeen : a.lastSeen))}</dd>
     <dt>Battery</dt><dd>${typeof st.battery === 'number' ? `${Math.round(st.battery * 100)}%${st.charging ? ' (charging)' : ''}` : 'not shared by this device'}</dd>
     ${typeof st.level === 'number' ? `<dt>Reading</dt><dd>${esc(Math.round(st.level))}${a.mission === 'sound' ? ' dB' : '%'}</dd>` : ''}
+    <dt>Location</dt><dd>${esc(placeName(a))}</dd>
     <dt>Recruited</dt><dd>${esc(new Date(a.createdAt).toLocaleString('en-GB'))}</dd>
     <dt>Device</dt><dd class="small">${esc(shortUa(a.ua))}</dd></dl>`;
+}
+function placeName(a) {
+  if (!a.place) return 'not on the map yet — press 📍 Place on map';
+  const f = S.house?.floors.find((x) => x.id === a.place.floorId);
+  const r = f?.rooms.find((x) => x.id === a.place.roomId);
+  return f ? `${r ? r.name : 'outside the rooms'} · ${f.name}` : 'on a floor that no longer exists';
 }
 const shortUa = (ua) => (/iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? (ua.match(/Android [\d.]+; ([^;)]+)/)?.[1] || 'Android') : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : ua.slice(0, 60)) || 'Unknown';
 
@@ -456,7 +537,7 @@ function drawAgent(a) {
       <label class="field grow" style="margin:0"><span>Where is it?</span><input name="name" value="${esc(a.name)}" placeholder="e.g. Hallway" maxlength="40" autocomplete="off"></label><button style="align-self:end">Save</button></form>
     <div><h2 style="margin-bottom:8px">Mission</h2><div class="missions">${S.missions.map((x) => `<button class="mission" data-mission="${x.id}" aria-pressed="${x.id === a.mission}"><b>${x.glyph} ${esc(x.name)}</b><span>${esc(x.summary)}</span></button>`).join('')}</div></div>
     ${m?.settings.length ? `<form data-msettings><h2 style="margin-bottom:8px">${esc(m.name)} settings</h2>${m.settings.map((s) => settingField(s, a.settings?.[s.key] ?? s.default)).join('')}<button class="btn-primary">Send to Agent</button></form>` : ''}
-    <div class="row"><button class="btn-primary" data-liveview ${a.online ? '' : 'disabled'}>📷 Live view</button><button data-cmd="find" ${a.online ? '' : 'disabled'}>◎ Find it (flash + beep)</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>↻ Restart Agent page</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
+    <div class="row"><button class="btn-primary" data-liveview ${a.online ? '' : 'disabled'}>📷 Live view</button><button data-place>📍 ${a.place ? 'Move on map' : 'Place on map'}</button><button data-cmd="find" ${a.online ? '' : 'disabled'}>◎ Find it (flash + beep)</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>↻ Restart Agent page</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
   </div>`;
   box.querySelectorAll('input[type=range]').forEach((r) => r.addEventListener('input', () => {
     const def = m.settings.find((s) => s.key === r.name);
@@ -484,6 +565,8 @@ function drawAgent(a) {
       let na;
       try { na = await T.api(`/agents/${a.id}`, { method: 'PATCH', body: { mission: b.dataset.mission } }); } catch (x) { return toast(x.message, { kind: 'err' }); }
       upsert(na); renderAgents(); drawAgent(na); toast(`${na.codename}: ${missionById(na.mission).name}`);
+    } else if ('place' in b.dataset) {
+      startPlacing(a);
     } else if ('liveview' in b.dataset) {
       openLive(a);
     } else if (b.dataset.cmd) {

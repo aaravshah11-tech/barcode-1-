@@ -3,7 +3,7 @@
 import { computeThreat, ACTIVITY_KINDS } from '../../shared/threat.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
 import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
-import { sanitizeHouse, emptyHouse } from '../../shared/house.js';
+import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = { fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15 };
@@ -257,6 +257,24 @@ export class HQ extends Emitter {
     }
     this.pushAgent(id);
     return this.agentView(b);
+  }
+  /** Where an Agent sits on the house map (a floor + a spot in metres), or null to take it off the map. */
+  placeAgent(id, place) {
+    const a = this.db.agent(id);
+    if (!a) return null;
+    let clean = null;
+    if (place) {
+      const f = this.house().floors.find((x) => x.id === place.floorId);
+      const x = Number(place.x), y = Number(place.y);
+      if (!f || !Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 500 || Math.abs(y) > 500) return null;
+      clean = { floorId: f.id, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
+      const room = f.rooms.find((r) => pointInPolygon([clean.x, clean.y], r.points));
+      if (room) clean.roomId = room.id;
+      this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(a)} ${a.codename} placed in ${room ? room.name : f.name}` });
+    }
+    this.db.updateAgent(id, { place: clean });
+    this.pushAgent(id);
+    return this.agentView(this.db.agent(id));
   }
   removeAgent(id) {
     const a = this.db.agent(id);

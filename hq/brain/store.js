@@ -68,7 +68,7 @@ export async function openStore({ memory = false, storage = globalThis.localStor
     },
     updateAgent(id, patch) {
       const a = meta.agents.find((x) => x.id === id);
-      if (a) { for (const k of ['codename', 'name', 'mission', 'settings', 'lastSeen', 'battery', 'charging', 'ua']) if (k in patch) a[k] = copy(patch[k]); saveMeta(); }
+      if (a) { for (const k of ['codename', 'name', 'mission', 'settings', 'lastSeen', 'battery', 'charging', 'ua', 'place']) if (k in patch) a[k] = copy(patch[k]); saveMeta(); }
       return api.agent(id);
     },
     revokeAgent(id) { const a = meta.agents.find((x) => x.id === id); if (a) { a.revoked = true; a.tokenHash = `revoked:${Date.now()}`; saveMeta(); } },

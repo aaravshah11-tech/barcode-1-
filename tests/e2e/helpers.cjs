@@ -52,7 +52,7 @@ exports.hqApi = (page) => (method, p, body) => page.evaluate(([m, pa, b]) => win
 
 /** Gets past the boot sequence and the codename + PIN screen (enrolling the Director the first time). */
 exports.login = async (page, { codename = 'TESTER', pin = '2468' } = {}) => {
-  await page.waitForSelector('.boot, [data-login], [data-threat]', { timeout: 20000 });
+  await page.waitForSelector('.boot, [data-login], [data-threat]', { timeout: 20000 }).catch(async (e) => { console.log('page shows:', (await page.textContent('body').catch(() => '')).replace(/\s+/g, ' ').slice(0, 300)); throw e; });
   if (await page.$('.boot')) { await page.click('.boot').catch(() => {}); await page.waitForSelector('.boot', { state: 'detached' }); }
   await page.waitForSelector('[data-login], [data-threat]', { timeout: 20000 });
   if (!(await page.$('[data-login]'))) return;
@@ -78,7 +78,7 @@ exports.recruit = async (dash, ctx, world, { manual = false } = {}) => {
   const hqId = (await api('GET', '/state')).info.hqId;
   const p = await ctx.newPage();
   await p.goto(`${world.agentUrl}#hq=${hqId}&pair=${code}`);
-  await p.waitForFunction(() => window.__agent?.connected, null, { timeout: 20000 });
+  await p.waitForFunction(() => window.__agent?.connected, null, { timeout: 20000 }).catch(async (e) => { console.log('agent page:', (await p.textContent('body').catch(() => '')).replace(/\s+/g, ' ').slice(0, 300)); throw e; });
   const id = (await api('GET', '/state')).agents.at(-1).id;
   return { p, id };
 };

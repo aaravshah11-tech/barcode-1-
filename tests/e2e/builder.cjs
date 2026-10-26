@@ -127,6 +127,9 @@ const SHOTS = process.argv[2] || '';
   // Done → the plan shows on the map panel
   await page.click('[data-done]');
   await page.waitForSelector('.builder', { state: 'detached' });
+  await page.waitForFunction(() => window.__map3d?.roomMeshes.size === 3, null, { timeout: 15000 });
+  check(true, 'Done: the house appears on the 3D map');
+  await page.click('[data-mapview="plan"]');
   await page.waitForSelector('[data-plan] >> text=Kitchen');
   check(true, 'Done: the floor plan shows on the Tactical map');
   await page.waitForSelector('[data-log] >> text=House plan updated: 2 floors, 3 rooms', { timeout: 5000 }).catch(() => {});
@@ -137,7 +140,7 @@ const SHOTS = process.argv[2] || '';
   // Survives a reload
   await page.reload();
   await login(page);
-  await page.waitForSelector('[data-plan] >> text=Lounge', { timeout: 15000 });
+  await page.waitForFunction(() => window.__map3d?.roomMeshes.size === 3, null, { timeout: 15000 });
   await page.click('[data-build]');
   await page.click('[data-tool="trace"]');
   await page.waitForSelector('[data-trace]');

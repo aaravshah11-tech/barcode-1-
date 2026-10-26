@@ -12,7 +12,12 @@ import { dial } from '../shared/link.js';
 export async function startLocal({ onStatus }) {
   // Only one HQ per browser: a second tab would fight the first one for HQ's address.
   if (navigator.locks) {
-    const got = await new Promise((resolve) => navigator.locks.request('sentinel-hq', { ifAvailable: true }, (lock) => { resolve(!!lock); return lock ? new Promise(() => {}) : undefined; }));
+    // After a reload the old page may hold on for a moment, so keep asking for a few seconds.
+    let got = false;
+    for (let i = 0; i < 12 && !got; i++) {
+      got = await new Promise((resolve) => navigator.locks.request('sentinel-hq', { ifAvailable: true }, (lock) => { resolve(!!lock); return lock ? new Promise(() => {}) : undefined; }));
+      if (!got) await new Promise((r) => setTimeout(r, 400));
+    }
     if (!got) throw Object.assign(new Error('HQ is already open in another tab or window on this computer. Use that one (or close it and reload this page).'), { taken: true });
   }
   const db = await openStore();

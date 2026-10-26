@@ -61,6 +61,12 @@ export function makeApi({ hq, db, auth }) {
       if (!hq.command(mm[1], body.action)) throw fail(409, 'That Agent is offline.');
       return { ok: true };
     }
+    mm = p.match(/^\/agents\/([\w-]{1,64})\/place$/);
+    if (mm && m === 'PUT') {
+      const a = hq.placeAgent(mm[1], body.clear ? null : body);
+      if (!a) throw fail(400, 'Couldn’t place the Agent there.');
+      return a;
+    }
     mm = p.match(/^\/agents\/([\w-]{1,64})\/live$/);
     if (mm && m === 'POST') {
       if (!hq.db.agent(mm[1])) throw fail(404, 'No such Agent.');

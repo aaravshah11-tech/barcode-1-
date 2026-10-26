@@ -7,6 +7,7 @@ import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 const TABS = [['general', 'General'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
 export const registerTab = (id, render) => { extraTabs[id] = render; };
+const q3d = () => { try { return localStorage.getItem('sentinel.q3d') || 'medium'; } catch { return 'medium'; } };
 const hr = '<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">';
 
 /** Save text as a file on this device (Mission Log export, backups). */
@@ -39,6 +40,7 @@ function general(body, S, onChange) {
   body.innerHTML = `
     <h2 style="margin-bottom:8px">Look &amp; sound</h2>
     <div class="themes" role="group" aria-label="Theme">${THEMES.map(([k, l]) => `<button type="button" class="theme-chip t-${k}" data-theme="${k}" aria-pressed="${st.theme === k}"><i></i>${esc(l)}</button>`).join('')}</div>
+    <label class="field" style="margin-top:12px"><span>3D map quality (this device)</span><select data-q3d style="max-width:260px">${[['low', 'Low — smooth on older laptops'], ['medium', 'Medium'], ['high', 'High — sharpest']].map(([k, l]) => `<option value="${k}" ${q3d() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="field" style="margin-top:12px"><span>Sound volume (this device)</span><div class="row"><input type="range" min="0" max="100" step="5" value="${Math.round(sp.volume * 100)}" data-volume style="flex:1"><label class="row small" style="gap:6px"><input type="checkbox" data-muted ${sp.muted ? 'checked' : ''}> Mute</label></div></label>
     ${hr}
     <form data-general>
@@ -69,6 +71,7 @@ function general(body, S, onChange) {
   body.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', async () => {
     try { const s = await S.api('/settings', { method: 'PATCH', body: { theme: b.dataset.theme } }); onChange?.(s); body.querySelectorAll('[data-theme]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); sfx('granted'); } catch (x) { toast(x.message, { kind: 'err' }); }
   }));
+  $('[data-q3d]', body).addEventListener('change', (e) => { try { localStorage.setItem('sentinel.q3d', e.target.value); } catch { /* ignore */ } window.__map3d?.setQuality(e.target.value); toast('3D quality saved for this device'); });
   $('[data-volume]', body).addEventListener('change', (e) => { setSfx({ volume: Number(e.target.value) / 100, muted: false }); $('[data-muted]', body).checked = false; sfx('beep'); });
   $('[data-muted]', body).addEventListener('change', (e) => setSfx({ muted: e.target.checked }));
   $('[data-pin]', body).addEventListener('submit', async (e) => {
