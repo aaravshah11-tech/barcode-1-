@@ -40,6 +40,8 @@ const SHOTS = process.argv[2] || '';
   await page.waitForFunction(() => document.querySelector('[data-room] text')?.textContent === 'Kitchen');
   check(true, 'drag to draw a room, then name it');
   await page.fill('[data-rw]', '4.5'); await page.press('[data-rw]', 'Tab');
+  await page.waitForFunction(() => document.querySelector('.b-side')?.textContent.includes('4.50 ×'));
+  check(await page.evaluate(() => document.activeElement?.matches('[data-rh]')), 'Tab moves on to the next box (the panel keeps your place)');
   await page.fill('[data-rh]', '3'); await page.press('[data-rh]', 'Tab');
   await page.waitForFunction(() => document.querySelector('.b-side')?.textContent.includes('4.50 × 3.00 m'));
   check(true, 'type an exact size: 4.5 × 3 m (13.5 m²)');

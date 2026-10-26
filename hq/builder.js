@@ -69,7 +69,7 @@ export function openBuilder(S, { files, onClose } = {}) {
       try { const sent = JSON.stringify(house); S.house = await S.api('/house', { method: 'PUT', body: JSON.parse(sent) }); if (JSON.stringify(house) === sent) $('[data-saved]', el).textContent = 'SAVED'; } catch (x) { $('[data-saved]', el).textContent = 'NOT SAVED'; toast(x.message, { kind: 'err' }); }
     }, 500);
   };
-  const change = (fn) => { undo.push(JSON.stringify(house)); if (undo.length > 80) undo.shift(); redo.length = 0; fn(); save(); draw(); panel(); };
+  const change = (fn) => { undo.push(JSON.stringify(house)); if (undo.length > 80) undo.shift(); redo.length = 0; fn(); save(); draw(); setTimeout(panel, 0); }; // panel after focus has moved (Tab)
   const restore = (from, to) => { if (!from.length) return; to.push(JSON.stringify(house)); house = JSON.parse(from.pop()); fi = Math.min(fi, house.floors.length - 1); sel = null; save(); draw(); panel(); };
 
   // ---------- coordinates ----------
@@ -168,7 +168,10 @@ export function openBuilder(S, { files, onClose } = {}) {
         <ol class="small b-steps"><li>Pick <b>Draw room</b> and drag out each room. Rooms snap to a 10 cm grid.</li><li>Click a room (with <b>Select</b>) to name it and type its exact size.</li><li>Add <b>doors</b> and <b>windows</b> by clicking on walls. A selected door can become an archway, sliding door or garage door.</li><li>Add <b>stairs</b>, <b>inner walls</b> and <b>pillars</b>. Stairs show on the 3D map climbing to the next floor.</li><li>Upstairs? Press <b>＋</b> next to the floor tabs.</li><li>Have an estate-agent floor plan? Use <b>Floor-plan picture</b> to trace it.</li></ol>
         ${f.rooms.length ? '' : `<h2>…or start from a template</h2><div class="row">${Object.entries(TEMPLATES).map(([k, t]) => `<button class="small" data-template="${k}">${esc(t.name)}</button>`).join('')}</div>`}`;
     }
+    // Redrawing the panel mustn't lose your place: keep focus on the same box (e.g. after Tab).
+    const f0 = side.contains(document.activeElement) ? [...document.activeElement.attributes].find((a) => a.name.startsWith('data-'))?.name : null;
     side.innerHTML = html;
+    if (f0) side.querySelector(`[${f0}]`)?.focus();
   }
 
   function tracePanel(f) {

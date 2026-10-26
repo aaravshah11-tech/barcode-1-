@@ -1,0 +1,148 @@
+// SECURE TERMINAL: type commands instead of clicking (press ` to open, Esc to close).
+// Voice commands go through the same place, so typing and talking always do the same thing.
+import { esc, $, confirmBox, clock } from '../shared/ui.js';
+import { parseCommand, complete, COMMANDS } from '../shared/command.js';
+import { MODE_INFO } from '../shared/threat.js';
+import { icon } from '../shared/icons.js';
+import { sfx } from '../shared/sfx.js';
+
+/**
+ * env = { S, api, lock(), setMapView(view), flyTo(agentId), openLive(agent), onSettings(settings) }
+ * Returns { open, close, toggle, run(text, { voice }) → Promise<{ ok, reply }> }.
+ */
+export function createTerminal(env) {
+  const { S } = env;
+  const lines = []; // what the terminal shows (kept while the page is open)
+  const history = [];
+  let hpos = 0, el = null;
+
+  const ctx = () => ({
+    agents: S.agents,
+    rooms: (S.house?.floors || []).flatMap((f) => f.rooms.map((r) => ({ id: r.id, name: r.name }))),
+  });
+  const roomName = (a) => { for (const f of S.house?.floors || []) { const r = f.rooms.find((x) => x.id === a.place?.roomId); if (r) return r.name; } return ''; };
+  const out = (text, cls = '') => { lines.push({ text, cls }); while (lines.length > 400) lines.shift(); paint(); };
+
+  async function exec(c) {
+    const ok = (reply, extra = []) => ({ ok: true, reply, lines: extra });
+    const no = (reply) => ({ ok: false, reply });
+    switch (c.cmd) {
+      case 'none': return ok('');
+      case 'help': return ok('Commands:', COMMANDS.map(([, use, what]) => `  ${use.padEnd(34)} ${what}`).concat(['', 'Voice: hold the microphone button (or the V key) and say a command, e.g. “switch to night mode”.']));
+      case 'status': {
+        const t = S.threat || { level: 'GREEN', reason: '' }, on = S.agents.filter((a) => a.online).length;
+        return ok(`Threat level ${t.level}. ${MODE_INFO[S.settings.mode || 'home'].label} mode. ${on} of ${S.agents.length} Agent${S.agents.length === 1 ? '' : 's'} online.`, [`  ${t.reason || ''}`]);
+      }
+      case 'agents':
+        if (!S.agents.length) return ok('No Agents deployed. Use Recruit to add an old phone.');
+        return ok(`${S.agents.length} Agent${S.agents.length === 1 ? '' : 's'}:`, S.agents.map((a) => `  ${a.label.padEnd(9)} ${a.codename.padEnd(12)} ${(a.online ? 'ONLINE' : 'OFFLINE').padEnd(8)} ${[a.name, roomName(a)].filter(Boolean).join(' · ')}`));
+      case 'find': {
+        const a = S.agents.find((x) => x.id === c.agentId);
+        await env.api(`/agents/${a.id}/command`, { method: 'POST', body: { action: 'find' } }).catch((x) => { throw x.status === 409 ? new Error(`${a.codename} is offline.`) : x; });
+        env.flyTo(a.id);
+        return ok(`${a.codename} is flashing its codename.`);
+      }
+      case 'send': {
+        const r = await env.api('/comms', { method: 'POST', body: { target: c.target, text: c.text, speak: true } });
+        return ok(`Transmitted to ${r.delivered} Agent${r.delivered === 1 ? '' : 's'}${r.queued ? `; ${r.queued} offline, delivered when they reconnect` : ''}.`);
+      }
+      case 'log': {
+        const evs = S.events.filter((e) => !c.alerts || e.level !== 'info').slice(0, c.n);
+        if (!evs.length) return ok(c.alerts ? 'No alerts.' : 'The Mission Log is empty.');
+        return ok(`${c.alerts ? 'Latest alerts' : 'Mission Log'} (${evs.length}):`, evs.map((e) => `  ${clock(e.ts)}  ${(e.level === 'info' ? '' : e.level.toUpperCase()).padEnd(6)} ${e.message}`));
+      }
+      case 'net': {
+        const n = S.net;
+        if (!n || n.online == null) return ok('No internet checks yet.');
+        return ok(n.online ? `Internet up. ${n.latency} ms response.${n.uptime24h != null ? ` ${n.uptime24h}% uptime in 24 hours.` : ''}` : 'Internet DOWN.', (n.speed || []).slice(-1).map((s) => `  Last speed test: ${s.down} Mbps down${s.up != null ? ` · ${s.up} Mbps up` : ''}`));
+      }
+      case 'speedtest': {
+        out('Running speed test (about 20 seconds)…', 'muted');
+        const r = await env.api('/net/speedtest', { method: 'POST' });
+        return ok(`${r.down} megabits down${r.up != null ? `, ${r.up} up` : ''}.`);
+      }
+      case 'standdown': await env.api('/alarm/stop', { method: 'POST' }); return ok('Alarm stood down on all Agents.');
+      case 'panic':
+        if (!(await confirmBox('Raise PANIC?', 'HQ goes into LOCKDOWN and every Agent is alerted at once.', { ok: 'Raise panic', danger: true }))) return no('Panic cancelled.');
+        env.onSettings(await env.api('/panic', { method: 'POST' }));
+        return ok('PANIC raised. Lockdown in force.');
+      case 'mode': {
+        if (c.mode === S.settings.mode) return ok(`Already in ${MODE_INFO[c.mode].label} mode.`);
+        if (c.mode === 'lockdown' && !(await confirmBox('Enter LOCKDOWN?', 'Every Agent is armed. Any activity is an intrusion and Agents may sound the alarm.', { ok: 'Lockdown', danger: true }))) return no('Lockdown cancelled.');
+        env.onSettings(await env.api('/settings', { method: 'PATCH', body: { mode: c.mode } }));
+        return ok(`${MODE_INFO[c.mode].label} mode. ${MODE_INFO[c.mode].summary}`);
+      }
+      case 'map': env.setMapView(c.view); return ok(`Map: ${c.view === '3d' ? '3D' : c.view}.`);
+      case 'live': {
+        const a = S.agents.find((x) => x.id === c.agentId);
+        if (!a.online) return no(`${a.codename} is offline.`);
+        env.openLive(a);
+        return ok(`Opening live view on ${a.codename}. It shows a red banner while you watch.`);
+      }
+      case 'theme': env.onSettings(await env.api('/settings', { method: 'PATCH', body: { theme: c.theme } })); return ok(`Theme: ${c.theme}.`);
+      case 'time': { const d = new Date(); return ok(`${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}, ${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}.`); }
+      case 'whoami': return ok(`${S.operator || 'Director'} on ${S.mode === 'hq' ? 'the HQ computer' : 'a linked phone'}.`);
+      case 'lock': setTimeout(() => env.lock(), 300); return ok('Locking.');
+      case 'clear': lines.length = 0; paint(); return ok('');
+      case 'error': return no(c.error);
+      default: return no(`Unknown command “${c.text}”. Type help.`);
+    }
+  }
+
+  /** Run one command (typed or spoken). */
+  async function run(text, { voice = false } = {}) {
+    const c = parseCommand(text, ctx());
+    if (c.cmd !== 'none') out(`${voice ? 'voice>' : '>'} ${text}`, 'cmd');
+    let r;
+    try { r = await exec(c); } catch (x) { r = { ok: false, reply: x.message || 'That didn’t work.' }; }
+    if (r.reply) out(r.reply, r.ok ? '' : 'err');
+    for (const l of r.lines || []) out(l, 'muted');
+    if (c.cmd !== 'none' && c.cmd !== 'clear') sfx(r.ok ? 'blip' : 'warn');
+    return { ok: r.ok, reply: r.reply, cmd: c.cmd };
+  }
+
+  function paint() {
+    const o = el && $('[data-termout]', el);
+    if (!o) return;
+    o.innerHTML = lines.map((l) => `<li class="${l.cls}">${esc(l.text) || '&nbsp;'}</li>`).join('');
+    o.scrollTop = o.scrollHeight;
+  }
+
+  function open() {
+    if (el) { $('[data-termin]', el).focus(); return; }
+    el = document.createElement('section');
+    el.className = 'term';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Secure terminal');
+    el.innerHTML = `<header class="term-head">${icon('terminal')}<b>Secure terminal</b><span class="muted small">help · ↑ history · Tab completes · Esc closes</span><span class="spacer"></span><button class="icon-btn btn-ghost" data-termclose aria-label="Close terminal">${icon('close')}</button></header>
+      <ol class="term-out" data-termout aria-live="polite"></ol>
+      <form class="term-in" data-termform><label for="term-in" class="mono">SENTINEL&gt;</label><input id="term-in" data-termin autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"></form>`;
+    document.body.appendChild(el);
+    if (!lines.length) out('SENTINEL secure terminal. Type help for the commands.', 'muted');
+    paint();
+    const input = $('[data-termin]', el);
+    $('[data-termform]', el).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const v = input.value;
+      input.value = '';
+      if (v.trim()) { history.push(v); if (history.length > 50) history.shift(); }
+      hpos = history.length;
+      await run(v);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' && history.length) { e.preventDefault(); hpos = Math.max(0, hpos - 1); input.value = history[hpos]; }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); hpos = Math.min(history.length, hpos + 1); input.value = history[hpos] || ''; }
+      else if (e.key === 'Tab') {
+        e.preventDefault();
+        const c = complete(input.value);
+        if (typeof c === 'string') input.value = `${c} `;
+        else if (Array.isArray(c)) out(c.join('   '), 'muted');
+      } else if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    });
+    $('[data-termclose]', el).addEventListener('click', close);
+    input.focus();
+  }
+  function close() { el?.remove(); el = null; }
+  const toggle = () => (el ? close() : open());
+  return { open, close, toggle, run, get isOpen() { return !!el; }, lines };
+}

@@ -1,0 +1,70 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseCommand as p, findAgent, complete } from '../../shared/command.js';
+
+const ctx = {
+  agents: [
+    { id: 'a1', codename: 'NIGHTJAR', name: 'Hallway', label: 'AGENT-01', place: { roomId: 'r-k' } },
+    { id: 'a2', codename: 'KESTREL', name: '', label: 'AGENT-02' },
+  ],
+  rooms: [{ id: 'r-k', name: 'Kitchen' }, { id: 'r-l', name: 'Living room' }],
+};
+
+test('terminal commands', () => {
+  assert.deepEqual(p('help'), { cmd: 'help' });
+  assert.deepEqual(p('STATUS'), { cmd: 'status' });
+  assert.deepEqual(p('mode night'), { cmd: 'mode', mode: 'night' });
+  assert.deepEqual(p('mode banana').cmd, 'error');
+  assert.deepEqual(p('log 5'), { cmd: 'log', n: 5 });
+  assert.deepEqual(p('log'), { cmd: 'log', n: 10 });
+  assert.deepEqual(p('map plan'), { cmd: 'map', view: 'plan' });
+  assert.deepEqual(p('theme redops'), { cmd: 'theme', theme: 'redops' });
+  assert.equal(p('theme pink').cmd, 'error');
+  assert.deepEqual(p('find nightjar', ctx), { cmd: 'find', agentId: 'a1' });
+  assert.deepEqual(p('find agent-02', ctx), { cmd: 'find', agentId: 'a2' });
+  assert.deepEqual(p('find 1', ctx), { cmd: 'find', agentId: 'a1' });
+  assert.deepEqual(p('live kitchen', ctx), { cmd: 'live', agentId: 'a1' }, 'an Agent can be named by its room');
+  assert.equal(p('find bob', ctx).cmd, 'error');
+  assert.deepEqual(p('speedtest'), { cmd: 'speedtest' });
+  assert.deepEqual(p('standdown'), { cmd: 'standdown' });
+  assert.deepEqual(p('panic'), { cmd: 'panic' });
+  assert.deepEqual(p('lock'), { cmd: 'lock' });
+  assert.deepEqual(p('xyzzy'), { cmd: 'unknown', text: 'xyzzy' });
+  assert.deepEqual(p('   '), { cmd: 'none' });
+});
+
+test('messages keep their wording and find who they’re for', () => {
+  assert.deepEqual(p('send all Dinner is ready!', ctx), { cmd: 'send', target: 'all', text: 'Dinner is ready!' });
+  assert.deepEqual(p('broadcast Leaving in 5 minutes', ctx), { cmd: 'send', target: 'all', text: 'Leaving in 5 minutes' });
+  assert.deepEqual(p('send living room Lights out', ctx), { cmd: 'send', target: 'room:r-l', text: 'Lights out' });
+  assert.deepEqual(p('tell kestrel Come downstairs please', ctx), { cmd: 'send', target: 'a2', text: 'Come downstairs' });
+  assert.deepEqual(p('send kitchen kitchen is closed', ctx), { cmd: 'send', target: 'room:r-k', text: 'kitchen is closed' });
+  assert.equal(p('send nobody hi', ctx).cmd, 'error');
+  assert.equal(p('send all', ctx).cmd, 'error');
+});
+
+test('voice phrasing', () => {
+  assert.deepEqual(p('Switch to night mode'), { cmd: 'mode', mode: 'night' });
+  assert.deepEqual(p('Sentinel, arm away please'), { cmd: 'mode', mode: 'away' });
+  assert.deepEqual(p('lockdown'), { cmd: 'mode', mode: 'lockdown' });
+  assert.deepEqual(p('initiate lock down'), { cmd: 'mode', mode: 'lockdown' });
+  assert.deepEqual(p('home mode'), { cmd: 'mode', mode: 'home' });
+  assert.deepEqual(p('good night'), { cmd: 'mode', mode: 'night' });
+  assert.deepEqual(p("What's the status?"), { cmd: 'status' });
+  assert.deepEqual(p('Stop the alarm'), { cmd: 'standdown' });
+  assert.deepEqual(p('run a speed test'), { cmd: 'speedtest' });
+  assert.deepEqual(p('where is kestrel', ctx), { cmd: 'find', agentId: 'a2' });
+  assert.deepEqual(p('show the camera in the kitchen', ctx), { cmd: 'live', agentId: 'a1' });
+  assert.deepEqual(p('show plan'), { cmd: 'map', view: 'plan' });
+  assert.deepEqual(p('Tell everyone dinner is ready', ctx), { cmd: 'send', target: 'all', text: 'dinner is ready' });
+  assert.deepEqual(p('what time is it'), { cmd: 'time' });
+  assert.equal(p('I am home now').cmd, 'unknown', 'chatter that mentions a mode is not a command');
+});
+
+test('helpers', () => {
+  assert.equal(findAgent('Hallway', ctx).id, 'a1');
+  assert.equal(findAgent('agent 2', ctx).id, 'a2');
+  assert.equal(complete('spe'), 'speedtest');
+  assert.deepEqual(complete('s'), ['status', 'send', 'speedtest', 'standdown']);
+  assert.equal(complete('zz'), null);
+});

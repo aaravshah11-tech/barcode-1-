@@ -13,6 +13,8 @@ import { openBuilder } from './builder.js';
 import { icon } from '../shared/icons.js';
 import { MODES, MODE_INFO, suggestMode, ACTIVITY_KINDS } from '../shared/threat.js';
 import { centroid, openingEnds, bbox, fixtureLines } from '../shared/house.js';
+import { createTerminal } from './terminal.js';
+import { voicePrefs, voiceSupported, createPushToTalk, speak } from './voice.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
@@ -59,7 +61,8 @@ const gateHtml = (inner) => `<div class="gate"><div class="hud-bg"></div><div cl
 async function unlock(reason = '') {
   unlocked = false;
   radar?.destroy(); radar = null;
-  await lockScreen(app, T.api, { remote: MODE === 'remote', reason });
+  const who = await lockScreen(app, T.api, { remote: MODE === 'remote', reason });
+  S.operator = who?.codename || S.operator;
   if (MODE === 'remote') apply(await waitForState());
   unlocked = true;
 }
@@ -70,6 +73,7 @@ async function lockNow(reason = 'Locked.') {
   if (!unlocked) return;
   unlocked = false;
   closeAllSheets();
+  term.close(); ptt.stop();
   try { await T.api('/auth/lock', { method: 'POST', body: {} }); } catch { /* fine */ }
   await unlock(reason);
   launch();
@@ -150,6 +154,8 @@ function shell() {
       ${MODES.map((m) => `<button data-mode="${m}" class="${m}">${MODE_INFO[m].label}</button>`).join('')}
     </div>
     <span class="clock" data-clock></span>
+    <button class="icon-btn ptt" data-ptt hidden aria-label="Hold to give a voice command" title="Hold to talk (or hold V)">${icon('mic')}</button>
+    <button class="icon-btn" data-terminal aria-label="Terminal" title="Terminal (press \`)">${icon('terminal')}</button>
     <button class="icon-btn" data-mute aria-label="Sound on/off" title="Sound on/off"></button>
     <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">${icon('fullscreen')}</button>
     <button class="icon-btn" data-lock aria-label="Lock" title="Lock">${icon('lock')}</button>
@@ -191,7 +197,7 @@ function shell() {
     </div>
   </main>`;
   radar = new Radar($('[data-radar]'), { onPick: openAgent, fx: S.settings.fx });
-  renderMute();
+  renderMute(); renderPtt();
   map3d?.destroy(); map3d = null;
   if (S.mapView === undefined) S.mapView = houseHasRooms() ? (HAS_GL ? '3d' : 'plan') : 'radar';
   launchMapView();
@@ -208,6 +214,7 @@ async function onClick(e) {
   const b = e.target.closest('button');
   if (!b) return;
   sfx('click');
+  if ('terminal' in b.dataset) { term.toggle(); return; }
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
   if ('lock' in b.dataset) { lockNow('Locked. HQ is still guarding the house.'); return; }
@@ -240,6 +247,44 @@ async function onClick(e) {
     renderLog();
   }
 }
+
+// ---------------- terminal + push-to-talk voice ----------------
+const term = createTerminal({
+  S, api: (...a) => T.api(...a),
+  lock: () => lockNow('Locked. HQ is still guarding the house.'),
+  setMapView: (v) => { S.mapView = v; launchMapView(); },
+  flyTo: (id) => { const a = S.agents.find((x) => x.id === id); if (a?.place && houseHasRooms() && HAS_GL) flyToAgent(id); },
+  openLive: (a) => openLive(a),
+  onSettings: (s) => { S.settings = s; settingsChanged(); },
+});
+window.__term = term; // for the automated tests
+const ptt = createPushToTalk({
+  onText: async (text) => {
+    const r = await term.run(text, { voice: true });
+    toast(`“${text}” — ${r.reply || 'done'}`, { kind: r.ok ? '' : 'err', ms: 5000 });
+    speak(r.ok ? r.reply : `Sorry. ${r.reply}`);
+  },
+  onState: ({ listening, interim, error }) => {
+    let box = document.querySelector('.ptt-status');
+    if (!box) { box = document.createElement('div'); box.className = 'ptt-status'; box.setAttribute('role', 'status'); document.body.appendChild(box); }
+    box.hidden = !listening;
+    box.innerHTML = `<span class="ptt-dot"></span><b>Listening</b> <span class="muted">release to send</span>${interim ? `<div class="ptt-heard">${esc(interim)}</div>` : ''}`;
+    $('[data-ptt]')?.classList.toggle('on', !!listening);
+    if (error) toast(error, { kind: 'err', ms: 6000 });
+  },
+});
+function renderPtt() { const b = $('[data-ptt]'); if (b) b.hidden = !(voicePrefs().on && voiceSupported()); }
+addEventListener('sentinel:voice', renderPtt);
+document.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-ptt]')) { e.preventDefault(); ptt.start(); } });
+document.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-ptt]')) e.preventDefault(); });
+for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, () => { if (ptt.listening) ptt.stop(); });
+const typing = (e) => e.target.matches?.('input, textarea, select, [contenteditable]');
+document.addEventListener('keydown', (e) => {
+  if (!unlocked || typing(e) || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.builder')) return;
+  if (e.key === '`' && !document.querySelector('.sheet-backdrop')) { e.preventDefault(); term.toggle(); }
+  else if ((e.key === 'v' || e.key === 'V') && !e.repeat && voicePrefs().on && voiceSupported()) { e.preventDefault(); ptt.start(); }
+});
+document.addEventListener('keyup', (e) => { if ((e.key === 'v' || e.key === 'V') && ptt.listening) ptt.stop(); });
 
 // ---------------- live updates from HQ ----------------
 function onMsg(msg) {

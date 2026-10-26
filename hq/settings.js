@@ -3,6 +3,7 @@ import { esc, $, toast, sheet, confirmBox, qrSvg, ago } from '../shared/ui.js';
 import { forgetViewer } from './transport.js';
 import { THEMES } from '../shared/themes.js';
 import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
+import { voicePrefs, setVoicePrefs, voiceSupported, PRIVACY } from './voice.js';
 
 const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
@@ -44,6 +45,10 @@ function general(body, S, onChange) {
     <label class="field" style="margin-top:12px"><span>3D map quality (this device)</span><select data-q3d style="max-width:260px">${[['low', 'Low — smooth on older laptops'], ['medium', 'Medium'], ['high', 'High — sharpest']].map(([k, l]) => `<option value="${k}" ${q3d() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${local ? `<label class="field" style="margin-top:12px"><span>Automatic internet speed test</span><select data-speedevery style="max-width:260px">${[[0, 'Off (run it by hand)'], [24, 'Once a day'], [6, 'Every 6 hours'], [1, 'Every hour (uses ~250 MB a day)']].map(([v, l]) => `<option value="${v}" ${Number(st.speedEvery || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Each test downloads about 8 MB and uploads 2 MB.</div></label>` : ''}
     <label class="field" style="margin-top:12px"><span>Sound volume (this device)</span><div class="row"><input type="range" min="0" max="100" step="5" value="${Math.round(sp.volume * 100)}" data-volume style="flex:1"><label class="row small" style="gap:6px"><input type="checkbox" data-muted ${sp.muted ? 'checked' : ''}> Mute</label></div></label>
+    ${hr}<h2 style="margin-bottom:8px">Voice commands (this device)</h2>
+    ${voiceSupported() ? `<label class="field row"><input type="checkbox" data-voiceon ${voicePrefs().on ? 'checked' : ''}><span style="margin:0">Push-to-talk voice commands: hold the microphone button at the top (or the V key) and speak, e.g. “switch to night mode”.</span></label>
+      <label class="field row"><input type="checkbox" data-voicereply ${voicePrefs().reply ? 'checked' : ''}><span style="margin:0">Answer out loud</span></label>
+      <p class="help">${esc(PRIVACY())}</p>` : '<p class="small muted">This browser can’t do voice commands. Chrome or Edge can. Typed commands work everywhere: press <b class="mono">`</b> or the terminal button.</p>'}
     ${hr}
     <form data-general>
       <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Display effects: faint grid, scan lines and typing text (also used by Agents). Turn off on a slow computer.</span></label>
@@ -77,6 +82,15 @@ function general(body, S, onChange) {
   $('[data-q3d]', body).addEventListener('change', (e) => { try { localStorage.setItem('sentinel.q3d', e.target.value); } catch { /* ignore */ } window.__map3d?.setQuality(e.target.value); toast('3D quality saved for this device'); });
   $('[data-volume]', body).addEventListener('change', (e) => { setSfx({ volume: Number(e.target.value) / 100, muted: false }); $('[data-muted]', body).checked = false; sfx('beep'); });
   $('[data-muted]', body).addEventListener('change', (e) => setSfx({ muted: e.target.checked }));
+  $('[data-voiceon]', body)?.addEventListener('change', async (e) => {
+    if (!e.target.checked) { setVoicePrefs({ on: false }); toast('Voice commands off'); return; }
+    e.target.checked = false;
+    if (!(await confirmBox('Switch on voice commands?', PRIVACY(), { ok: 'I understand, switch on' }))) return;
+    e.target.checked = true;
+    setVoicePrefs({ on: true });
+    toast('Voice commands on. Hold the microphone button (or V) and speak.');
+  });
+  $('[data-voicereply]', body)?.addEventListener('change', (e) => setVoicePrefs({ reply: e.target.checked }));
   $('[data-pin]', body).addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
