@@ -22,6 +22,9 @@ import { heatLevel, heatOpacity } from '../shared/replay.js';
 import { voicePrefs, voiceSupported, createPushToTalk, speak } from './voice.js';
 import { createWorkspace } from './workspace.js';
 import { openPalette, paletteOpen } from './palette.js';
+import { createTriage } from './views/triage.js';
+import { createIncidents } from './views/incidents.js';
+import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
@@ -147,6 +150,7 @@ function launch() {
 
 function apply(st) {
   S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || []; S.weather = st.weather ?? S.weather ?? null;
+  S.alerts = st.alerts || S.alerts || []; S.incidents = st.incidents || S.incidents || [];
 }
 
 // ---------------- the console frame: app bar, navigation rail, views, status bar ----------------
@@ -224,6 +228,7 @@ const OPS_PANELS = () => [
       <div class="map-hint" data-maphint hidden></div>
       <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
       <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>` },
+  { id: 'queue', title: 'Alert queue', defaultW: 3, defaultH: 8, html: '<div class="panel-head"><h2>Alert queue <span data-qcount></span></h2><button class="small" data-view="triage" title="Open the Triage queue (2)">Open</button></div><div class="wp-body"><ol class="mini-queue" data-minique></ol></div>' },
   { id: 'state', title: 'Alert state', defaultW: 3, defaultH: 7, html: '<div class="panel-head"><h2>Alert state</h2></div><div class="wp-body" data-peoplelist></div>' },
   { id: 'agents', title: 'Agents', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="wp-body agents" data-agents></div>' },
   { id: 'network', title: 'Network', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Network</h2></div><div class="wp-body"><dl class="kv netinfo" data-network></dl><div data-netchart></div><div data-netextra></div></div>' },
@@ -243,9 +248,9 @@ const OPS_PANELS = () => [
 ];
 export const OPS_EXTRA_PANELS = []; // later parts add panels (e.g. the Triage queue)
 const OPS_PRESETS = {
-  Standard: [{ id: 'state', x: 0, y: 0, w: 3, h: 7 }, { id: 'agents', x: 0, y: 7, w: 3, h: 9 }, { id: 'network', x: 0, y: 16, w: 3, h: 9 }, { id: 'map', x: 3, y: 0, w: 6, h: 16 }, { id: 'log', x: 3, y: 16, w: 6, h: 9 }, { id: 'comms', x: 9, y: 0, w: 3, h: 9 }, { id: 'situation', x: 9, y: 9, w: 3, h: 16 }],
-  'Map focus': [{ id: 'map', x: 0, y: 0, w: 9, h: 19 }, { id: 'state', x: 9, y: 0, w: 3, h: 7 }, { id: 'log', x: 9, y: 7, w: 3, h: 12 }, { id: 'agents', x: 0, y: 19, w: 4, h: 8 }, { id: 'network', x: 4, y: 19, w: 4, h: 8, hidden: true }, { id: 'comms', x: 8, y: 19, w: 4, h: 8, hidden: true }, { id: 'situation', x: 8, y: 19, w: 4, h: 8, hidden: true }],
-  'Event review': [{ id: 'log', x: 0, y: 0, w: 7, h: 12 }, { id: 'map', x: 7, y: 0, w: 5, h: 12 }, { id: 'state', x: 0, y: 12, w: 4, h: 7 }, { id: 'agents', x: 4, y: 12, w: 4, h: 7 }, { id: 'network', x: 8, y: 12, w: 4, h: 7 }, { id: 'comms', x: 0, y: 19, w: 6, h: 8, hidden: true }, { id: 'situation', x: 6, y: 19, w: 6, h: 8, hidden: true }],
+  Standard: [{ id: 'state', x: 0, y: 0, w: 3, h: 7 }, { id: 'agents', x: 0, y: 7, w: 3, h: 9 }, { id: 'network', x: 0, y: 16, w: 3, h: 9 }, { id: 'map', x: 3, y: 0, w: 6, h: 16 }, { id: 'log', x: 3, y: 16, w: 6, h: 9 }, { id: 'queue', x: 9, y: 0, w: 3, h: 8 }, { id: 'comms', x: 9, y: 8, w: 3, h: 8 }, { id: 'situation', x: 9, y: 16, w: 3, h: 9 }],
+  'Map focus': [{ id: 'map', x: 0, y: 0, w: 9, h: 19 }, { id: 'state', x: 9, y: 0, w: 3, h: 7 }, { id: 'queue', x: 9, y: 7, w: 3, h: 6 }, { id: 'log', x: 9, y: 13, w: 3, h: 6 }, { id: 'agents', x: 0, y: 19, w: 4, h: 8 }, { id: 'network', x: 4, y: 19, w: 4, h: 8, hidden: true }, { id: 'comms', x: 8, y: 19, w: 4, h: 8, hidden: true }, { id: 'situation', x: 8, y: 19, w: 4, h: 8, hidden: true }],
+  'Event review': [{ id: 'queue', x: 0, y: 0, w: 7, h: 6 }, { id: 'log', x: 0, y: 6, w: 7, h: 12 }, { id: 'map', x: 7, y: 0, w: 5, h: 18 }, { id: 'state', x: 0, y: 18, w: 4, h: 7 }, { id: 'agents', x: 4, y: 18, w: 4, h: 7 }, { id: 'network', x: 8, y: 18, w: 4, h: 7 }, { id: 'comms', x: 0, y: 25, w: 6, h: 8, hidden: true }, { id: 'situation', x: 6, y: 25, w: 6, h: 8, hidden: true }],
 };
 let ws = null;
 registerView({
@@ -268,6 +273,29 @@ registerView({
   leave() { map3d?.destroy(); map3d = null; radar?.destroy?.(); radar = null; ws = null; },
 });
 window.__ws = () => ws; // for the automated tests
+
+// ---------------- TRIAGE + INCIDENTS (see views/) ----------------
+const triage = createTriage({ S, api: (...a) => T.api(...a), openIncident: (id) => openIncident(id) });
+const incidents = createIncidents({ S, api: (...a) => T.api(...a), playback: (w) => { showView('ops'); setTimeout(() => timeline.startWindow(w), 300); } });
+function openIncident(id) { incidents.preselect(id); if (S.view === 'incidents') incidents.open(id); else showView('incidents'); }
+const unhandled = () => (S.alerts || []).filter((a) => a.status === 'new');
+registerView({
+  id: 'triage', label: 'Triage', icon: 'inbox', render: (root) => triage.render(root),
+  badge() { const b = $('[data-badge="triage"]'); if (!b) return; const u = unhandled(); b.hidden = !u.length; b.textContent = u.length > 99 ? '99+' : u.length; b.classList.toggle('crit', u.some((a) => SEV_RANK[a.severity] >= 3)); b.classList.toggle('warn', !u.some((a) => SEV_RANK[a.severity] >= 3) && u.some((a) => a.severity === 'MEDIUM')); },
+});
+registerView({
+  id: 'incidents', label: 'Incidents', icon: 'case', render: (root) => incidents.render(root),
+  badge() { const b = $('[data-badge="incidents"]'); if (!b) return; const n = (S.incidents || []).filter((i) => i.status === 'open' || i.status === 'investigating').length; b.hidden = !n; b.textContent = n; },
+});
+function renderQueue() {
+  const box = $('[data-minique]');
+  if (!box) return;
+  const u = unhandled().sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || b.ts - a.ts), now = Date.now();
+  const c = $('[data-qcount]'); if (c) c.textContent = u.length ? `(${u.length})` : '';
+  box.innerHTML = u.length ? u.slice(0, 8).map((a) => `<li><button data-view="triage" data-qalert="${a.id}"><span class="sev sev-${a.severity}">${a.severity}</span><span class="grow">${esc(a.title)}${a.count > 1 ? ` ×${a.count}` : ''}</span><span class="mono small muted" data-qage="${a.ts}">${ageText(now - a.ts)}</span></button></li>`).join('')
+    : '<li class="small muted empty">No unhandled alerts.</li>';
+}
+function upsertBy(list, item) { const i = list.findIndex((x) => x.id === item.id); if (i >= 0) list[i] = item; else list.unshift(item); }
 
 // ---------------- status bar ----------------
 function hqHealth() {
@@ -341,7 +369,7 @@ function commandPalette() {
   openPalette(paletteActions, { fallback: async (q) => { const r = await term.run(q); toast(r.reply || 'Done', { kind: r.ok ? '' : 'err', ms: 5000 }); } });
 }
 function shortcutsSheet() {
-  const rows = [['Ctrl K', 'Command palette — jump anywhere, run anything'], ['1 – 9', 'Switch view (Operations, Triage, …)'], ['G', 'Global intel'], ['`', 'Terminal'], ['M', 'Map: switch 3D / plan'], ['Shift E', 'Edit the workspace layout'], ['Shift L', 'Lock the console'], ['V (hold)', 'Push-to-talk voice command (if switched on)'], ['Esc', 'Close a window'], ['?', 'This list']];
+  const rows = [['Ctrl K', 'Command palette — jump anywhere, run anything'], ['1 – 9', 'Switch view (Operations, Triage, …)'], ['G', 'Global intel'], ['`', 'Terminal'], ['M', 'Map: switch 3D / plan'], ['Shift E', 'Edit the workspace layout'], ['Shift L', 'Lock the console'], ['V (hold)', 'Push-to-talk voice command (if switched on)'], ['↑ ↓ / J K', 'Triage: choose an alert'], ['A E D I', 'Triage: acknowledge · escalate · dismiss · incident'], ['Esc', 'Close a window'], ['?', 'This list']];
   sheet(`<table class="keys-table">${rows.map(([k, d]) => `<tr><td>${k.split(' ').map((x) => `<kbd>${esc(x)}</kbd>`).join(' ')}</td><td>${esc(d)}</td></tr>`).join('')}</table>`, { title: 'Keyboard shortcuts' });
 }
 function toggleIso() { S.iso = !S.iso; try { localStorage.setItem('sentinel.iso', S.iso ? '1' : ''); } catch { /* ignore */ } map3d?.setIso(S.iso); $$('[data-iso]').forEach((b) => b.setAttribute('aria-pressed', String(S.iso))); }
@@ -355,6 +383,7 @@ document.addEventListener('keydown', (e) => {
   if (!unlocked) return;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); commandPalette(); return; }
   if (e.target.matches?.('input, textarea, select, [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey || paletteOpen() || document.querySelector('.sheet-backdrop, .builder, .atlas')) return;
+  if (S.view === 'triage' && triage.key(e)) { e.preventDefault(); return; }
   if (e.key === '?') { e.preventDefault(); shortcutsSheet(); }
   else if (e.key === 'L' && e.shiftKey) { e.preventDefault(); lockNow('Locked. HQ is still guarding the house.'); }
   else if (e.key === 'E' && e.shiftKey) { e.preventDefault(); if (S.view !== 'ops') showView('ops'); ws?.setEdit(!ws.edit); }
@@ -373,7 +402,7 @@ async function onClick(e) {
   const b = e.target.closest('button');
   if (!b) return;
   if ('palette' in b.dataset) { commandPalette(); return; }
-  if (b.dataset.view) { showView(b.dataset.view); return; }
+  if (b.dataset.view) { if (b.dataset.qalert) triage.select(b.dataset.qalert); showView(b.dataset.view); return; }
   if ('iso' in b.dataset) { toggleIso(); return; }
   if ('terminal' in b.dataset) { term.toggle(); return; }
   if ('global' in b.dataset) { openGlobal(); return; }
@@ -515,6 +544,8 @@ function onMsg(msg) {
     if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S);
   }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
+  else if (msg.t === 'alert') { upsertBy(S.alerts, msg.alert); renderQueue(); triage.draw(); for (const v of VIEWS) v.badge?.(); }
+  else if (msg.t === 'incident') { upsertBy(S.incidents, msg.incident); incidents.changed(msg.incident); renderQueue(); for (const v of VIEWS) v.badge?.(); }
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
   else if (msg.t === 'frame') liveFrame(msg);
@@ -556,7 +587,7 @@ function addEvent(ev) {
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); renderStatus(); for (const v of VIEWS) v.badge?.(); }
+function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); renderStatus(); renderQueue(); for (const v of VIEWS) v.badge?.(); }
 
 // ---------------- the floor plan on the map panel (the 3D map replaces this in the next upgrade) ----------------
 const houseHasRooms = () => !!S.house?.floors?.some((f) => f.rooms.length);
@@ -745,6 +776,9 @@ function tick() {
   if (Date.now() % 60000 < 1000) renderPeople();
   renderStatus();
   renderIntel();
+  triage.tick();
+  const now = Date.now();
+  $$('[data-qage]').forEach((el) => { el.textContent = ageText(now - Number(el.dataset.qage)); });
 }
 /** (The old key-figures strip is now the status bar.) */
 function renderStats() { renderStatus(); }

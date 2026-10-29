@@ -43,7 +43,7 @@ const SHOTS = process.argv[2] || '';
   check((await page.textContent('[data-agents]')).includes('No agents deployed'), 'empty Agents list explains how to recruit');
   check((await page.textContent('[data-log]')).includes('HQ session started'), 'Mission Log: HQ ONLINE');
   check(!(await page.evaluate(() => document.body.classList.contains('fx'))), 'no scanline / glitch effects');
-  check(await page.$$eval('[data-wsgrid] [data-panel]', (p) => p.length) === 7, 'workspace: 7 panels on the Operations screen');
+  check(await page.$$eval('[data-wsgrid] [data-panel]', (p) => p.length) === 8, 'workspace: 8 panels on the Operations screen');
 
   // Status bar
   await page.waitForFunction(() => document.querySelector('[data-sbop]')?.textContent === 'NIGHTOWL');

@@ -8,6 +8,7 @@ import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js
 import { addDiagSample, batteryAlert } from '../../shared/diag.js';
 import { buildBriefing, dayStart } from '../../shared/briefing.js';
 import { cleanShips } from '../../shared/feeds.js';
+import { Ops } from './ops.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -41,6 +42,7 @@ export class HQ extends Emitter {
     this.threat = null;
     this.timers = [];
     this.info = {}; // filled in by the network layer (HQ's address etc.)
+    this.ops = new Ops({ hq: this, db }); // triage queue + incidents
   }
 
   start() {
@@ -127,6 +129,8 @@ export class HQ extends Emitter {
       net: this.netSummary?.() || null,
       weather: this.weather || null,
       messages: this.messages || [],
+      alerts: this.ops.alerts({ limit: 300 }),
+      incidents: this.ops.incidents().slice(0, 200),
       missions: MISSIONS,
       info: this.info,
       now: this.now(),

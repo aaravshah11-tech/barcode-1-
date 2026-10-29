@@ -18,7 +18,7 @@ export const cleanCodename = (c) => String(c || '').trim().toUpperCase().replace
 const validPin = (p) => String(p || '').length >= 4 && String(p || '').length <= 64; // a PIN or a password
 
 export function makeAuth({ db, now = () => Date.now(), idleMin = () => 15 }) {
-  const sessions = new Map(); // session -> lastUsed
+  const sessions = new Map(); // session -> { at: lastUsed, codename }
 
   const record = () => db.getSetting('director', null);
   const lockState = () => db.getSetting('authLock', { fails: 0, until: 0 });
@@ -54,7 +54,7 @@ export function makeAuth({ db, now = () => Date.now(), idleMin = () => 15 }) {
     async unlock({ codename, pin }) {
       const r = await check(codename, pin);
       const session = randomToken(24);
-      sessions.set(session, now());
+      sessions.set(session, { at: now(), codename: r.codename });
       return { ok: true, session, codename: r.codename };
     },
     async change({ codename, pin, newCodename, newPin }) {
@@ -71,10 +71,13 @@ export function makeAuth({ db, now = () => Date.now(), idleMin = () => 15 }) {
     valid(session) {
       if (!session || !sessions.has(session)) return false;
       const idle = idleMin();
-      if (idle && now() - sessions.get(session) > idle * 60000) { sessions.delete(session); return false; }
-      sessions.set(session, now());
+      const s = sessions.get(session);
+      if (idle && now() - s.at > idle * 60000) { sessions.delete(session); return false; }
+      s.at = now();
       return true;
     },
+    /** Who is using this session (for “acknowledged by …”). */
+    whoIs: (session) => sessions.get(session)?.codename || null,
     lock(session) { sessions.delete(session); },
   };
 }

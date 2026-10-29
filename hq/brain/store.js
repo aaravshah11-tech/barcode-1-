@@ -31,7 +31,7 @@ const all = (db) => new Promise((resolve) => {
  * Returns the same functions the old SQLite database had, so HQ's logic didn't need to change.
  */
 export async function openStore({ memory = false, storage = globalThis.localStorage } = {}) {
-  const blank = { settings: {}, agents: [], pairCodes: [], viewers: [], nextEventId: 1 };
+  const blank = { settings: {}, agents: [], pairCodes: [], viewers: [], nextEventId: 1, docs: {}, counters: {} };
   let meta = blank;
   if (!memory) { try { meta = { ...blank, ...JSON.parse(storage.getItem(META) || '{}') }; } catch { meta = blank; } }
   const db = memory ? null : await idb();
@@ -90,6 +90,20 @@ export async function openStore({ memory = false, storage = globalThis.localStor
     viewerByTokenHash: (h) => copy(meta.viewers.find((v) => v.tokenHash === h)),
     updateViewer(id, patch) { const v = meta.viewers.find((x) => x.id === id); if (v) { Object.assign(v, copy(patch)); saveMeta(); } },
     removeViewer(id) { meta.viewers = meta.viewers.filter((v) => v.id !== id); saveMeta(); },
+
+    // ---------- records: alerts, incidents, rules… (small lists kept with the settings) ----------
+    docs: (name) => (meta.docs[name] || []).map(copy),
+    doc: (name, id) => copy((meta.docs[name] || []).find((d) => d.id === id)),
+    putDoc(name, d, max = 5000) {
+      const list = (meta.docs[name] ||= []);
+      const i = list.findIndex((x) => x.id === d.id);
+      if (i >= 0) list[i] = copy(d); else { list.push(copy(d)); if (list.length > max) list.splice(0, list.length - max); }
+      saveMeta();
+      return copy(d);
+    },
+    removeDocs(name, pred) { const before = (meta.docs[name] || []).length; meta.docs[name] = (meta.docs[name] || []).filter((d) => !pred(d)); saveMeta(); return before - meta.docs[name].length; },
+    /** Next number in a named sequence (e.g. incidents in 2026). */
+    nextNumber(key) { meta.counters[key] = (meta.counters[key] || 0) + 1; saveMeta(); return meta.counters[key]; },
 
     // ---------- Mission Log ----------
     addEvent(e) {

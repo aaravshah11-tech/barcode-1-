@@ -20,14 +20,38 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/auth/status' && m === 'GET') return auth.status();
     if (p === '/auth/setup' && m === 'POST') { if (who.remote) throw fail(403, 'Set up the Director on the HQ computer.'); const r = await auth.setup(body); hq.logEvent({ kind: 'system', message: `Director ${r.codename} enrolled` }); return r; }
     if (p === '/auth/unlock' && m === 'POST') {
-      try { const r = await auth.unlock(body); hq.logEvent({ kind: 'system', message: `${r.codename} logged in${who.remote ? ' from a linked phone' : ''}` }); return r; }
+      try { const r = await auth.unlock(body); if (!who.remote) hq.localOperator = r.codename; hq.logEvent({ kind: 'system', message: `${r.codename} logged in${who.remote ? ' from a linked phone' : ''}` }); return r; }
       catch (e) { if (e.status === 401 || e.status === 429) hq.logEvent({ kind: 'system', level: 'warn', message: `Failed login attempt${who.remote ? ' from a linked phone' : ''}` }); throw e; }
     }
     if (p === '/auth/lock' && m === 'POST') { auth.lock(who.session || body.session); return { ok: true }; }
     if (who.remote && !auth.valid(who.session)) throw fail(401, 'Locked — log in with your codename and PIN.');
     if (p === '/auth/change' && m === 'POST') return auth.change(body);
 
+    const by = who.remote ? (auth.whoIs(who.session) || who.label || 'a linked phone') : (hq.localOperator || 'HQ');
+
     if (p === '/state' && m === 'GET') return hq.snapshot();
+
+    // ----- triage queue + incidents -----
+    const ops = hq.ops;
+    if (p === '/alerts' && m === 'GET') return ops.alerts({ status: url.searchParams.get('status') || null, limit: Math.min(3000, Number(url.searchParams.get('limit')) || 300) });
+    let am = p.match(/^\/alerts\/(ALT-\d{6})\/(acknowledge|escalate|dismiss|reopen)$/);
+    if (am && m === 'POST') return ops.act(am[1], am[2], { by, reason: body.reason, note: body.note });
+    if (p === '/alerts/bulk' && m === 'POST') {
+      const ids = (Array.isArray(body.ids) ? body.ids : []).slice(0, 200).map(String);
+      if (!['acknowledge', 'dismiss'].includes(body.action)) throw fail(400, 'Bulk actions: acknowledge or dismiss.');
+      const done = [];
+      for (const id of ids) { try { done.push(ops.act(id, body.action, { by, reason: body.reason })); } catch { /* already handled */ } }
+      return { done: done.length };
+    }
+    if (p === '/incidents' && m === 'GET') return ops.incidents();
+    if (p === '/incidents' && m === 'POST') return ops.createIncident({ title: body.title, severity: body.severity, alertIds: (Array.isArray(body.alertIds) ? body.alertIds : []).slice(0, 100).map(String), assignee: body.assignee, note: body.note, by });
+    am = p.match(/^\/incidents\/([\w-]{1,64})$/);
+    if (am && m === 'GET') return ops.incidentDetail(am[1]);
+    if (am && m === 'PATCH') return ops.updateIncident(am[1], body, { by });
+    am = p.match(/^\/incidents\/([\w-]{1,64})\/notes$/);
+    if (am && m === 'POST') return ops.addNote(am[1], body.text, { by });
+    am = p.match(/^\/incidents\/([\w-]{1,64})\/alerts$/);
+    if (am && m === 'POST') return ops.linkAlerts(am[1], (Array.isArray(body.alertIds) ? body.alertIds : []).slice(0, 100).map(String), { by });
     if (p === '/settings' && m === 'PATCH') return hq.updateSettings(body);
     if (p === '/house' && m === 'GET') return hq.house();
     if (p === '/net/speedtest' && m === 'POST') { if (!hq.netmon) throw fail(409, 'Speed tests run on the HQ computer.'); return hq.netmon.speedTest(); }

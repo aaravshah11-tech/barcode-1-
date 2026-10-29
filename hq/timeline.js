@@ -68,12 +68,17 @@ export function createTimeline(env) {
 
   // ---------- replay ----------
   async function startReplay(daysAgo = 0) {
+    const now = Date.now();
+    return begin({ daysAgo, from: dayStart(now, daysAgo), to: daysAgo ? dayStart(now, daysAgo - 1) - 1 : now });
+  }
+  /** Replay just a window of time (e.g. around an incident), at 1 min/s. */
+  function startWindow({ from, to, label = '' }) { return begin({ daysAgo: null, from, to: Math.min(to, Date.now()), label, speed: 60 }); }
+  async function begin({ daysAgo, from, to, label = '', speed = null }) {
     if (!(await env.ensureRooms())) return false;
     stopReplay(false);
-    const now = Date.now(), from = dayStart(now, daysAgo), to = daysAgo ? dayStart(now, daysAgo - 1) - 1 : now;
     let events;
     try { events = replayable(await env.api(`/log?since=${from}&limit=20000`), from, to); } catch (x) { toast(x.message, { kind: 'err' }); return false; }
-    rp = { daysAgo, from, to, t: from, idx: 0, events, speed: S.replaySpeed || 300, playing: events.length > 0, last: performance.now(), raf: 0, feed: [] };
+    rp = { daysAgo, label, from, to, t: from, idx: 0, events, speed: speed || S.replaySpeed || 300, playing: events.length > 0, last: performance.now(), raf: 0, feed: [] };
     // start just before the first event, so there's no long wait
     if (events.length) rp.t = Math.max(from, events[0].ts - 5 * 60000);
     rp.idx = indexAfter(events, rp.t);
@@ -139,17 +144,17 @@ export function createTimeline(env) {
     const seen = new Set();
     const ticks = rp.events.map((e) => { const x = Math.round(((e.ts - rp.from) / span) * 400); const k = `${x}${e.level === 'alert' ? 'a' : ''}`; if (seen.has(k)) return ''; seen.add(k); return `<i class="${e.level === 'alert' ? 'alert' : ''}" style="left:${(x / 4).toFixed(2)}%"></i>`; }).join('');
     bar.innerHTML = `<div class="rp-row">
-        <span class="rp-tag mono">Replay</span>
+        <span class="rp-tag mono">${rp.label ? `Replay · ${esc(rp.label)}` : 'Replay'}</span>
         <button class="icon-btn" data-rpplay aria-label="Play or pause"></button>
         <b class="mono rp-clock" data-rpclock></b>
-        <span class="filters" role="group" aria-label="Day"><button data-rpday="0" aria-pressed="${rp.daysAgo === 0}">Today</button><button data-rpday="1" aria-pressed="${rp.daysAgo === 1}">Yesterday</button></span>
+        ${rp.daysAgo == null ? '' : `<span class="filters" role="group" aria-label="Day"><button data-rpday="0" aria-pressed="${rp.daysAgo === 0}">Today</button><button data-rpday="1" aria-pressed="${rp.daysAgo === 1}">Yesterday</button></span>`}
         <span class="filters" role="group" aria-label="Speed">${SPEEDS.map((v) => `<button data-rpspeed="${v}" aria-pressed="${v === rp.speed}">${SPEED_LABEL[v]}</button>`).join('')}</span>
         <span class="grow"></span>
         <button class="icon-btn btn-ghost" data-rpexit aria-label="Exit replay" title="Exit replay">✕</button>
       </div>
       <div class="rp-track"><div class="rp-ticks" aria-hidden="true">${ticks}</div>
         <input type="range" data-rpseek min="${rp.from}" max="${rp.to}" step="1000" value="${rp.t}" aria-label="Replay time"></div>
-      <div class="rp-scale small muted mono"><span>${clockOf(rp.from).slice(0, 5)}</span><span data-rpcount></span><span>${rp.daysAgo ? '24:00' : 'now'}</span></div>
+      <div class="rp-scale small muted mono"><span>${clockOf(rp.from).slice(0, 5)}</span><span data-rpcount></span><span>${rp.daysAgo == null ? clockOf(rp.to).slice(0, 5) : rp.daysAgo ? '24:00' : 'now'}</span></div>
       <ol class="rp-feed mono small" data-rpfeed aria-live="off"></ol>`;
     updateBar();
   }
@@ -161,7 +166,7 @@ export function createTimeline(env) {
     if (document.activeElement !== seekEl || rp.playing) seekEl.value = rp.t;
     bar.querySelector('[data-rpplay]').textContent = rp.playing ? '❚❚' : '▶';
     bar.querySelector('[data-rpplay]').setAttribute('aria-pressed', String(rp.playing));
-    bar.querySelector('[data-rpcount]').textContent = rp.events.length ? `${rp.idx} / ${rp.events.length} events` : 'No sensor events on this day';
+    bar.querySelector('[data-rpcount]').textContent = rp.events.length ? `${rp.idx} / ${rp.events.length} events` : (rp.daysAgo == null ? 'No sensor events in this window' : 'No sensor events on this day');
     bar.querySelector('[data-rpfeed]').innerHTML = rp.feed.map((e) => `<li class="${e.level === 'alert' ? 'c-red' : ''}">${clockOf(e.ts)} · ${KIND[e.kind] || e.kind.toUpperCase()} · ${esc(where(e.agentId))}</li>`).join('');
     if (S.heat.on) renderLegend();
   }
@@ -182,7 +187,7 @@ export function createTimeline(env) {
   function $$btn(sel, on) { document.querySelectorAll(sel).forEach((x) => x.setAttribute('aria-pressed', String(on))); }
 
   return {
-    setHeat, startReplay, stopReplay, liveEvent, heatTip, play, seek,
+    setHeat, startReplay, startWindow, stopReplay, liveEvent, heatTip, play, seek,
     get replaying() { return !!rp; },
     get state() { return rp && { t: rp.t, idx: rp.idx, total: rp.events.length, playing: rp.playing, speed: rp.speed }; },
     /** After the map was rebuilt (view switch, house edit): put the heatmap and bar back. */
