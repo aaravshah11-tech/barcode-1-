@@ -37,6 +37,8 @@ const P = {
   terminal: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="m7 9 3 3-3 3M12 15h5"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',
+  play: '<path d="M7 4v16l13-8z"/>',
+  heat: '<rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8" fill="currentColor" fill-opacity=".35"/><rect x="3" y="13" width="8" height="8" fill="currentColor" fill-opacity=".7"/><rect x="13" y="13" width="8" height="8"/>',
   alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
 };
 export const icon = (name, label = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"'}>${P[name] || ''}</svg>`;

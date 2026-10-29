@@ -17,6 +17,8 @@ import { createTerminal } from './terminal.js';
 import { renderIntel as drawIntel } from './intel.js';
 import { openBriefing, maybeAutoBriefing } from './briefing.js';
 import { renderDiagnostics } from './diagnostics.js';
+import { createTimeline } from './timeline.js';
+import { heatLevel, heatOpacity } from '../shared/replay.js';
 import { voicePrefs, voiceSupported, createPushToTalk, speak } from './voice.js';
 
 const app = $('#app');
@@ -175,11 +177,15 @@ function shell() {
   <main class="cc">
     ${panel('p-map radar-panel', 0.15, `<div class="panel-head"><h2>Site map</h2>
         <div class="filters" role="group" aria-label="Map view">${HAS_GL ? '<button data-mapview="3d">3D</button>' : ''}<button data-mapview="plan">Plan</button><button data-mapview="radar">Radar</button></div>
+        <button data-replay aria-pressed="false" title="Play back the day’s events on the map">${icon('play')}Replay</button>
+        <button data-heat aria-pressed="${!!S.heat?.on}" title="Show which rooms were busiest">${icon('heat')}Heatmap</button>
         ${MODE === 'hq' ? `<button data-build>${icon('house')}Edit floor plan</button>` : ''}</div>
       <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
         <div class="map3d" data-map3d hidden></div>
         <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="grow"></span><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
-        <div class="map-hint mono" data-maphint hidden></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
+        <div class="map-hint mono" data-maphint hidden></div>
+        <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
+        <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
     <div class="col-l">
     ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
     ${panel('p-home', 0.35, '<div class="panel-head"><h2>Security</h2></div><div data-peoplelist></div>')}
@@ -220,6 +226,8 @@ async function onClick(e) {
   sfx('click');
   if ('terminal' in b.dataset) { term.toggle(); return; }
   if ('briefing' in b.dataset) { openBriefing(S); return; }
+  if ('replay' in b.dataset) { if (timeline.replaying) timeline.stopReplay(); else timeline.startReplay(0); return; }
+  if ('heat' in b.dataset) { timeline.setHeat(!S.heat.on); return; }
   if ('setloc' in b.dataset) { openSettings(S, { onChange: (s) => { S.settings = s; settingsChanged(); } }); setTimeout(() => $('[data-locsearch] input')?.focus(), 50); return; }
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
@@ -254,6 +262,41 @@ async function onClick(e) {
   }
 }
 
+// ---------------- replay + heatmap (see timeline.js) ----------------
+const timeline = createTimeline({
+  S, api: (...a) => T.api(...a), map3d: () => map3d, renderPlan: () => renderPlan(),
+  planFlash: (id, alert) => planFlash(id, alert),
+  ensureRooms: async () => {
+    if (!houseHasRooms()) { toast('Draw your floor plan first (Edit floor plan), then place your Agents on it.', { kind: 'err' }); return false; }
+    if (S.mapView === 'radar') { S.mapView = HAS_GL ? '3d' : 'plan'; await launchMapView(); }
+    return true;
+  },
+});
+window.__timeline = timeline; // for the automated tests
+/** Flash a room on the flat plan (live events and replay). */
+function planFlash(roomId, alert) {
+  const g = document.querySelector(`[data-plan]:not([hidden]) [data-proom="${roomId}"]`);
+  if (!g) return;
+  g.classList.remove('hit', 'hit-alert'); void g.getBoundingClientRect();
+  g.classList.add(alert ? 'hit-alert' : 'hit');
+  clearTimeout(g._t); g._t = setTimeout(() => g.classList.remove('hit', 'hit-alert'), 2500);
+}
+/** The small read-out over the map (heatmap: "Kitchen · 14 events"). */
+function mapTip(text, x, y) {
+  const tip = $('[data-maptip]');
+  if (!tip) return;
+  tip.hidden = !text;
+  if (!text) return;
+  tip.textContent = text;
+  tip.style.left = `${Math.max(4, x + 12)}px`; tip.style.top = `${Math.max(4, y + 12)}px`;
+}
+document.addEventListener('pointermove', (e) => {
+  const plan = e.target.closest?.('[data-plan]');
+  if (!plan) return;
+  const g = e.target.closest('[data-proom]'), r = plan.parentElement.getBoundingClientRect();
+  mapTip(g && timeline.heatTip(g.dataset.proom), e.clientX - r.left, e.clientY - r.top);
+});
+
 // ---------------- terminal + push-to-talk voice ----------------
 const term = createTerminal({
   S, api: (...a) => T.api(...a),
@@ -262,6 +305,9 @@ const term = createTerminal({
   flyTo: (id) => { const a = S.agents.find((x) => x.id === id); if (a?.place && houseHasRooms() && HAS_GL) flyToAgent(id); },
   openLive: (a) => openLive(a),
   onSettings: (s) => { S.settings = s; settingsChanged(); },
+  replay: (daysAgo) => timeline.startReplay(daysAgo),
+  stopReplay: () => timeline.stopReplay(),
+  heat: (on, days) => timeline.setHeat(on, days),
 });
 window.__term = term; // for the automated tests
 const ptt = createPushToTalk({
@@ -297,7 +343,12 @@ function onMsg(msg) {
   if (msg.t === 'state') { apply(msg); renderAll(); }
   else if (msg.t === 'agent') { upsert(msg.agent); renderAgents(); if (S.open === msg.agent.id) refreshDrawer(); agents3d(); }
   else if (msg.t === 'agentRemoved') { S.agents = S.agents.filter((a) => a.id !== msg.id); renderAgents(); agents3d(); }
-  else if (msg.t === 'event') { addEvent(msg.event); renderStats(); map3d?.event(msg.event); if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S); }
+  else if (msg.t === 'event') {
+    addEvent(msg.event); renderStats();
+    if (!timeline.replaying) { map3d?.event(msg.event); const a = S.agents.find((x) => x.id === msg.event.agentId); if (a?.place?.roomId && ACTIVITY_KINDS.has(msg.event.kind)) planFlash(a.place.roomId, msg.event.level === 'alert'); }
+    timeline.liveEvent(msg.event);
+    if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S);
+  }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
@@ -356,7 +407,9 @@ async function launchMapView() {
   p.hidden = S.mapView !== 'plan';
   m.hidden = ui.hidden = S.mapView !== '3d';
   renderPlan();
+  mapTip(null);
   if (S.mapView === '3d') await start3d();
+  timeline.refresh();
 }
 
 // ---------------- the 3D house map ----------------
@@ -372,9 +425,11 @@ async function start3d() {
         fx: S.settings.fx, quality: getQuality(),
         onPick: (id) => openAgent(id),
         onPlace: (id, floorId, x, y) => placeAgent(id, floorId, x, y),
+        onHover: (h) => mapTip(h && timeline.heatTip(h.roomId), h?.x, h?.y),
       });
       map3d.setHouse(S.house);
       map3d.setAgents(S.agents);
+      timeline.refresh();
       renderFloorButtons();
       if (MODE === 'hq' && S.house.model && T.files) T.files.get('model').then((f) => map3d?.setModel(f, S.house.model));
     } catch (x) { console.error(x); toast(`3D map couldn’t start: ${x.message}. Showing the plan instead.`, { kind: 'err' }); S.mapView = 'plan'; map3d = null; launchMapView(); }
@@ -426,7 +481,11 @@ function renderPlan() {
   box.innerHTML = `${h.floors.length > 1 ? `<div class="filters plan-floors">${h.floors.map((x, i) => `<button data-planfloor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('')}</div>` : ''}
     <svg viewBox="${b.minX - pad} ${b.minY - pad} ${b.w + pad * 2} ${b.h + pad * 2}" role="img" aria-label="Floor plan of ${esc(f.name)}">
       <defs><marker id="p-up" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="fx-head"/></marker></defs>
-      ${f.rooms.map((r) => { const c = centroid(r.points); return `<g class="proom" data-proom="${r.id}"><polygon points="${r.points.join(' ')}"/><text x="${c[0]}" y="${c[1]}" style="font-size:${Math.max(b.w, b.h) / 38}px">${esc(r.name)}</text></g>`; }).join('')}
+      ${f.rooms.map((r) => {
+        const c = centroid(r.points), fs = Math.max(b.w, b.h) / 38, n = S.heat?.on ? S.heat.counts[r.id] || 0 : null, lvl = n == null ? 0 : heatLevel(n, S.heat.max);
+        return `<g class="proom" data-proom="${r.id}"><polygon points="${r.points.join(' ')}" ${lvl ? `style="fill:color-mix(in srgb, var(--amber) ${Math.round(heatOpacity(lvl) * 100)}%, transparent)"` : ''}/>
+          <text x="${c[0]}" y="${c[1]}" style="font-size:${fs}px">${esc(r.name)}</text>${n != null ? `<text x="${c[0]}" y="${c[1] + fs * 1.4}" class="heat-n" style="font-size:${fs * 0.85}px">${n}</text>` : ''}</g>`;
+      }).join('')}
       ${(f.fixtures || []).map((x) => { const L = fixtureLines(x, f.height + 0.25); return `<g class="fx ${x.kind}"><polygon points="${L.outline.join(' ')}"/>${L.lines.map(([a, c]) => `<line x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}"/>`).join('')}${L.arrow ? `<line class="fx-arrow" marker-end="url(#p-up)" x1="${L.arrow[0][0]}" y1="${L.arrow[0][1]}" x2="${L.arrow[1][0]}" y2="${L.arrow[1][1]}"/>` : ''}</g>`; }).join('')}
       ${f.openings.map((o) => { const e = openingEnds(f, o); return e ? `<line x1="${e.a[0]}" y1="${e.a[1]}" x2="${e.b[0]}" y2="${e.b[1]}" class="op ${o.kind}"/>` : ''; }).join('')}
     </svg>`;

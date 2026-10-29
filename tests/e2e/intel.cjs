@@ -80,7 +80,9 @@ function forecast() {
   check(true, 'Mission Log warns: battery low (18%) — plug it in');
   await page.evaluate((id) => window.__hq.hq.agentStatus(id, { battery: 0.17, charging: false }), agent.id);
   await page.waitForTimeout(300);
-  check(await page.$$eval('[data-log] li', (l) => l.filter((x) => x.textContent.includes('battery low')).length) === 1, 'the warning is only given once');
+  const lowLogged = await page.evaluate(() => window.__hq.hq.db.events({ limit: 500 }).filter((e) => /battery low/.test(e.message)).length);
+  if (lowLogged !== 1) console.log('DEBUG battery events:', await page.evaluate(() => window.__hq.hq.db.events({ limit: 50 }).map((e) => e.message)), 'agent getBattery:', await agent.p.evaluate(() => typeof navigator.getBattery));
+  check(lowLogged === 1, 'the warning is only given once');
 
   await page.click('.agent');
   await page.waitForSelector('[data-diag] .tchart svg');

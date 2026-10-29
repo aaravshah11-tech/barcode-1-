@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { centroid, openingEnds, pointInPolygon, bbox, stepCount, OPENING_KINDS } from '../shared/house.js';
+import { heatLevel, heatOpacity } from '../shared/replay.js';
 
 const QUALITY = {
   low: { pixelRatio: 1, antialias: false, fps: 24, labels: false, faces: false },
@@ -20,8 +21,8 @@ const P = ([x, y]) => new THREE.Vector2(x, y); // plan (x, y) → shape coords; 
 
 export class Map3D {
   /** box: the element to draw into. opts.onPick(agentId) when a marker is clicked; opts.onPlace(floorId, x, y) in place mode. */
-  constructor(box, { onPick, onPlace, quality = getQuality(), fx = true } = {}) {
-    this.box = box; this.onPick = onPick; this.onPlace = onPlace; this.fx = fx;
+  constructor(box, { onPick, onPlace, onHover, quality = getQuality(), fx = true } = {}) {
+    this.box = box; this.onPick = onPick; this.onPlace = onPlace; this.onHover = onHover; this.fx = fx;
     this.q = QUALITY[quality] || QUALITY.medium; this.qName = quality;
     this.house = null; this.agents = []; this.floorSel = -1; this.explode = 0; this.explodeTarget = 0;
     this.effects = []; this.markers = new Map(); this.roomMeshes = new Map(); this.floorGroups = []; this.openingLines = [];
@@ -41,7 +42,8 @@ export class Map3D {
     Object.assign(this.controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: Math.PI * 0.49, minDistance: 3, maxDistance: 120 });
     this.controls.addEventListener('start', () => { this.flight = null; this.userMoved = Date.now(); this.wake(4000); });
     this.controls.addEventListener('change', () => this.wake(800));
-    this.renderer.domElement.addEventListener('pointermove', () => this.wake(1500));
+    this.renderer.domElement.addEventListener('pointermove', (e) => { this.wake(1500); this.hover(e); });
+    this.renderer.domElement.addEventListener('pointerleave', () => this.onHover?.(null));
     this.renderer.domElement.addEventListener('wheel', () => this.wake(1500), { passive: true });
     this.root = new THREE.Group();
     this.scene.add(this.root);
@@ -121,6 +123,7 @@ export class Map3D {
       this.floorGroups.push(g);
     });
     this.layout(true);
+    this.applyHeat();
     if (!keepView) this.frame();
     this.wake(1000);
     if (this.model) this.root.add(this.model);
@@ -206,6 +209,27 @@ export class Map3D {
     g.rotation.y = -(x.rot * Math.PI) / 180;
     g.position.set(x.x, 0, x.y);
     return g;
+  }
+
+  // ---------- heatmap: tint each room's floor by how busy it was ----------
+  /** counts: { roomId: n } or null to switch it off. */
+  setHeat(counts) { this.heat = counts ? { counts, max: Math.max(0, ...Object.values(counts)) } : null; this.applyHeat(); this.wake(600); }
+  applyHeat() { for (const g of this.roomMeshes.values()) { const m = g.userData.floorMesh; if (m) this.restoreFloor(m); } }
+  restoreFloor(mesh) {
+    const id = mesh.parent?.userData.roomId, lvl = this.heat ? heatLevel(this.heat.counts[id] || 0, this.heat.max) : 0;
+    if (lvl) { mesh.material.color.copy(this.c.amber); mesh.material.opacity = heatOpacity(lvl); }
+    else { mesh.material.color.copy(this.c.accent); mesh.material.opacity = 0.07; }
+  }
+  /** Pointing at a room → onHover({ roomId, name, x, y }) (used for the heatmap read-out). */
+  hover(e) {
+    if (!this.onHover || this.hoverAt > performance.now() - 60) return;
+    this.hoverAt = performance.now();
+    this.ray.setFromCamera(this.pointer(e), this.camera);
+    const meshes = [...this.roomMeshes.values()].filter((g) => g.visible && g.parent?.visible).map((g) => g.userData.floorMesh).filter(Boolean);
+    const hit = this.ray.intersectObjects(meshes, false)[0];
+    const g = hit?.object.parent;
+    const r = this.box.getBoundingClientRect();
+    this.onHover(g ? { roomId: g.userData.roomId, name: g.userData.name, x: e.clientX - r.left, y: e.clientY - r.top } : null);
   }
 
   /** Show all floors (-1) or just one; floors above the chosen one are hidden. */
@@ -390,7 +414,7 @@ export class Map3D {
       const k = (now - fx.t0) / fx.dur;
       if (k < 0) return true;
       if (k >= 1) {
-        if (fx.kind === 'room' && fx.mesh) { fx.mesh.material.color.copy(this.c.accent); fx.mesh.material.opacity = 0.07; }
+        if (fx.kind === 'room' && fx.mesh) this.restoreFloor(fx.mesh);
         if (fx.kind === 'flash') fx.obj.material.color.copy(this.c.amber);
         if (fx.kind === 'ripple') { fx.obj.parent?.remove(fx.obj); fx.obj.geometry.dispose(); }
         if (fx.kind === 'marker') fx.obj.scale.setScalar(1);

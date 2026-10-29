@@ -86,6 +86,19 @@ export function createTerminal(env) {
         const off = list.filter((a) => !a.online);
         return ok(low.length || off.length ? `${[low.length ? `${low.length} low on battery` : '', off.length ? `${off.length} offline` : ''].filter(Boolean).join(', ')}.` : `${list.length === 1 ? `${list[0].codename} is` : `All ${list.length} Agents are`} healthy.`, list.map(row));
       }
+      case 'replay': {
+        if (c.stop) { env.stopReplay(); return ok('Replay stopped. Back to live.'); }
+        const started = await env.replay(c.daysAgo);
+        return started ? ok(`Replaying ${c.daysAgo ? 'yesterday' : 'today'} on the map. Use the bar under the map to pause, change speed or jump.`) : no('Replay needs a floor plan with Agents placed on it.');
+      }
+      case 'heatmap': {
+        await env.heat(c.on, c.days);
+        if (!c.on) return ok('Heatmap off.');
+        if (!S.heat.on) return no('The heatmap needs a floor plan with Agents placed on it.');
+        const top = Object.entries(S.heat.counts).sort((a, b) => b[1] - a[1])[0];
+        const name = top && (S.house?.floors || []).flatMap((f) => f.rooms).find((r) => r.id === top[0])?.name;
+        return ok(`Heatmap on (${c.days === 7 ? 'last 7 days' : 'today'}).${name ? ` Busiest: ${name}, ${top[1]} events.` : ' No sensor events in rooms yet.'}`);
+      }
       case 'net': {
         const n = S.net;
         if (!n || n.online == null) return ok('No internet checks yet.');

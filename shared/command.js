@@ -18,6 +18,8 @@ export const COMMANDS = [
   ['briefing', 'briefing [today]', 'Yesterday’s Mission Briefing (or today so far)'],
   ['weather', 'weather', 'Weather now and rain coming up'],
   ['diag', 'diag [agent]', 'Agent health: battery, link time, uptime'],
+  ['replay', 'replay [today|yesterday|stop]', 'Play back the day’s sensor events on the map'],
+  ['heatmap', 'heatmap [on|off|week]', 'Tint rooms by how busy they were'],
   ['net', 'net', 'Internet status'],
   ['speedtest', 'speedtest', 'Run an internet speed test'],
   ['standdown', 'standdown', 'Silence the alarm on every Agent'],
@@ -115,6 +117,11 @@ export function parseCommand(input, ctx = {}) {
   if (/^(weather|forecast)$/.test(t) || /^(?:whats|what is) the (?:weather|forecast)/.test(t) || /^(?:is it|will it|is it going to) (?:rain|snow)/.test(t)) return { cmd: 'weather' };
   const diagM = t.match(/^(?:diag|diagnostics|battery|batteries|health)(?: (?:of |for )?(.+))?$/);
   if (diagM) { if (!diagM[1] || /^(all|agents|everyone)$/.test(diagM[1])) return { cmd: 'diag', agentId: null }; const a = findAgent(diagM[1], ctx); return a ? { cmd: 'diag', agentId: a.id } : { cmd: 'error', error: `No Agent called “${diagM[1]}”.` }; }
+
+  const rpM = t.match(/^(?:replay|play back|playback)(?: (?:of )?(today|yesterday|stop|off|exit))?$/);
+  if (rpM) return /stop|off|exit/.test(rpM[1] || '') ? { cmd: 'replay', stop: true } : { cmd: 'replay', daysAgo: rpM[1] === 'yesterday' ? 1 : 0 };
+  const hmM = t.match(/^(?:show (?:the )?)?heat ?map(?: (on|off|week|7 days|today))?$/) || t.match(/^(hide) (?:the )?heat ?map$/);
+  if (hmM) return { cmd: 'heatmap', on: !/off|hide/.test(hmM[1] || ''), days: /week|7/.test(hmM[1] || '') ? 7 : 1 };
 
   const findM = t.match(/^(?:find|locate|ping|where is|wheres) (.+)$/);
   if (findM) { const a = findAgent(findM[1], ctx); return a ? { cmd: 'find', agentId: a.id } : { cmd: 'error', error: `No Agent called “${findM[1]}”. Type agents to list them.` }; }

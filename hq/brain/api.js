@@ -47,8 +47,9 @@ export function makeApi({ hq, db, auth }) {
       return after;
     }
     if (p === '/log' && m === 'GET') {
-      const before = Number(url.searchParams.get('before')) || null;
-      return db.events({ before, limit: Math.min(500, Number(url.searchParams.get('limit')) || 100), kind: url.searchParams.get('kind') || null });
+      const before = Number(url.searchParams.get('before')) || null, since = Number(url.searchParams.get('since')) || null;
+      // a period (since …) can be long — replay and heatmap read a whole day or week
+      return db.events({ before, since, limit: Math.min(since ? 20000 : 500, Number(url.searchParams.get('limit')) || 100), kind: url.searchParams.get('kind') || null });
     }
     if (p === '/pair' && m === 'POST') {
       const role = body.role === 'viewer' ? 'viewer' : 'agent';

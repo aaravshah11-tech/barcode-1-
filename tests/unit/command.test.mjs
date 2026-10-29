@@ -83,3 +83,15 @@ test('part 8 commands: where is everyone, briefing, weather, diag', () => {
   assert.deepEqual(p('battery nightjar', ctx), { cmd: 'diag', agentId: 'a1' });
   assert.equal(p('diag bob', ctx).cmd, 'error');
 });
+
+test('part 9 commands: replay and heatmap', () => {
+  assert.deepEqual(p('replay today'), { cmd: 'replay', daysAgo: 0 });
+  assert.deepEqual(p('replay'), { cmd: 'replay', daysAgo: 0 });
+  assert.deepEqual(p('replay yesterday'), { cmd: 'replay', daysAgo: 1 });
+  assert.deepEqual(p('replay stop'), { cmd: 'replay', stop: true });
+  assert.deepEqual(p('heatmap'), { cmd: 'heatmap', on: true, days: 1 });
+  assert.deepEqual(p('heatmap week'), { cmd: 'heatmap', on: true, days: 7 });
+  assert.deepEqual(p('heatmap off'), { cmd: 'heatmap', on: false, days: 1 });
+  assert.deepEqual(p('Sentinel, show the heat map'), { cmd: 'heatmap', on: true, days: 1 });
+  assert.deepEqual(p('hide the heatmap'), { cmd: 'heatmap', on: false, days: 1 });
+});

@@ -257,3 +257,13 @@ test('Director login: hashed PIN, lockout, linked phones need a session', async 
   await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' }));
   assert.ok((await api('POST', '/auth/unlock', { codename: 'FALCON', pin: '777777' })).session);
 });
+
+test('the store keeps the low-battery “already warned” flag (so the warning is given once)', async () => {
+  const { openStore } = await import('../../hq/brain/store.js');
+  const db = await openStore({ memory: true });
+  db.addAgent({ id: 'x', number: 1, codename: 'TEST', tokenHash: 'h' });
+  db.updateAgent('x', { battAlert: 'low' });
+  assert.equal(db.agent('x').battAlert, 'low');
+  db.updateAgent('x', { battAlert: null });
+  assert.equal(db.agent('x').battAlert, null);
+});
