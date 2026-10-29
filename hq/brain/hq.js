@@ -12,6 +12,7 @@ import { Ops } from './ops.js';
 import { Analytics } from './analytics.js';
 import { Tamper } from './tamper.js';
 import { NetSecurity } from './network.js';
+import { Reports } from './reports.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -49,6 +50,7 @@ export class HQ extends Emitter {
     this.analytics = new Analytics({ hq: this, db }); // correlation rules + pattern of life
     this.tamper = new Tamper({ hq: this, db }); // moved, covered, unplugged, fast drain, unexpected offline
     this.net = new NetSecurity({ hq: this, db }); // asset register, network alerts, health check
+    this.reports = new Reports({ hq: this, db }); // SITREP, weekly and custom reports
     this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
@@ -58,9 +60,10 @@ export class HQ extends Emitter {
     this.timers.push(setInterval(() => this.prune(), 3600000));
     this.prune();
     this.analytics.start();
+    this.reports.start();
     return this;
   }
-  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); }
+  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); }
 
   /** A known phone or device appeared (a linked phone connected, or the network register saw it). */
   deviceSeen({ id, label, type = 'phone', owner = '' }) {

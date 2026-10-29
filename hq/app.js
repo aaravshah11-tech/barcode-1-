@@ -28,6 +28,7 @@ import { createAnalysis } from './views/analysis.js';
 import { createCoverage } from './views/coverage.js';
 import { createRegister } from './views/register.js';
 import { createNetwork } from './views/network.js';
+import { createReports } from './views/reports.js';
 import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
@@ -299,6 +300,8 @@ const registerViewer = createRegister({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'register', label: 'Agents', icon: 'agent', render: (root) => registerViewer.render(root) });
 const networkView = createNetwork({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'network', label: 'Network', icon: 'network', render: (root) => networkView.render(root) });
+const reportsView = createReports({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'reports', label: 'Reports', icon: 'doc', render: (root) => reportsView.render(root) });
 let viewRefresh = null;
 /** Coverage and the Agent register follow Agent changes (debounced). */
 function refreshAgentViews() { clearTimeout(viewRefresh); viewRefresh = setTimeout(() => { if (S.view === 'coverage') coverageView.refresh(); else if (S.view === 'register') registerViewer.refresh(); }, 400); }
@@ -568,6 +571,7 @@ function onMsg(msg) {
   else if (msg.t === 'net') { S.net = msg.net; renderNetwork(); }
   else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
   else if (msg.t === 'assets') networkView.refresh();
+  else if (msg.t === 'reports') reportsView.refresh();
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
   else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); }
   else if (msg.t === 'house') { S.house = msg.house; refreshAgentViews(); renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }

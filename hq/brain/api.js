@@ -45,6 +45,14 @@ export function makeApi({ hq, db, auth }) {
       for (const id of ids) { try { done.push(ops.act(id, body.action, { by, reason: body.reason })); } catch { /* already handled */ } }
       return { done: done.length };
     }
+    // ----- reports -----
+    if (p === '/sitrep' && m === 'GET') return hq.reports.liveSitrep();
+    if (p === '/reports' && m === 'GET') return hq.reports.list();
+    if (p === '/reports' && m === 'POST') return hq.reports.generate({ kind: ['sitrep', 'weekly', 'custom'].includes(body.kind) ? body.kind : 'custom', from: body.from, to: body.to, title: body.title, sections: body.sections, filter: body.filter, by });
+    am = p.match(/^\/reports\/([\w-]{1,64})$/);
+    if (am && m === 'GET') return hq.reports.get(am[1]);
+    if (am && m === 'DELETE') return hq.reports.remove(am[1]);
+
     // ----- network security -----
     const ns = hq.net;
     if (p === '/network/assets' && m === 'GET') return ns.assets();
