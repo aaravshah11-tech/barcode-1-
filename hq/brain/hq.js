@@ -10,6 +10,7 @@ import { buildBriefing, dayStart } from '../../shared/briefing.js';
 import { cleanShips } from '../../shared/feeds.js';
 import { Ops } from './ops.js';
 import { Analytics } from './analytics.js';
+import { Tamper } from './tamper.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -45,6 +46,7 @@ export class HQ extends Emitter {
     this.info = {}; // filled in by the network layer (HQ's address etc.)
     this.ops = new Ops({ hq: this, db }); // triage queue + incidents
     this.analytics = new Analytics({ hq: this, db }); // correlation rules + pattern of life
+    this.tamper = new Tamper({ hq: this, db }); // moved, covered, unplugged, fast drain, unexpected offline
     this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
@@ -263,6 +265,7 @@ export class HQ extends Emitter {
     if (typeof status.since === 'number' && status.since <= this.now() + 60000) clean.since = status.since; // when the Agent page started
     if (typeof status.net === 'string') clean.net = status.net.slice(0, 12); // e.g. "4g", "wifi"
     if (typeof status.downlink === 'number') clean.downlink = Math.max(0, Math.min(10000, Math.round(status.downlink * 10) / 10));
+    const prevCharging = o.status?.charging;
     o.status = { ...o.status, ...clean, at: this.now() };
     const patch = { lastSeen: this.now() };
     if ('battery' in clean) patch.battery = clean.battery;
@@ -281,6 +284,7 @@ export class HQ extends Emitter {
     }
     this.db.updateAgent(agentId, patch);
     this.pushAgent(agentId);
+    if ('charging' in clean || 'battery' in clean) this.emit('agentStatus', agentId, { prevCharging, status: o.status });
   }
   diagAll() { return this.db.getSetting('diag', {}) || {}; }
   /** Everything the Agent window's Diagnostics section shows. */
@@ -306,7 +310,7 @@ export class HQ extends Emitter {
     const a = this.db.agent(agentId);
     if (!a) return null;
     const kind = String(e.kind || '');
-    const allowed = new Set([...(missionById(a.mission)?.eventKinds || []), 'agent']);
+    const allowed = new Set([...(missionById(a.mission)?.eventKinds || []), 'agent', 'tamper']);
     if (!allowed.has(kind)) return null;
     const data = {};
     for (const [k, v] of Object.entries(e.data || {})) if (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 60)) data[k] = v;
@@ -323,7 +327,7 @@ export class HQ extends Emitter {
     const def = missionById(a?.mission)?.settings.find((s) => s.key === key && s.type === 'grid');
     if (!def) return;
     const settings = cleanSettings(a.mission, { ...a.settings, [key]: cells });
-    this.db.updateAgent(agentId, { settings: { ...a.settings, ...settings } });
+    this.db.updateAgent(agentId, { settings: { ...a.settings, ...settings }, calibratedAt: this.now() });
     this.pushAgent(agentId);
   }
 
@@ -415,7 +419,12 @@ export class HQ extends Emitter {
     const mission = patch.mission && missionById(patch.mission) ? patch.mission : a.mission;
     if (mission !== a.mission) changes.mission = mission;
     if (patch.settings || mission !== a.mission) changes.settings = { ...a.settings, ...cleanSettings(mission, { ...a.settings, ...(patch.settings || {}) }) };
+    if (changes.mission) changes.missionLog = [...(a.missionLog || [{ mission: a.mission, at: a.recruitedAt || a.createdAt || this.now() }]), { mission, at: this.now() }].slice(-50);
+    if (patch.settings && JSON.stringify(changes.settings) !== JSON.stringify(a.settings)) changes.calibratedAt = this.now(); // sensitivity / zones adjusted
+    if (typeof patch.notes === 'string') changes.notes = patch.notes.replace(/[<>]/g, '').slice(0, 2000);
+    if (patch.calibrated === true) changes.calibratedAt = this.now();
     const b = this.db.updateAgent(id, changes);
+    if (patch.calibrated === true) this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(b)} ${b.codename} calibration checked` });
     if (changes.codename && changes.codename !== a.codename) this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(a)} renamed “${a.codename}” → “${b.codename}”` });
     if (changes.mission) this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(b)} ${b.codename} assigned ${missionById(mission).name}` });
     const o = this.online.get(id);
@@ -427,6 +436,14 @@ export class HQ extends Emitter {
     this.pushAgent(id);
     return this.agentView(b);
   }
+  /** Which way an Agent's camera faces on the plan (degrees clockwise from the top of the plan). */
+  setFacing(id, dir) {
+    const a = this.db.agent(id);
+    if (!a?.place || !Number.isFinite(Number(dir))) return null;
+    this.db.updateAgent(id, { place: { ...a.place, dir: ((Math.round(Number(dir)) % 360) + 360) % 360 } });
+    this.pushAgent(id);
+    return this.agentView(this.db.agent(id));
+  }
   /** Where an Agent sits on the house map (a floor + a spot in metres), or null to take it off the map. */
   placeAgent(id, place) {
     const a = this.db.agent(id);
@@ -437,6 +454,8 @@ export class HQ extends Emitter {
       const x = Number(place.x), y = Number(place.y);
       if (!f || !Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 500 || Math.abs(y) > 500) return null;
       clean = { floorId: f.id, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
+      const dir = place.dir ?? a.place?.dir;
+      if (Number.isFinite(Number(dir)) && dir !== null) clean.dir = ((Math.round(Number(dir)) % 360) + 360) % 360;
       const room = f.rooms.find((r) => pointInPolygon([clean.x, clean.y], r.points));
       if (room) clean.roomId = room.id;
       this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(a)} ${a.codename} placed in ${room ? room.name : f.name}` });

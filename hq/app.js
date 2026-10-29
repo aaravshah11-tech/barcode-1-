@@ -25,6 +25,8 @@ import { openPalette, paletteOpen } from './palette.js';
 import { createTriage } from './views/triage.js';
 import { createIncidents } from './views/incidents.js';
 import { createAnalysis } from './views/analysis.js';
+import { createCoverage } from './views/coverage.js';
+import { createRegister } from './views/register.js';
 import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
@@ -290,6 +292,13 @@ registerView({
 });
 const analysis = createAnalysis({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'analysis', label: 'Analysis', icon: 'pulse', render: (root) => analysis.render(root) });
+const coverageView = createCoverage({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'coverage', label: 'Coverage', icon: 'shield', render: (root) => coverageView.render(root) });
+const registerViewer = createRegister({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'register', label: 'Agents', icon: 'agent', render: (root) => registerViewer.render(root) });
+let viewRefresh = null;
+/** Coverage and the Agent register follow Agent changes (debounced). */
+function refreshAgentViews() { clearTimeout(viewRefresh); viewRefresh = setTimeout(() => { if (S.view === 'coverage') coverageView.refresh(); else if (S.view === 'register') registerViewer.refresh(); }, 400); }
 function renderQueue() {
   const box = $('[data-minique]');
   if (!box) return;
@@ -538,7 +547,7 @@ document.addEventListener('keyup', (e) => { if ((e.key === 'v' || e.key === 'V')
 // ---------------- live updates from HQ ----------------
 function onMsg(msg) {
   if (msg.t === 'state') { apply(msg); renderAll(); }
-  else if (msg.t === 'agent') { upsert(msg.agent); renderAgents(); if (S.open === msg.agent.id) refreshDrawer(); agents3d(); }
+  else if (msg.t === 'agent') { upsert(msg.agent); renderAgents(); if (S.open === msg.agent.id) refreshDrawer(); agents3d(); refreshAgentViews(); }
   else if (msg.t === 'agentRemoved') { S.agents = S.agents.filter((a) => a.id !== msg.id); renderAgents(); agents3d(); }
   else if (msg.t === 'event') {
     addEvent(msg.event); renderStats();
@@ -557,7 +566,7 @@ function onMsg(msg) {
   else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
   else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); }
-  else if (msg.t === 'house') { S.house = msg.house; renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
+  else if (msg.t === 'house') { S.house = msg.house; refreshAgentViews(); renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
 }
 let agents3dTimer = null;
 function agents3d() { clearTimeout(agents3dTimer); agents3dTimer = setTimeout(() => map3d?.setAgents(S.agents), 150); }

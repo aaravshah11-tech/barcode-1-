@@ -28,7 +28,8 @@ test('severity rules: only events that need a decision become alerts', () => {
   assert.equal(severityFor({ kind: 'system', level: 'warn', message: 'Failed login attempt' }), 'MEDIUM');
   assert.equal(severityFor({ kind: 'system', level: 'warn', message: 'Internet connection lost' }), 'LOW');
   assert.equal(severityFor({ kind: 'system', level: 'alert', message: 'Security mode: LOCKDOWN' }), null, 'a mode change is not an alert');
-  assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “WOLF” offline' }), 'LOW');
+  assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “WOLF” offline' }), null, 'tamper detection explains offline Agents instead');
+  assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 WOLF: battery low (15%) — plug it in' }), 'LOW');
   assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “WOLF” disconnected by HQ' }), null);
   assert.equal(severityFor({ kind: 'threat', level: 'alert' }), null);
   assert.equal(alertTitle({ kind: 'motion', message: 'x' }, 'Kitchen'), 'Motion detected — Kitchen');

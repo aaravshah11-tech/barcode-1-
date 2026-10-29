@@ -37,6 +37,7 @@ export function severityFor(ev) {
   }
   if (ev.kind === 'agent') {
     if (/disconnected by HQ/.test(msg)) return null; // done on purpose by the operator
+    if (/\boffline\b/.test(msg)) return null; // tamper detection raises its own, better-explained alert
     return ev.level === 'warn' || ev.level === 'alert' ? 'LOW' : null; // offline, low battery
   }
   return ev.level === 'alert' ? 'HIGH' : null;

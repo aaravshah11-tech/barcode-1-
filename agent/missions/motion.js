@@ -2,6 +2,7 @@
 // HQ only ever receives "Motion detected" plus how much of the view changed.
 import { openCamera } from '../lib/camera.js';
 import { makeDetector } from '../lib/motion-core.js';
+import { frameStats, makeCoverWatch } from '../lib/tamper-core.js';
 
 const COLS = 8, ROWS = 6;
 
@@ -19,6 +20,7 @@ export async function start(ctx) {
   wrap.prepend(cam.video);
   const det = makeDetector({ W: cam.W, H: cam.H, cols: COLS, rows: ROWS });
   let lastReport = 0, editing = false, frames = 0, peak = 0;
+  const cover = makeCoverWatch(); // tamper: lens covered?
 
   // ----- ignore zones (picked here on the Agent; only cell numbers go to HQ) -----
   const grid = $('[data-grid]');
@@ -51,6 +53,9 @@ export async function start(ctx) {
     const f = cam.grey();
     if (!f) return;
     const r = det.step(f, { sensitivity: s.sensitivity, ignore: s.ignore });
+    const tc = cover(frameStats(f), Date.now());
+    if (tc === 'covered') ctx.report('tamper', 'Camera view blocked (lens covered?)', { type: 'covered' }, 'warn');
+    else if (tc === 'uncovered') ctx.report('tamper', 'Camera view clear again', { type: 'uncovered' }, 'info');
     frames++;
     peak = Math.max(peak, r.fraction);
     $('[data-meter]').style.width = `${Math.min(100, r.fraction * 400)}%`;

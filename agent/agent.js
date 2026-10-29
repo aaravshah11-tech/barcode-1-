@@ -7,6 +7,7 @@ import { missionById, cleanSettings } from '../shared/missions.js';
 import { dial } from '../shared/link.js';
 import { openCamera, activeCamera } from './lib/camera.js';
 import { applyTheme } from '../shared/themes.js';
+import { makeMoveWatch } from './lib/tamper-core.js';
 
 const KEY = 'sentinel.agent';
 const main = document.getElementById('main');
@@ -117,6 +118,7 @@ function shell() {
   setBanner();
   keepAwake();
   watchBattery();
+  watchTamper();
   armDimmer();
   tickStrip();
 }
@@ -364,6 +366,42 @@ async function watchBattery() {
   } catch { /* not supported (iPhone) */ }
 }
 setInterval(() => sendStatus(), 30000);
+
+/** TAMPER: tell HQ if this phone is picked up or turned (not for door Agents — their phone moves on purpose). */
+let tamperOn = false;
+function reportTamper(type, message) {
+  const msg = { t: 'event', kind: 'tamper', message, data: { type }, level: 'warn' };
+  if (!send(msg)) { outbox.push(msg); if (outbox.length > 50) outbox.shift(); }
+}
+function watchTamper() {
+  if (tamperOn || typeof DeviceMotionEvent === 'undefined') return;
+  const listen = () => {
+    if (tamperOn) return;
+    tamperOn = true;
+    let watch = makeMoveWatch();
+    let lastMission = mission.id;
+    addEventListener('devicemotion', (e) => {
+      if (mission.id === 'door') return;
+      if (mission.id !== lastMission) { lastMission = mission.id; watch = makeMoveWatch(); }
+      const g = e.accelerationIncludingGravity;
+      if (!g) return;
+      if (watch([g.x, g.y, g.z], Date.now()) === 'moved') reportTamper('moved', 'Agent moved (picked up or turned)');
+    });
+  };
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    // Some browsers allow it straight away; an iPhone needs one tap to allow the motion sensor.
+    DeviceMotionEvent.requestPermission().then((r) => { if (r === 'granted') listen(); else askTap(); }, askTap);
+  } else listen();
+  function askTap() {
+    if (tamperOn) return;
+    const foot = document.querySelector('.foot');
+    if (!foot || foot.querySelector('[data-tamperperm]')) return;
+    const b = document.createElement('button');
+    b.className = 'btn-ghost small'; b.dataset.tamperperm = ''; b.textContent = 'Turn on move alerts';
+    b.addEventListener('click', async () => { const r = await DeviceMotionEvent.requestPermission().catch(() => 'denied'); if (r === 'granted') { listen(); b.remove(); } else b.textContent = 'Move alerts blocked'; });
+    foot.prepend(b);
+  }
+}
 
 let wakeLock = null;
 async function keepAwake() {
