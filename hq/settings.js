@@ -6,7 +6,6 @@ import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 import { voicePrefs, setVoicePrefs, voiceSupported, PRIVACY } from './voice.js';
 import { geocodeUrl, roughly } from '../shared/weather.js';
 import { NORTH_OPTIONS } from '../shared/world.js';
-import { worldPrefs, setWorldPrefs } from './world.js';
 
 const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
@@ -54,21 +53,17 @@ function general(body, S, onChange) {
     <ul class="loc-results" data-locresults></ul>
     <p class="help">Only the town’s rough position (to about 1 km) is sent to Open-Meteo, a free weather service, to get the forecast. Sunrise and sunset are worked out on this computer.</p>
     <label class="field row" style="margin-top:8px"><input type="checkbox" data-briefingauto ${st.briefingAuto !== false ? 'checked' : ''}><span style="margin:0">Show the Mission Briefing (yesterday’s summary) the first time HQ is opened each morning</span></label>
-    ${hr}<h2 style="margin-bottom:8px">Live world (3D map)</h2>
+    ${hr}<h2 style="margin-bottom:8px">Site orientation (3D map)</h2>
     <div class="row" style="flex-wrap:wrap;gap:12px">
       <label class="field" style="margin:0"><span>Top of my floor plan faces</span><select data-north>${NORTH_OPTIONS.map(([v, l]) => `<option value="${v}" ${Number(st.northDeg || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label class="field" style="margin:0"><span>Night vision (this device)</span><select data-nv>${[['auto', 'Automatic after sunset'], ['on', 'Always'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${worldPrefs(S.mode).nv === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label class="field" style="margin:0"><span>Cinematic mode when idle (this device)</span><select data-cine>${[[0, 'Off'], [2, 'After 2 minutes'], [5, 'After 5 minutes'], [10, 'After 10 minutes']].map(([v, l]) => `<option value="${v}" ${worldPrefs(S.mode).cineMin === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     </div>
-    <label class="field row" style="margin-top:10px"><input type="checkbox" data-weatherfx ${worldPrefs(S.mode).weatherFx ? 'checked' : ''}><span style="margin:0">Show rain, snow and cloud shadows on the 3D map (this device; untick on a slow laptop)</span></label>
-    <p class="help">The sun and the house’s shadow follow the real sun for your location. Set which way the top of your floor plan faces so the shadows fall the right way (a compass shows N on the map).</p>
+    <p class="help">The 3D map is lit by the real sun for your location, and the house casts its real shadow. Set which way the top of your floor plan faces so the lighting is correct (a compass shows N on the map).</p>
     ${hr}<h2 style="margin-bottom:8px">Voice commands (this device)</h2>
     ${voiceSupported() ? `<label class="field row"><input type="checkbox" data-voiceon ${voicePrefs().on ? 'checked' : ''}><span style="margin:0">Push-to-talk voice commands: hold the microphone button at the top (or the V key) and speak, e.g. “switch to night mode”.</span></label>
       <label class="field row"><input type="checkbox" data-voicereply ${voicePrefs().reply ? 'checked' : ''}><span style="margin:0">Answer out loud</span></label>
       <p class="help">${esc(PRIVACY())}</p>` : '<p class="small muted">This browser can’t do voice commands. Chrome or Edge can. Typed commands work everywhere: press <b class="mono">`</b> or the terminal button.</p>'}
     ${hr}
     <form data-general>
-      <label class="field row"><input type="checkbox" name="fx" ${st.fx ? 'checked' : ''}><span style="margin:0">Display effects: faint grid, scan lines and typing text (also used by Agents). Turn off on a slow computer.</span></label>
       <label class="field"><span>Auto-lock after</span><select name="autoLockMin" style="max-width:220px">${[[5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [0, 'Never (not recommended)']].map(([v, l]) => `<option value="${v}" ${Number(st.autoLockMin) === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Without a tap, click or key for this long, HQ locks and asks for your codename + PIN. HQ keeps guarding the house while locked.</div></label>
       <label class="field"><span>Keep Mission Log entries for</span><div class="row"><input type="number" name="retentionDays" min="1" max="3650" value="${esc(st.retentionDays)}" style="max-width:120px"><span class="muted">days, then delete automatically</span></div></label>
       <button class="btn-primary">Save</button>
@@ -90,7 +85,7 @@ function general(body, S, onChange) {
     <div class="row"><button data-backup>⇩ Back up HQ</button><label class="btn" style="cursor:pointer">⇧ Restore a backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>` : ''}`;
   $('[data-general]', body).addEventListener('submit', async (e) => {
     e.preventDefault();
-    try { const s = await S.api('/settings', { method: 'PATCH', body: { fx: e.target.fx.checked, retentionDays: Number(e.target.retentionDays.value), autoLockMin: Number(e.target.autoLockMin.value) } }); onChange?.(s); toast('Settings saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
+    try { const s = await S.api('/settings', { method: 'PATCH', body: { retentionDays: Number(e.target.retentionDays.value), autoLockMin: Number(e.target.autoLockMin.value) } }); onChange?.(s); toast('Settings saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
   });
   body.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', async () => {
     try { const s = await S.api('/settings', { method: 'PATCH', body: { theme: b.dataset.theme } }); onChange?.(s); body.querySelectorAll('[data-theme]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); sfx('granted'); } catch (x) { toast(x.message, { kind: 'err' }); }
@@ -130,9 +125,6 @@ function general(body, S, onChange) {
   });
   $('[data-locclear]', body)?.addEventListener('click', () => setLoc(null));
   $('[data-north]', body).addEventListener('change', async (e) => { try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { northDeg: Number(e.target.value) } })); toast('Saved'); } catch (x) { toast(x.message, { kind: 'err' }); } });
-  $('[data-nv]', body).addEventListener('change', (e) => setWorldPrefs({ nv: e.target.value }, S.mode));
-  $('[data-cine]', body).addEventListener('change', (e) => setWorldPrefs({ cineMin: Number(e.target.value) }, S.mode));
-  $('[data-weatherfx]', body).addEventListener('change', (e) => setWorldPrefs({ weatherFx: e.target.checked }, S.mode));
   $('[data-briefingauto]', body).addEventListener('change', async (e) => { try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { briefingAuto: e.target.checked } })); } catch (x) { toast(x.message, { kind: 'err' }); } });
   $('[data-pin]', body).addEventListener('submit', async (e) => {
     e.preventDefault();

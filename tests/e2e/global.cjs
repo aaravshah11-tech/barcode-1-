@@ -125,7 +125,7 @@ const NEWS = { articles: [
   await page.keyboard.press('Escape');
 
   // ---- Terminal / voice ----
-  await page.click('.p-log .panel-head h2');
+  await page.click('.wp-log .panel-head h2');
   await page.keyboard.press('Backquote');
   await page.fill('[data-termin]', 'where is the iss'); await page.press('[data-termin]', 'Enter');
   await page.waitForSelector('.atlas');

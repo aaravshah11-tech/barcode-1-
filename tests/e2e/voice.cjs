@@ -42,7 +42,7 @@ const SHOTS = process.argv[2] || '';
   };
 
   // ---- Terminal ----
-  await page.click('.p-log .panel-head h2'); // focus the page, not a text box
+  await page.click('.wp-log .panel-head h2'); // focus the page, not a text box
   await page.keyboard.press('Backquote');
   await page.waitForSelector('.term [data-termin]');
   check(true, 'press ` to open the secure terminal');
@@ -114,7 +114,7 @@ const SHOTS = process.argv[2] || '';
 
   // Hold V instead
   await page.evaluate(() => { window.__speech.next = "what's the status"; });
-  await page.click('.p-log .panel-head h2');
+  await page.click('.wp-log .panel-head h2');
   await page.keyboard.down('v');
   await page.waitForSelector('.ptt-status:not([hidden])');
   await page.keyboard.up('v');

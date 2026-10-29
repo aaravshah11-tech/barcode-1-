@@ -43,21 +43,8 @@ export function confirmBox(title, message, { ok = 'Confirm', danger = false } = 
   });
 }
 
-/** Type text into an element character by character (instant when effects are off). */
-export function typewrite(el, text, { cps = 90, fx = true } = {}) {
-  if (!fx || reducedMotion() || document.hidden) { el.textContent = text; return Promise.resolve(); }
-  el.textContent = '';
-  el.classList.add('typing');
-  return new Promise((resolve) => {
-    let i = 0;
-    const step = Math.max(1, Math.round(text.length / 40));
-    const t = setInterval(() => {
-      i = Math.min(text.length, i + step);
-      el.textContent = text.slice(0, i);
-      if (i >= text.length) { clearInterval(t); el.classList.remove('typing'); resolve(); }
-    }, 1000 / cps * step);
-  });
-}
+/** Set an element's text (the old typewriter effect is gone; kept for older callers). */
+export function typewrite(el, text) { el.textContent = text; return Promise.resolve(); }
 
 export const clock = (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 export const dayClock = (ts) => { const d = new Date(ts); const today = new Date().toDateString() === d.toDateString(); return today ? clock(ts) : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${clock(ts)}`; };
@@ -91,8 +78,20 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-/** The SENTINEL logo, inline (so the radar sweep can animate). */
-export const LOGO = `<svg class="logo" viewBox="0 0 128 128" aria-hidden="true"><defs><linearGradient id="lgS" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:currentColor" stop-opacity="0"/><stop offset="1" style="stop-color:currentColor" stop-opacity=".55"/></linearGradient></defs>
-<circle cx="64" cy="64" r="58" style="fill:var(--bg)"/><g fill="none" stroke="currentColor"><circle cx="64" cy="64" r="56" stroke-width="3"/><circle cx="64" cy="64" r="40" stroke-width="1.5" stroke-opacity=".4"/><circle cx="64" cy="64" r="24" stroke-width="1.5" stroke-opacity=".3"/><path d="M64 8v12M64 108v12M8 64h12M108 64h12" stroke-width="2.5" stroke-opacity=".7"/></g>
-<g class="logo-sweep"><path d="M64 64 L120 64 A56 56 0 0 0 103.6 24.4 Z" fill="url(#lgS)"/></g>
-<path d="M22 64 Q64 28 106 64 Q64 100 22 64 Z" style="fill:var(--bg)" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><circle cx="64" cy="64" r="15" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="64" cy="64" r="7" fill="currentColor"/><circle cx="68.5" cy="59.5" r="2.4" style="fill:var(--bg)"/></svg>`;
+/** The SENTINEL mark: a plain hexagon with a horizontal bar (no animation). */
+export const LOGO = `<svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 28 9.5v13L16 29.5 4 22.5v-13z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 16h12" stroke="currentColor" stroke-width="2"/></svg>`;
+
+/** Classification banners across the top and bottom of the screen (styled like system markings). */
+export const CLASSIFICATION = 'SENTINEL // RESTRICTED – HOUSEHOLD';
+export function classificationBanners(text = CLASSIFICATION, { top = true, bottom = true } = {}) {
+  document.querySelectorAll('.cbanner').forEach((b) => b.remove());
+  for (const [on, pos] of [[top, 'top'], [bottom, 'bottom']]) {
+    if (!on) continue;
+    const el = document.createElement('div');
+    el.className = `cbanner ${pos}`;
+    el.setAttribute('role', 'note');
+    el.textContent = text;
+    document.body.appendChild(el);
+  }
+  document.body.classList.toggle('has-cb', top && bottom);
+}

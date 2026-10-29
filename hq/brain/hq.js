@@ -11,7 +11,7 @@ import { cleanShips } from '../../shared/feeds.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
-  fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15, speedEvery: 0,
+  fx: true, retentionDays: 30, mode: 'home', theme: 'graphite', autoLockMin: 15, speedEvery: 0,
   nightStart: '22:30', nightEnd: '07:00', // when NIGHT is suggested (and the siren stays quiet)
   alarm: { enabled: true, siren: true, volume: 60, seconds: 30, quietStart: '23:00', quietEnd: '07:00' }, // LOCKDOWN alarm protocol
   location: null, // { name, lat, lon } (rounded to ~1 km) for weather and sunrise/sunset
@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS = {
   airspaceKm: 40, // GLOBAL INTEL airspace radar range
 };
 const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
-const THEMES = ['mi6', 'classic', 'redops'];
+const THEMES = ['graphite', 'navy'];
 const PAIR_MINUTES = 10;
 
 class Emitter {
@@ -56,6 +56,8 @@ export class HQ extends Emitter {
     const s = { ...DEFAULT_SETTINGS, ...(this.db.getSetting('hq', {}) || {}) };
     s.mode = validMode(s.mode);
     s.alarm = { ...DEFAULT_SETTINGS.alarm, ...(s.alarm || {}) };
+    if (!THEMES.includes(s.theme)) s.theme = 'graphite'; // older theme names
+    s.fx = false; // display effects were removed in the professional redesign
     return s;
   }
   updateSettings(patch) {

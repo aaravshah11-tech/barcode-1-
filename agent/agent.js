@@ -1,10 +1,9 @@
 // SENTINEL Agent: pairs with HQ, stays connected, obeys signed orders and runs its mission.
 // Privacy rule: missions process camera/microphone data on this device only and send HQ nothing but
 // events and numbers ("motion detected", "72 dB").
-import { esc, LOGO, toast } from '../shared/ui.js';
+import { esc, LOGO, toast, classificationBanners } from '../shared/ui.js';
 import { canonical } from '../shared/canonical.js';
 import { missionById, cleanSettings } from '../shared/missions.js';
-import { boot } from '../shared/boot.js';
 import { dial } from '../shared/link.js';
 import { openCamera, activeCamera } from './lib/camera.js';
 import { applyTheme } from '../shared/themes.js';
@@ -24,7 +23,7 @@ let retry = 1000;
 let stopped = false; // disconnected by HQ
 let hqOffset = 0; // HQ clock minus ours
 const seenNonces = [];
-let fx = true;
+const fx = false; // visual effects were removed in the professional redesign
 let mission = { id: null, settings: null, inst: null };
 let hmacKey = null;
 const outbox = [];
@@ -46,7 +45,6 @@ async function init() {
     return;
   }
   if (!creds?.hqId) return notRecruited();
-  await boot({ title: 'SENTINEL // AGENT ONLINE', lines: ['WAKING AGENT', 'SECURE CHANNEL', 'CONTACTING HQ'], key: 'sentinel.agentBooted', fx });
   shell();
   connect();
 }
@@ -69,12 +67,12 @@ function claimWith(hqId, code) {
 }
 
 async function claim(hqId, code) {
-  main.innerHTML = `<div class="big-msg">${LOGO}<h1>RECRUITING…</h1><p class="muted mono">Contacting HQ and exchanging the one-time code</p></div>`;
+  main.innerHTML = `<div class="big-msg">${LOGO}<h1>Joining HQ…</h1><p class="muted mono">Contacting HQ and exchanging the one-time code</p></div>`;
   try {
     const data = await claimWith(hqId, code);
     save({ hqId, agentId: data.agentId, token: data.token, codename: data.codename, label: data.label, recruited: Date.now() });
     stopped = false;
-    main.innerHTML = `<div class="big-msg">${LOGO}<h1>WELCOME, ${esc(data.codename)}</h1><p class="mono">${esc(data.label)} has joined HQ.</p><p class="small muted">Tip: add this page to your home screen so it opens full-screen and stays paired.</p></div>`;
+    main.innerHTML = `<div class="big-msg">${LOGO}<h1>Joined as ${esc(data.codename)}</h1><p class="mono">${esc(data.label)} has joined HQ.</p><p class="small muted">Tip: add this page to your home screen so it opens full-screen and stays paired.</p></div>`;
     setTimeout(() => { shell(); connect(); }, 1500);
   } catch (e) {
     notRecruited(e.message);
@@ -83,7 +81,7 @@ async function claim(hqId, code) {
 
 function notRecruited(error = '') {
   banner.hidden = true;
-  main.innerHTML = `<div class="big-msg">${LOGO}<h1>NOT RECRUITED</h1>
+  main.innerHTML = `<div class="big-msg">${LOGO}<h1>Not yet an Agent</h1>
     <p>This device isn’t an Agent yet. On HQ press <b>＋ Recruit</b> and scan the QR code — or type both codes here:</p>
     ${error ? `<p class="c-red mono small">${esc(error)}</p>` : ''}
     <form data-code class="codes">
@@ -101,7 +99,7 @@ function notRecruited(error = '') {
 function shell() {
   main.innerHTML = `
     <header class="ag-head">
-      <div class="ag-radar" aria-hidden="true"><i></i><i></i><i></i><span class="sweep"></span><b></b></div>
+      <div class="ag-state" data-agstate aria-hidden="true"><span class="dot"></span></div>
       <div class="grow"><small class="ag-label" data-label>${esc(creds.label)}</small><div class="ag-code" data-codename>${esc(creds.codename)}</div>
         <div class="ag-mission mono" data-mname></div></div>
     </header>
@@ -234,12 +232,11 @@ function command(cmd) {
   else if (cmd.action === 'disconnect') {
     stopped = true; save(null); stopMission(); link?.close();
     banner.hidden = true;
-    main.innerHTML = `<div class="big-msg">${LOGO}<h1>DISCONNECTED BY HQ</h1><p>This device is no longer an Agent. To use it again, scan a new Recruit QR code.</p></div>`;
+    main.innerHTML = `<div class="big-msg">${LOGO}<h1>Disconnected by HQ</h1><p>This device is no longer an Agent. To use it again, scan a new Recruit QR code.</p></div>`;
   }
 }
 
 function applyConfig(c) {
-  if (typeof c.fx === 'boolean') { fx = c.fx; document.body.classList.toggle('fx', fx); }
   if (c.theme) applyTheme(c.theme);
   if (typeof c.name === 'string') { creds.name = c.name; save(creds); }
   if (c.codename) { creds.codename = c.codename; save(creds); const el = document.querySelector('[data-codename]'); if (el) el.textContent = c.codename; }
@@ -465,4 +462,5 @@ function findMe() {
 }
 
 window.__agent = { get mission() { return mission; }, get connected() { return connected; }, get lastCmd() { return lastCmd; }, verify, sent: sentLog }; // for the automated tests
+classificationBanners(undefined, { top: false }); // the privacy banner owns the top edge
 init();

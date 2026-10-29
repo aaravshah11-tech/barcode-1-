@@ -101,15 +101,6 @@ export function createTerminal(env) {
         const name = top && (S.house?.floors || []).flatMap((f) => f.rooms).find((r) => r.id === top[0])?.name;
         return ok(`Heatmap on (${c.days === 7 ? 'last 7 days' : 'today'}).${name ? ` Busiest: ${name}, ${top[1]} events.` : ' No sensor events in rooms yet.'}`);
       }
-      case 'nightvision': {
-        const st = await env.nightVision(c.mode);
-        return ok(c.mode === 'auto' ? `Night vision: automatic (after sunset). It is ${st.nv ? 'on' : 'off'} now.` : `Night vision ${c.mode}.`);
-      }
-      case 'cinematic': {
-        setTimeout(() => env.cinematic(), 700); // after the terminal closes; any key or touch stops it
-        setTimeout(close, 0);
-        return ok('Cinematic mode. Touch anything to stop.');
-      }
       case 'global': {
         setTimeout(close, 0);
         const at = await env.global(c.sel || null);

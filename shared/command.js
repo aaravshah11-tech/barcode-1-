@@ -20,8 +20,6 @@ export const COMMANDS = [
   ['diag', 'diag [agent]', 'Agent health: battery, link time, uptime'],
   ['replay', 'replay [today|yesterday|stop]', 'Play back the day’s sensor events on the map'],
   ['heatmap', 'heatmap [on|off|week]', 'Tint rooms by how busy they were'],
-  ['nightvision', 'nightvision [on|off|auto]', 'Green night-vision look on the 3D map'],
-  ['cinematic', 'cinematic', 'Slowly circle the house (touch anything to stop)'],
   ['global', 'global', 'Open Global intel: globe, ISS, aircraft, earthquakes, ships'],
   ['iss', 'iss', 'Where the Space Station is, and its next pass over HQ'],
   ['airspace', 'airspace', 'Planes over the house right now'],
@@ -39,7 +37,7 @@ export const COMMANDS = [
   ['lock', 'lock', 'Lock this screen'],
   ['clear', 'clear', 'Clear the terminal'],
 ];
-export const THEME_NAMES = ['mi6', 'classic', 'redops'];
+export const THEME_NAMES = ['graphite', 'navy'];
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
 const FILLER = new Set(['sentinel', 'hq', 'ok', 'okay', 'hey', 'please', 'computer']);
@@ -130,9 +128,6 @@ export function parseCommand(input, ctx = {}) {
   const hmM = t.match(/^(?:show (?:the )?)?heat ?map(?: (on|off|week|7 days|today))?$/) || t.match(/^(hide) (?:the )?heat ?map$/);
   if (hmM) return { cmd: 'heatmap', on: !/off|hide/.test(hmM[1] || ''), days: /week|7/.test(hmM[1] || '') ? 7 : 1 };
 
-  const nvM = t.match(/^(?:night ?vision|nv)(?: (on|off|auto))?$/) || t.match(/^(?:switch|turn) (on|off) night ?vision$/);
-  if (nvM) return { cmd: 'nightvision', mode: nvM[1] || 'on' };
-  if (/^(cinematic|cinematic mode|screensaver|patrol)$/.test(t) || /^(?:start|begin) (?:cinematic|patrol)/.test(t)) return { cmd: 'cinematic' };
 
   if (/^(global|global intel|globe|world|atlas)$/.test(t) || /^(?:open|show) (?:the )?(?:global|globe|world map|atlas)/.test(t)) return { cmd: 'global' };
   if (/^(iss|space station)$/.test(t) || /^(?:where is|wheres|when is|whens|track) (?:the )?(?:iss|space station)/.test(t) || /next (?:iss|space station) pass/.test(t)) return { cmd: 'global', sel: { type: 'iss' }, say: 'iss' };

@@ -5,7 +5,7 @@ body { overflow-x: hidden; }
   font: 600 .7rem var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--on-accent); background: var(--green); }
 .banner-active.watching { background: var(--red); color: #fff; }
 .banner-active.offline { background: var(--amber); color: #1a1000; }
-.agent-main { min-height: 100dvh; padding: 56px 16px 28px; padding-top: calc(48px + env(safe-area-inset-top)); display: grid; grid-template-rows: auto 1fr auto; gap: 14px; max-width: 760px; margin: 0 auto; }
+.agent-main { min-height: 100dvh; padding: 56px 16px calc(28px + var(--cb)); padding-top: calc(48px + env(safe-area-inset-top)); display: grid; grid-template-rows: auto 1fr auto; gap: 14px; max-width: 760px; margin: 0 auto; }
 .id-card { display: flex; gap: 14px; align-items: center; }
 .id-card .logo { width: 54px; height: 54px; flex: none; }
 .id-card .who { font: 600 1.25rem var(--sans); letter-spacing: .1em; color: var(--text); }
@@ -25,7 +25,7 @@ body { overflow-x: hidden; }
 .meter { height: 12px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line-2); overflow: hidden; }
 .meter > div { height: 100%; background: var(--green); width: 0; transition: width .15s; }
 .meter .mark { position: relative; }
-.cam-wrap { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line-2); background: #000; aspect-ratio: 4 / 3; }
+.cam-wrap { position: relative; border-radius: 2px; overflow: hidden; border: 1px solid var(--line-2); background: #000; aspect-ratio: 4 / 3; }
 .cam-wrap video, .cam-wrap canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
 .zone-grid { position: absolute; inset: 0; display: grid; }
 .zone-grid button { border: 1px solid rgba(var(--accent-rgb), .25); border-radius: 0; background: transparent; min-height: 0; padding: 0; }
@@ -34,8 +34,8 @@ body { overflow-x: hidden; }
 .zone-grid.view button[aria-pressed="false"] { border-color: transparent; }
 .hot { position: absolute; inset: 0; pointer-events: none; }
 .privacy { font: .74rem var(--mono); color: var(--muted); border-left: 3px solid var(--green); padding-left: 10px; }
-.knock { width: min(80vw, 420px); aspect-ratio: 1; border-radius: 50%; font-size: clamp(1.2rem, 6vw, 2rem); margin: 10px auto; display: grid; place-items: center; border: 3px solid var(--green); color: var(--green); background: radial-gradient(circle, rgba(57,255,136,.18), rgba(57,255,136,.04)); box-shadow: 0 0 40px rgba(57,255,136,.35); letter-spacing: .18em; }
-.knock:active { transform: scale(.97); background: rgba(57,255,136,.3); }
+.knock { width: min(80vw, 420px); aspect-ratio: 1; border-radius: 50%; font-size: clamp(1.1rem, 5vw, 1.6rem); margin: 10px auto; display: grid; place-items: center; border: 2px solid var(--green); color: var(--text); background: var(--panel-2); letter-spacing: .1em; }
+.knock:active { background: var(--green-dim); }
 /* dimmer + find-me flash */
 .dim { position: fixed; inset: 0; z-index: 2400; background: rgba(0, 0, 0, .9); display: grid; place-content: center; text-align: center; gap: 8px; cursor: pointer; }
 .dim-clock { font-size: 2.2rem; color: rgba(var(--accent-rgb), .35); letter-spacing: .1em; }
@@ -93,20 +93,9 @@ body.intel-mode .agent-main { max-width: none; }
 .ag-strip b { font-weight: 500; font-size: .86rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ag-strip b.low { color: var(--red); }
 body[data-hqlink="down"] [data-linkms] { color: var(--amber); }
-/* radar: three rings, a cross, a rotating sweep, a pulsing centre (pure CSS — light on old phones) */
-.ag-radar { --s: 64px; position: relative; width: var(--s); height: var(--s); flex: none; border-radius: 50%; border: 1.5px solid rgba(var(--accent-rgb), .7); overflow: hidden;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), .08), transparent 70%), linear-gradient(rgba(var(--accent-rgb), .25), rgba(var(--accent-rgb), .25)) center / 1px 100% no-repeat, linear-gradient(90deg, rgba(var(--accent-rgb), .25), rgba(var(--accent-rgb), .25)) center / 100% 1px no-repeat; }
-.ag-radar i { position: absolute; inset: 0; margin: auto; border-radius: 50%; border: 1px solid rgba(var(--accent-rgb), .3); }
-.ag-radar i:nth-child(1) { width: 75%; height: 75%; } .ag-radar i:nth-child(2) { width: 50%; height: 50%; } .ag-radar i:nth-child(3) { width: 25%; height: 25%; }
-.ag-radar .sweep { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(var(--accent-rgb), .55), rgba(var(--accent-rgb), 0) 70deg, transparent 360deg); animation: agSweep 4s linear infinite; }
-.ag-radar b { position: absolute; left: 50%; top: 50%; width: 8%; height: 8%; min-width: 5px; min-height: 5px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .6); animation: agPulse 2s ease-out infinite; }
-.ag-radar.big { --s: min(62vw, 300px); margin: 6px auto 0; }
-@keyframes agSweep { to { transform: rotate(360deg); } }
-@keyframes agPulse { 0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .6); } 100% { box-shadow: 0 0 0 calc(var(--s) * .18) rgba(var(--accent-rgb), 0); } }
-body:not(.fx) .ag-radar .sweep, body:not(.fx) .ag-radar b { animation-duration: 12s; }
-body[data-hqlink="down"] .ag-radar { border-color: var(--amber); }
-body[data-hqlink="down"] .ag-radar .sweep { animation-play-state: paused; opacity: .3; }
-@media (prefers-reduced-motion: reduce) { .ag-radar .sweep, .ag-radar b { animation: none; } }
+.ag-state { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border: 1px solid var(--line-2); background: var(--bg-2); }
+.ag-state .dot { width: 10px; height: 10px; background: var(--ok); }
+body[data-hqlink="down"] .ag-state .dot { background: var(--amber); }
 .standby { display: grid; justify-items: center; text-align: center; gap: 10px; padding: 8px 0 14px; }
-.standby-title { font-size: 1rem; letter-spacing: .3em; text-transform: uppercase; color: var(--text); margin: 8px 0 0; }
+.standby-title { font: 600 .78rem var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text); margin: 4px 0 0; }
 @media (max-width: 360px) { .ag-strip { grid-template-columns: repeat(2, 1fr); } .ag-strip span:nth-child(3) { border-left: 0; } }

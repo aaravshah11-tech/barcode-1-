@@ -229,7 +229,7 @@ test('Director login: hashed PIN, lockout, linked phones need a session', async 
   const auth = makeAuth({ db, now: () => now.t, idleMin: () => 15 });
   const api = makeApi({ hq, db, auth });
   assert.equal((await api('GET', '/auth/status')).setup, false);
-  await assert.rejects(api('POST', '/auth/setup', { codename: 'falcon', pin: '12' }), /4–8 digits/);
+  await assert.rejects(api('POST', '/auth/setup', { codename: 'falcon', pin: '12' }), /at least 4 characters/);
   await assert.rejects(api('POST', '/auth/setup', { codename: 'falcon', pin: '1234' }, { remote: true }), /HQ computer/);
   assert.equal((await api('POST', '/auth/setup', { codename: 'falcon', pin: '4321' })).codename, 'FALCON');
   await assert.rejects(api('POST', '/auth/setup', { codename: 'x', pin: '9999' }), /already/);
@@ -244,12 +244,12 @@ test('Director login: hashed PIN, lockout, linked phones need a session', async 
   await assert.rejects(api('GET', '/state', {}, { remote: true, session: ok.session }), /Locked/, 'session ends after 15 min idle');
 
   // wrong PINs: 5 tries then locked, even with the right PIN
-  for (let i = 0; i < 4; i++) await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '0000' }), /tries left/);
-  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '0000' }), /Locked for 1 min/);
-  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' }), /Too many wrong tries/);
+  for (let i = 0; i < 4; i++) await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '0000' }), /attempts? remaining/);
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '0000' }), /locked for 1 min/);
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' }), /Too many failed attempts/);
   now.t += 61000;
   assert.ok((await api('POST', '/auth/unlock', { codename: 'FALCON', pin: '4321' })).session, 'works again after the lockout');
-  await assert.rejects(api('POST', '/auth/unlock', { codename: 'RAVEN', pin: '4321' }), /DENIED/, 'wrong codename');
+  await assert.rejects(api('POST', '/auth/unlock', { codename: 'RAVEN', pin: '4321' }), /Incorrect username/, 'wrong username');
   assert.ok(db.events({}).some((e) => /Failed login attempt/.test(e.message)), 'failed logins are logged');
 
   // change PIN

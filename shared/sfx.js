@@ -1,5 +1,4 @@
-// Sound design: soft beeps, scan sweeps and alert tones, made on the fly with the Web Audio API
-// (no sound files). Volume and mute are saved per device.
+// Alert tones, made on the fly with the Web Audio API (no sound files). Volume and mute are saved per device.
 const KEY = 'sentinel.sfx';
 let ctx = null, master = null;
 let prefs = { volume: 0.5, muted: false };
@@ -46,16 +45,9 @@ function tone(freq, { start = 0, dur = 0.12, type = 'sine', gain = 0.25, to = nu
   o.start(t); o.stop(t + dur + 0.02);
 }
 
+// Sounds only for genuine alerts — short and understated. Everything else is silent.
 const SOUNDS = {
-  click: () => tone(1800, { dur: 0.04, type: 'square', gain: 0.05 }),
-  blip: () => { tone(1320, { dur: 0.07, gain: 0.12 }); tone(1760, { start: 0.07, dur: 0.07, gain: 0.1 }); },
-  beep: () => tone(980, { dur: 0.14, gain: 0.16 }),
-  scan: () => tone(300, { dur: 1.1, type: 'sawtooth', gain: 0.05, to: 2400 }),
-  granted: () => { tone(880, { dur: 0.12, gain: 0.16 }); tone(1320, { start: 0.12, dur: 0.22, gain: 0.16 }); },
-  denied: () => { tone(220, { dur: 0.25, type: 'square', gain: 0.1 }); tone(160, { start: 0.25, dur: 0.35, type: 'square', gain: 0.1 }); },
-  alert: () => { for (let i = 0; i < 4; i++) tone(i % 2 ? 660 : 990, { start: i * 0.22, dur: 0.2, type: 'triangle', gain: 0.2 }); },
-  warn: () => { tone(740, { dur: 0.16, type: 'triangle', gain: 0.16 }); tone(560, { start: 0.18, dur: 0.2, type: 'triangle', gain: 0.14 }); },
-  boot: () => { [220, 330, 440, 660, 880].forEach((f, i) => tone(f, { start: i * 0.09, dur: 0.16, gain: 0.1 })); tone(1760, { start: 0.55, dur: 0.5, gain: 0.08 }); },
-  type: () => tone(2400 + Math.random() * 600, { dur: 0.02, type: 'square', gain: 0.02 }),
+  alert: () => { tone(880, { dur: 0.16, type: 'sine', gain: 0.18 }); tone(660, { start: 0.2, dur: 0.22, type: 'sine', gain: 0.16 }); },
+  warn: () => tone(740, { dur: 0.14, type: 'sine', gain: 0.12 }),
 };
 export function sfx(name) { try { SOUNDS[name]?.(); } catch { /* sound is optional */ } }

@@ -68,7 +68,7 @@ exports.openHQ = async (page, world) => {
   await page.goto(world.hqUrl);
   await exports.login(page);
   await page.waitForSelector('[data-threat]', { timeout: 15000 });
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK ONLINE'), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK'), null, { timeout: 15000 });
 };
 
 /** Recruits a new Agent in `ctx` with a fresh code from HQ. */

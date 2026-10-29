@@ -18,7 +18,7 @@ test('terminal commands', () => {
   assert.deepEqual(p('log 5'), { cmd: 'log', n: 5 });
   assert.deepEqual(p('log'), { cmd: 'log', n: 10 });
   assert.deepEqual(p('map plan'), { cmd: 'map', view: 'plan' });
-  assert.deepEqual(p('theme redops'), { cmd: 'theme', theme: 'redops' });
+  assert.deepEqual(p('theme navy'), { cmd: 'theme', theme: 'navy' });
   assert.equal(p('theme pink').cmd, 'error');
   assert.deepEqual(p('find nightjar', ctx), { cmd: 'find', agentId: 'a1' });
   assert.deepEqual(p('find agent-02', ctx), { cmd: 'find', agentId: 'a2' });
@@ -96,13 +96,9 @@ test('part 9 commands: replay and heatmap', () => {
   assert.deepEqual(p('hide the heatmap'), { cmd: 'heatmap', on: false, days: 1 });
 });
 
-test('part 10 commands: night vision, cinematic', () => {
-  assert.deepEqual(p('nightvision'), { cmd: 'nightvision', mode: 'on' });
-  assert.deepEqual(p('night vision off'), { cmd: 'nightvision', mode: 'off' });
-  assert.deepEqual(p('nightvision auto'), { cmd: 'nightvision', mode: 'auto' });
-  assert.deepEqual(p('Sentinel, turn on night vision'), { cmd: 'nightvision', mode: 'on' });
-  assert.deepEqual(p('cinematic'), { cmd: 'cinematic' });
-  assert.deepEqual(p('start patrol'), { cmd: 'cinematic' });
+test('removed gimmicks: night vision and cinematic are no longer commands', () => {
+  assert.equal(p('nightvision on').cmd, 'unknown');
+  assert.equal(p('cinematic').cmd, 'unknown');
 });
 
 test('part 11 commands: global intel', () => {

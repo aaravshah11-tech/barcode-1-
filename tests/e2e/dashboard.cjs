@@ -19,14 +19,14 @@ const SHOTS = process.argv[2] || '';
   check((await page.textContent('h1')).includes('SENTINEL'), 'front page loads');
   await shot('front-page');
   await page.click('[data-start]');
-  await page.waitForSelector('.boot-bar');
-  check(true, 'START HQ → boot sequence with decrypting bars (no install)');
-  await page.waitForTimeout(1200);
-  await shot('boot');
-  await page.waitForSelector('.boot', { state: 'detached', timeout: 10000 });
-  // First time: enrol the Director (codename + PIN)
-  await page.waitForSelector('[data-login] [name=pin2]');
-  check(await page.evaluate(() => document.documentElement.dataset.theme) === 'mi6', 'default theme is MI6 hologram');
+  // No boot animation any more: straight to a plain sign-in screen
+  await page.waitForSelector('[data-login] [name=pin2]', { timeout: 15000 });
+  check(!(await page.$('.boot, .boot-bar, [data-scanner]')), 'no boot animation or fake fingerprint scan');
+  check(await page.evaluate(() => document.documentElement.dataset.theme) === 'graphite', 'default theme is Graphite');
+  const banners = await page.$$eval('.cbanner', (b) => b.map((x) => `${x.className}:${x.textContent}`));
+  check(banners.length === 2 && banners.every((t) => t.includes('SENTINEL // RESTRICTED – HOUSEHOLD')), 'classification banner top and bottom: SENTINEL // RESTRICTED – HOUSEHOLD');
+  check((await page.textContent('.login-notice')).includes('monitored and logged'), 'sign-in shows “use of this system is monitored and logged”');
+  check(await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes('IBM Plex Sans')), 'IBM Plex Sans font');
   await page.fill('[name=codename]', 'nightowl');
   await page.fill('[name=pin]', '13579');
   await page.fill('[name=pin2]', '97531');
@@ -35,39 +35,60 @@ const SHOTS = process.argv[2] || '';
   await page.fill('[name=pin2]', '13579');
   await shot('login-setup');
   await page.click('[data-login] button');
-  await page.waitForSelector('[data-scanner]:not([hidden])');
-  check(true, 'fingerprint / retina scan animation plays');
-  await page.waitForSelector('text=ACCESS GRANTED');
-  await page.waitForTimeout(300);
-  await shot('login-granted');
-  check((await page.textContent('[data-scantext]')).includes('NIGHTOWL'), 'ACCESS GRANTED — welcome, codename');
   await page.waitForSelector('[data-threat]', { timeout: 10000 });
-  check(true, 'Command Centre opens after login');
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK ONLINE'), null, { timeout: 15000 });
+  check(true, 'Operations screen opens after sign-in');
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK'), null, { timeout: 15000 });
   check(true, 'HQ goes ONLINE (matchmaking server reached)');
   await page.waitForSelector('[data-threat].GREEN');
   check((await page.textContent('[data-agents]')).includes('No agents deployed'), 'empty Agents list explains how to recruit');
   check((await page.textContent('[data-log]')).includes('HQ session started'), 'Mission Log: HQ ONLINE');
-  check(await page.evaluate(() => document.body.classList.contains('fx')), 'scanline effects on by default');
-  check(await page.$$eval('.cc .panel', (p) => p.length) === 7, 'command-centre layout: map + 6 panels around it');
-  await page.waitForTimeout(1200);
+  check(!(await page.evaluate(() => document.body.classList.contains('fx'))), 'no scanline / glitch effects');
+  check(await page.$$eval('[data-wsgrid] [data-panel]', (p) => p.length) === 7, 'workspace: 7 panels on the Operations screen');
+
+  // Status bar
+  await page.waitForFunction(() => document.querySelector('[data-sbop]')?.textContent === 'NIGHTOWL');
+  const sb = await page.textContent('[data-statusbar]');
+  check(/DIRECTOR/.test(sb) && /HOME/.test(sb) && /\d\d:\d\d:\d\d/.test(sb) && /Nominal/.test(sb) && /0\/0/.test(sb), 'status bar: operator, role, session timer, alert state, UTC/local time, HQ health, Agents online');
+
+  // Command palette
+  await page.keyboard.press('Control+k');
+  await page.waitForSelector('.palette [data-pq]');
+  await page.fill('.palette [data-pq]', 'away');
+  check((await page.textContent('.palette .sel')).includes('AWAY'), 'Ctrl+K command palette: typing “away” finds “Set AWAY”');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.palette', { state: 'detached' });
+  await page.keyboard.press('?');
+  await page.waitForSelector('.sheet >> text=Keyboard shortcuts');
+  check(true, '? shows the keyboard shortcuts');
+  await page.keyboard.press('Escape');
+
+  // Workspace: edit, move a panel, save the layout
+  await page.click('[data-wsedit]');
+  await page.waitForSelector('[data-wsgrid].editing');
+  const before = await page.$eval('[data-panel="comms"]', (e) => e.style.gridColumn);
+  const head = await page.$('[data-panel="comms"] .panel-head h2'), hb = await head.boundingBox();
+  await page.mouse.move(hb.x + 5, hb.y + 5); await page.mouse.down();
+  await page.mouse.move(hb.x - 600, hb.y + 5, { steps: 8 }); await page.mouse.up();
+  const after = await page.$eval('[data-panel="comms"]', (e) => e.style.gridColumn);
+  check(before !== after, `Edit layout: drag a panel by its title bar (${before} → ${after})`);
+  page.once('dialog', (d) => d.accept('Night watch'));
+  await page.click('[data-wssave]');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sentinel.layouts')).current === 'Night watch');
+  check(true, 'Save as… stores the layout under a name');
+  await page.selectOption('[data-wslayout]', 'Map focus');
+  await page.waitForSelector('[data-panel="map"]');
+  check(true, 'presets: Map focus');
+  await page.selectOption('[data-wslayout]', 'Standard');
+  await page.click('[data-wsedit]');
   await shot('dashboard-empty');
 
-  // Themes
+  // Themes: Graphite and Navy only
   await page.click('[data-settings]');
-  await page.click('[data-theme="redops"]');
-  await page.waitForFunction(() => document.documentElement.dataset.theme === 'redops');
-  check(true, 'theme picker: RED OPS');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(800);
-  await shot('theme-redops');
-  await page.click('[data-settings]');
-  await page.click('[data-theme="classic"]');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(500);
-  await shot('theme-classic');
-  await page.click('[data-settings]');
-  await page.click('[data-theme="mi6"]');
+  check(await page.$$eval('.theme-chip', (t) => t.map((x) => x.dataset.theme).join()) === 'graphite,navy', 'themes: Graphite and Navy');
+  await page.click('[data-theme="navy"]');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'navy');
+  check(true, 'theme picker: Navy');
+  await page.click('[data-theme="graphite"]');
   await page.keyboard.press('Escape');
 
   // Lock, wrong PIN, right PIN
@@ -76,9 +97,9 @@ const SHOTS = process.argv[2] || '';
   check(!(await page.$('[data-agents]')), 'locking hides everything');
   await page.fill('[name=codename]', 'NIGHTOWL'); await page.fill('[name=pin]', '0000');
   await page.click('[data-login] button');
-  await page.waitForSelector('text=ACCESS DENIED');
-  await page.waitForSelector('text=tries left');
-  check(true, 'wrong PIN → ACCESS DENIED (tries left shown)');
+  await page.waitForSelector('text=Incorrect username or password');
+  await page.waitForSelector('text=attempts remaining');
+  check(true, 'wrong PIN → “Incorrect username or password” (attempts remaining shown)');
   await page.waitForSelector('[data-login] button:not([disabled])');
   await page.fill('[name=pin]', '13579');
   await page.click('[data-login] button');
@@ -102,12 +123,9 @@ const SHOTS = process.argv[2] || '';
   await shot('recruit');
   await page.keyboard.press('Escape');
 
-  // Settings: effects, export, backup
+  // Settings: export, backup
   await page.click('[data-settings]');
-  await page.uncheck('[name=fx]');
-  await page.click('[data-general] button');
-  await page.waitForFunction(() => !document.body.classList.contains('fx'));
-  check(true, 'effects can be switched off');
+  check(!(await page.$('[name=fx]')), 'no “effects” switch any more');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-export="csv"]')]);
   const csvText = require('fs').readFileSync(await csv.path(), 'utf8');
   check(csv.suggestedFilename().endsWith('.csv') && csvText.includes('Security mode: AWAY'), 'Mission Log exports as CSV');
@@ -128,7 +146,7 @@ const SHOTS = process.argv[2] || '';
   await login(page, { codename: 'nightowl', pin: '13579' });
   await page.waitForSelector('[data-log] >> text=Security mode: AWAY', { timeout: 15000 });
   check(true, 'Mission Log is still there after reloading the page');
-  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK ONLINE'), null, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK'), null, { timeout: 30000 });
   check(true, 'HQ comes back ONLINE with the same HQ code after a reload');
 
   // A second HQ tab in the same browser is refused politely

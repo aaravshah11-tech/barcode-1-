@@ -1,8 +1,8 @@
-// Themes: MI6 (cyan hologram, the default), CLASSIC (neon green) and RED OPS (red on black).
+// Two restrained themes: GRAPHITE (default) and NAVY. Older theme names fall back to graphite.
 import { themeColors } from './radar.js';
 
-export const THEMES = [['mi6', 'MI6 — slate'], ['classic', 'Classic — green'], ['redops', 'Red ops']];
-export const DEFAULT_THEME = 'mi6';
+export const THEMES = [['graphite', 'Graphite'], ['navy', 'Navy']];
+export const DEFAULT_THEME = 'graphite';
 export const validTheme = (t) => (THEMES.some(([k]) => k === t) ? t : DEFAULT_THEME);
 
 export function applyTheme(t) {

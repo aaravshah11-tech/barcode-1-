@@ -70,7 +70,7 @@ const SHOTS = process.argv[2] || '';
   await page.waitForTimeout(300);
   await shot('map3d-motion');
   await page.evaluate((id) => window.__map3d.event({ agentId: id, kind: 'sound', level: 'info', message: 'Loud sound: 80 dB' }), ear.id);
-  check(await map(() => window.__map3d.effects.filter((e) => e.kind === 'ripple').length === 3), 'loud sound → ripple rings spread out from the Agent');
+  check(await map(() => window.__map3d.effects.filter((e) => e.kind === 'ripple').length === 1), 'loud sound → one quiet ring spreads out from the Agent');
 
   // Fly-to from the Mission Log
   const before = await map(() => window.__map3d.camera.position.toArray());

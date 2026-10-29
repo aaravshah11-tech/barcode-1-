@@ -65,7 +65,7 @@ export class Radar {
   loop(now) {
     const dt = Math.min(100, now - this.last);
     this.last = now;
-    const moving = this.fx && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const moving = false; // no sweep animation (professional style)
     const prev = this.angle;
     if (moving) this.angle = (this.angle + (dt / 4000) * TAU) % TAU;
     this.draw(now, prev, moving);
@@ -90,12 +90,12 @@ export class Radar {
     for (let d = 0; d < 360; d += 10) { const a = (d / 360) * TAU; const l = d % 30 ? 4 : 9; g.beginPath(); g.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); g.lineTo(cx + Math.cos(a) * (R - l), cy + Math.sin(a) * (R - l)); g.stroke(); }
     // sweep (a fading wedge behind the beam)
     const sweepLen = 0.9;
-    if (g.createConicGradient) {
+    if (moving && g.createConicGradient) {
       const cg = g.createConicGradient(this.angle - sweepLen, cx, cy);
       cg.addColorStop(0, `rgba(${ACC},0)`); cg.addColorStop(sweepLen / TAU, `rgba(${ACC},0.32)`); cg.addColorStop(sweepLen / TAU + 0.0001, `rgba(${ACC},0)`); cg.addColorStop(1, `rgba(${ACC},0)`);
       g.fillStyle = cg; g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, this.angle - sweepLen, this.angle); g.closePath(); g.fill();
     }
-    g.strokeStyle = `rgba(${ACC},0.85)`; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(this.angle) * R, cy + Math.sin(this.angle) * R); g.stroke();
+    if (moving) { g.strokeStyle = `rgba(${ACC},0.85)`; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(this.angle) * R, cy + Math.sin(this.angle) * R); g.stroke(); }
     // HQ in the middle
     g.fillStyle = COLORS.on; g.beginPath(); g.arc(cx, cy, 4, 0, TAU); g.fill();
     g.font = '700 10px ui-monospace, Menlo, monospace'; g.fillStyle = `rgba(${ACC},0.7)`; g.fillText('HQ', cx + 7, cy - 6);

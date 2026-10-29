@@ -1,5 +1,5 @@
-// Part 10: LIVE WORLD — real sun + shadow on the 3D map, compass, night vision after sunset, rain/snow and
-// cloud shadows, the PRECIPITATION INBOUND alert, and CINEMATIC idle mode. The weather service is faked.
+// Part 10 (after the redesign): real sun + shadow on the 3D map, compass, the PRECIPITATION INBOUND
+// alert and the isometric view. The weather service is faked.
 const { chromium } = require('playwright');
 const path = require('path');
 const { startWorld, launch, openHQ, check, finish } = require('./helpers.cjs');
@@ -67,68 +67,34 @@ function forecast() {
   const m2 = await page.evaluate(() => [window.__map3d.compass.position.x, window.__map3d.compass.position.z]);
   check(Math.abs(m2[0] - m1.compass[0]) > 1, 'Settings: “top of my floor plan faces East” turns the compass (and the shadows)');
 
-  // ---- Night: night vision ----
+  // ---- Night: no sun, no shadow (night vision was removed in the redesign) ----
   const night = await page.evaluate(() => { const d = new Date(); d.setHours(23, 30, 0, 0); return window.__world._setNow(d.getTime()); });
-  check(night.nv && night.phase === 'night', '23:30: night, night vision switches on by itself');
-  check(await page.evaluate(() => document.querySelector('[data-map3d]').classList.contains('nv') && window.__map3d.c.accent.getHexString() === '52ff8f'), 'night vision: the map turns phosphor green');
+  check(night.phase === 'night' && !('nv' in night), '23:30: night (no night-vision effect any more)');
   check(await page.evaluate(() => !window.__map3d.sunObj && !window.__map3d.shadowMesh), 'no sun or shadow at night');
-  check((await page.textContent('[data-worldchip]')).toUpperCase().includes('NIGHT VISION'), 'map chip: NIGHT VISION');
+  check((await page.textContent('[data-worldchip]')).trim() === 'Night', 'map chip: Night');
   await page.waitForTimeout(600);
   await shot('world-night');
-  await page.click('[data-settings]');
-  await page.selectOption('[data-nv]', 'off');
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('[data-map3d]').classList.contains('nv'));
-  check(true, 'night vision can be switched off (this device)');
-  await page.evaluate(() => { localStorage.removeItem('sentinel.world'); window.__world._setNow(null); });
+  check(!(await page.$('[data-nv], [data-weatherfx], [data-cine]')), 'no night-vision / weather-effect / cinematic settings');
+  await page.evaluate(() => window.__world._setNow(null));
 
-  // ---- Weather on the map ----
-  raining = true;
-  await page.evaluate(() => window.__hq.hq.refreshWeather());
-  await page.evaluate(() => { const d = new Date(); d.setHours(12, 30, 0, 0); return window.__world._setNow(d.getTime()); });
-  await page.waitForFunction(() => window.__map3d.rain?.pts.geometry.attributes.position.count > 100);
-  const y0 = await page.evaluate(() => window.__map3d.rain.pts.geometry.attributes.position.array[1]);
+  // ---- Isometric view ----
+  await page.click('[data-iso]');
+  await page.waitForFunction(() => window.__map3d.iso && window.__map3d.camera.isOrthographicCamera);
+  check(true, 'Iso button: flat isometric (orthographic) view');
+  check(await page.evaluate(() => localStorage.getItem('sentinel.iso') === '1'), 'isometric choice remembered on this device');
   await page.waitForTimeout(500);
-  const y1 = await page.evaluate(() => window.__map3d.rain.pts.geometry.attributes.position.array[1]);
-  check(y0 !== y1, 'raining now: rain falls over the house');
-  check(await page.evaluate(() => window.__map3d.clouds.length) >= 3, 'overcast: cloud shadows drift across');
-  check((await page.textContent('[data-worldchip]')).includes('Rain'), 'map chip says Rain');
-  await shot('world-rain');
-  await page.click('[data-settings]');
-  await page.uncheck('[data-weatherfx]');
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !window.__map3d.rain && !window.__map3d.clouds.length);
-  check(true, 'weather effects can be switched off for a slow laptop');
-  await page.evaluate(() => { localStorage.removeItem('sentinel.world'); window.__world._setNow(null); });
-
-  // ---- Cinematic idle mode ----
-  await page.click('[data-mapview="plan"]');
-  await page.evaluate(() => window.__world._idleFor(6 * 60000)); // nobody has touched HQ for 6 minutes
-  await page.waitForFunction(() => document.body.classList.contains('cinematic'), null, { timeout: 12000 });
-  check(true, 'after 5 minutes untouched: cinematic mode starts');
-  check(await page.evaluate(() => window.__map3d && !!window.__map3d.cine), 'it switches to the 3D map and the camera circles the house');
-  const a0 = await page.evaluate(() => window.__map3d.camera.position.x);
-  await page.waitForTimeout(800);
-  check(Math.abs(await page.evaluate(() => window.__map3d.camera.position.x) - a0) > 0.01, 'the camera is moving');
-  check(await page.isVisible('[data-cinecap]') && await page.$$eval('.cine-focus', (x) => x.length) === 1, 'intel lines under the map, panels highlighted in turn');
-  await shot('world-cinematic');
-  await page.keyboard.press('Shift');
-  await page.waitForFunction(() => !document.body.classList.contains('cinematic'));
-  await page.waitForFunction(() => !document.querySelector('[data-plan]').hidden);
-  check(true, 'any key ends it and puts the plan view back');
+  await shot('world-iso');
+  await page.click('[data-iso]');
+  await page.waitForFunction(() => !window.__map3d.iso && window.__map3d.camera.isPerspectiveCamera);
+  check(true, 'Iso again: back to the normal 3D view');
 
   // ---- Terminal ----
-  await page.click('.p-log .panel-head h2');
+  await page.click('.wp-log .panel-head h2');
   await page.keyboard.press('Backquote');
   await page.fill('[data-termin]', 'nightvision on'); await page.press('[data-termin]', 'Enter');
-  await page.waitForFunction(() => document.querySelector('[data-termout]').textContent.includes('Night vision on'));
-  check(await page.evaluate(() => window.__world.state.nv), 'terminal: nightvision on');
-  await page.fill('[data-termin]', 'nightvision auto'); await page.press('[data-termin]', 'Enter');
-  await page.fill('[data-termin]', 'cinematic'); await page.press('[data-termin]', 'Enter');
-  await page.waitForFunction(() => document.body.classList.contains('cinematic'), null, { timeout: 5000 });
-  check(true, 'terminal: cinematic');
-  await page.mouse.click(10, 10);
-  await page.waitForFunction(() => !document.body.classList.contains('cinematic'));
+  await page.waitForFunction(() => /unknown|not a command|Unknown/i.test(document.querySelector('[data-termout]').textContent));
+  check(true, 'terminal: “nightvision” is no longer a command');
+  await page.keyboard.press('Escape');
 
   await finish(browser, world, errors, 'live world');
 })().catch((e) => { console.error(e); process.exit(1); });

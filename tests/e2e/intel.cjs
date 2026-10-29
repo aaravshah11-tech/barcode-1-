@@ -60,12 +60,12 @@ function forecast() {
   await actx.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'getBattery', { value: undefined }); }); // the test supplies the battery readings
   const agent = await recruit(page, actx, world);
   agent.p.on('pageerror', (e) => errors.push(`[agent] ${e.message}`));
-  await agent.p.waitForSelector('.ag-radar', { timeout: 8000 }).catch(async (e) => { console.log('AGENT:', (await agent.p.content()).slice(0, 1500), errors); throw e; });
+  await agent.p.waitForSelector('.ag-state', { timeout: 8000 }).catch(async (e) => { console.log('AGENT:', (await agent.p.content()).slice(0, 1500), errors); throw e; });
   await agent.p.waitForFunction(() => /\d+ ms/.test(document.querySelector('[data-linkms]')?.textContent || ''), null, { timeout: 30000 });
-  check(true, 'Agent screen: radar, and its link time to HQ in ms');
+  check(true, 'Agent screen: status mark, and its link time to HQ in ms');
   check((await agent.p.textContent('[data-mname]')).includes('STANDBY'), 'Agent screen shows its mission');
   check(await agent.p.isVisible('[data-banner]'), 'the SENTINEL AGENT ACTIVE banner is still there');
-  check((await agent.p.textContent('.standby')).toUpperCase().includes('AWAITING ORDERS'), 'standby: big radar, “Awaiting orders”');
+  check((await agent.p.textContent('.standby')).toUpperCase().includes('STANDING BY'), 'standby: plain “Standing by” card');
   await shot(agent.p, 'agent-screen');
 
   // Pretend the battery is running down (readings arrive as the Agent would send them)
@@ -136,7 +136,7 @@ function forecast() {
   } else check(true, '(before 5 am: automatic briefing not tested)');
 
   // ---- Terminal ----
-  await page.click('.p-log .panel-head h2');
+  await page.click('.wp-log .panel-head h2');
   await page.keyboard.press('Backquote');
   await page.waitForSelector('[data-termin]');
   const run = async (cmd, want) => { await page.fill('[data-termin]', cmd); await page.press('[data-termin]', 'Enter'); await page.waitForFunction((w) => document.querySelector('[data-termout]').textContent.includes(w), want, { timeout: 10000 }); };

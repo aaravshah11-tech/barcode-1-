@@ -46,8 +46,8 @@ const SHOTS = process.argv[2] || '';
   await page.waitForFunction(() => window.__map3d?.roomMeshes.size === 9, null, { timeout: 15000 });
   await page.click('[data-heat]');
   await page.waitForSelector('[data-heatlegend]:not([hidden]) >> text=Busiest rooms');
-  const op = await page.evaluate(({ k, h }) => { const m = window.__map3d.roomMeshes; return { k: m.get(k).userData.floorMesh.material.opacity, h: m.get(h).userData.floorMesh.material.opacity, other: [...m.values()][0].userData.floorMesh.material.opacity }; }, { k: roomId('Kitchen'), h: roomId('Hall') });
-  check(op.k > op.h && op.h > op.other, `3D: the kitchen (6 events) is tinted strongest, the hall (2) less, quiet rooms not at all (${op.k.toFixed(2)} > ${op.h.toFixed(2)} > ${op.other.toFixed(2)})`);
+  const op = await page.evaluate(({ k, h }) => { const m = window.__map3d.roomMeshes; return { k: m.get(k).userData.floorMesh.material.color.r, h: m.get(h).userData.floorMesh.material.color.r, other: [...m.values()][0].userData.floorMesh.material.color.r }; }, { k: roomId('Kitchen'), h: roomId('Hall') });
+  check(op.k > op.h && op.h > op.other, `3D: the kitchen (6 events) is tinted most amber, the hall (2) less, quiet rooms not at all (${op.k.toFixed(2)} > ${op.h.toFixed(2)} > ${op.other.toFixed(2)})`);
   check((await page.textContent('[data-heatlegend]')).includes('8 sensor events'), 'legend: period, scale from fewer to more, total events');
   await shot('heatmap-3d');
 
@@ -107,7 +107,7 @@ const SHOTS = process.argv[2] || '';
   check(true, 'Exit: back to live');
 
   // ---- Terminal ----
-  await page.click('.p-log .panel-head h2');
+  await page.click('.wp-log .panel-head h2');
   await page.keyboard.press('Backquote');
   const run = async (cmd, want) => { await page.fill('[data-termin]', cmd); await page.press('[data-termin]', 'Enter'); await page.waitForFunction((w) => document.querySelector('[data-termout]').textContent.includes(w), want, { timeout: 10000 }); };
   await run('replay today', 'Replaying today');

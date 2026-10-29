@@ -1,6 +1,5 @@
-// SENTINEL Command Centre.
-import { esc, $, $$, toast, sheet, confirmBox, typewrite, clock, dayClock, ago, qrSvg, LOGO } from '../shared/ui.js';
-import { boot } from '../shared/boot.js';
+// SENTINEL — household security operations console.
+import { esc, $, $$, toast, sheet, confirmBox, clock, dayClock, ago, qrSvg, LOGO, classificationBanners } from '../shared/ui.js';
 import { Radar } from '../shared/radar.js';
 import { missionById } from '../shared/missions.js';
 import { openSettings } from './settings.js';
@@ -18,13 +17,15 @@ import { renderIntel as drawIntel } from './intel.js';
 import { openBriefing, maybeAutoBriefing } from './briefing.js';
 import { renderDiagnostics } from './diagnostics.js';
 import { createTimeline } from './timeline.js';
-import { createWorld, setWorldPrefs } from './world.js';
+import { createWorld } from './world.js';
 import { heatLevel, heatOpacity } from '../shared/replay.js';
 import { voicePrefs, voiceSupported, createPushToTalk, speak } from './voice.js';
+import { createWorkspace } from './workspace.js';
+import { openPalette, paletteOpen } from './palette.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
-const S = { agents: [], events: [], threat: null, settings: { fx: true, mode: 'home' }, missions: [], info: {}, filter: 'all', open: null, mode: MODE, api: (...a) => T.api(...a) };
+const S = { agents: [], events: [], threat: null, settings: { mode: 'home' }, missions: [], info: {}, filter: 'all', open: null, mode: MODE, api: (...a) => T.api(...a) };
 let radar = null;
 const HAS_GL = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
 
@@ -34,7 +35,8 @@ let net = { state: 'connecting' };
 let unlocked = false;
 
 async function start() {
-  app.innerHTML = gateHtml('<p class="muted small">Establishing secure session…</p>');
+  classificationBanners();
+  app.innerHTML = gateHtml('<p class="muted small">Connecting…</p>');
   try {
     if (MODE === 'hq') {
       T = await startLocal({ onStatus: setNet });
@@ -56,12 +58,10 @@ async function start() {
     return;
   }
   applyTheme(S.settings.theme);
-  document.body.classList.toggle('fx', S.settings.fx);
-  await boot({ fx: S.settings.fx });
   if (!S.ready || MODE === 'hq') await unlock();
   launch();
 }
-const gateHtml = (inner) => `<div class="gate"><div class="hud-bg"></div><div class="panel hud-in login-panel">${LOGO}<h1 class="login-title">Sentinel</h1><div>${inner}</div></div></div>`;
+const gateHtml = (inner) => `<div class="gate"><div class="login-panel"><div class="login-brand">${LOGO}<div><b>SENTINEL</b><small>Household security operations</small></div></div><div>${inner}</div></div></div>`;
 
 /** Show the codename + PIN screen until the Director logs in. */
 async function unlock(reason = '') {
@@ -69,6 +69,8 @@ async function unlock(reason = '') {
   radar?.destroy(); radar = null;
   const who = await lockScreen(app, T.api, { remote: MODE === 'remote', reason });
   S.operator = who?.codename || S.operator;
+  S.role = who?.role || 'DIRECTOR';
+  S.sessionStart = Date.now();
   if (MODE === 'remote') apply(await waitForState());
   unlocked = true;
 }
@@ -79,7 +81,7 @@ async function lockNow(reason = 'Locked.') {
   if (!unlocked) return;
   unlocked = false;
   closeAllSheets();
-  term.close(); ptt.stop(); world.stopCinematic();
+  term.close(); ptt.stop();
   try { await T.api('/auth/lock', { method: 'POST', body: {} }); } catch { /* fine */ }
   await unlock(reason);
   launch();
@@ -119,10 +121,10 @@ function setNet(s) {
   const was = net.state;
   net = s;
   const el = $('[data-net]');
-  if (was !== s.state && unlocked) { if (s.state === 'online') sfx('beep'); else if (s.state === 'offline') sfx('warn'); }
-  renderNetwork();
+  if (was !== s.state && unlocked && s.state === 'offline') sfx('warn');
+  renderNetwork(); renderStatus();
   if (!el) return;
-  const label = { online: MODE === 'hq' ? 'Uplink online' : 'Linked', connecting: 'Connecting', offline: 'Offline', taken: 'In use elsewhere' }[s.state] || s.state;
+  const label = { online: MODE === 'hq' ? 'Uplink' : 'Linked', connecting: 'Connecting', offline: 'Offline', taken: 'In use elsewhere' }[s.state] || s.state;
   el.innerHTML = `<span class="dot ${s.state === 'online' ? 'on' : s.state === 'connecting' ? 'warn' : 'alert'}"></span>${label}`;
   el.title = s.detail || '';
   const r = $('[data-reason]');
@@ -147,75 +149,219 @@ function apply(st) {
   S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || []; S.weather = st.weather ?? S.weather ?? null;
 }
 
-const started = Date.now();
+// ---------------- the console frame: app bar, navigation rail, views, status bar ----------------
+/** Views in the left rail. Later parts register more (Triage, Incidents, Agents, Network, Reports, Audit). */
+const VIEWS = [];
+export function registerView(v) { if (!VIEWS.some((x) => x.id === v.id)) VIEWS.push(v); }
+const allowed = (v) => !v.roles || v.roles.includes(S.role || 'DIRECTOR');
+let currentView = null;
+try { S.view = localStorage.getItem('sentinel.view') || 'ops'; } catch { S.view = 'ops'; }
+
 function shell() {
-  const panel = (cls, d, inner, label = '') => `<section class="panel hud-in ${cls}" style="--d:${d}s" ${label ? `aria-label="${label}"` : ''}>${inner}</section>`;
   app.innerHTML = `
-  <div class="hud-bg"></div>
-  <div class="classbar">Official-Sensitive · Sentinel Home Operations · Authorised operators only</div>
-  <header class="top">
-    ${LOGO}<div class="brand">Sentinel <small>${MODE === 'hq' ? 'Headquarters' : 'Field link'}</small></div>
-    <span class="threat" data-threat aria-live="polite"></span>
-    <span class="spacer"></span>
-    <span class="net" data-net></span>
-    <div class="presence hide-phone" role="group" aria-label="Security mode">
-      ${MODES.map((m) => `<button data-mode="${m}" class="${m}">${MODE_INFO[m].label}</button>`).join('')}
-    </div>
-    <span class="clock" data-clock></span>
-    <button class="icon-btn ptt" data-ptt hidden aria-label="Hold to give a voice command" title="Hold to talk (or hold V)">${icon('mic')}</button>
-    <button class="icon-btn" data-global aria-label="Global intel" title="Global intel: ISS, aircraft, earthquakes, ships">${icon('globe')}</button>
-    <button class="icon-btn" data-terminal aria-label="Terminal" title="Terminal (press \`)">${icon('terminal')}</button>
-    <button class="icon-btn" data-mute aria-label="Sound on/off" title="Sound on/off"></button>
-    <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">${icon('fullscreen')}</button>
-    <button class="icon-btn" data-lock aria-label="Lock" title="Lock">${icon('lock')}</button>
-    ${MODE === 'hq' ? `<button class="btn-primary" data-recruit>${icon('plus')}Recruit</button>` : ''}
-    <button class="icon-btn" data-settings aria-label="Settings" title="Settings">${icon('settings')}</button>
-  </header>
-  <div class="stats hud-in" style="--d:0s">
-    <div class="stat"><b data-stat="online">0</b><span>Agents online</span></div>
-    <div class="stat"><b data-stat="events">0</b><span>Events today</span></div>
-    <div class="stat"><b data-stat="alerts">0</b><span>Alerts today</span></div>
-    <div class="stat"><b data-stat="uptime">00:00:00</b><span>${MODE === 'hq' ? 'Session uptime' : 'Link uptime'}</span></div>
-  </div>
-  <main class="cc">
-    ${panel('p-map radar-panel', 0.15, `<div class="panel-head"><h2>Site map</h2>
-        <div class="filters" role="group" aria-label="Map view">${HAS_GL ? '<button data-mapview="3d">3D</button>' : ''}<button data-mapview="plan">Plan</button><button data-mapview="radar">Radar</button></div>
-        <button data-replay aria-pressed="false" title="Play back the day’s events on the map">${icon('play')}Replay</button>
-        <button data-heat aria-pressed="${!!S.heat?.on}" title="Show which rooms were busiest">${icon('heat')}Heatmap</button>
-        ${MODE === 'hq' ? `<button data-build>${icon('house')}Edit floor plan</button>` : ''}</div>
-      <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
-        <div class="map3d" data-map3d hidden></div>
-        <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="world-chip mono" data-worldchip hidden></span><span class="grow"></span><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
-        <div class="map-hint mono" data-maphint hidden></div>
-        <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
-        <div class="replay-bar" data-replaybar hidden></div><div class="cine-cap mono" data-cinecap hidden></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
-    <div class="col-l">
-    ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
-    ${panel('p-home', 0.35, '<div class="panel-head"><h2>Security</h2></div><div data-peoplelist></div>')}
-    ${panel('p-net', 0.45, '<div class="panel-head"><h2>Network</h2></div><dl class="kv netinfo" data-network></dl><div data-netchart></div><div data-netextra></div>')}
-    </div><div class="col-r">
-    ${panel('p-comms', 0.3, `<div class="panel-head"><h2>Comms</h2></div>
+  <div class="frame">
+    <header class="appbar">
+      <div class="ab-brand">${LOGO}<span><b>SENTINEL</b><small>${MODE === 'hq' ? 'Headquarters' : 'Remote console'}</small></span></div>
+      <span class="ab-view" data-viewtitle></span>
+      <span class="threat" data-threat aria-live="polite"></span>
+      <span class="grow"></span>
+      <button class="ab-search" data-palette title="Command palette (Ctrl+K)" aria-label="Command palette">${icon('search')}<span class="hide-phone">Search or run a command</span><span class="hide-phone ab-keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      <div class="presence hide-phone" role="group" aria-label="Alert state">
+        ${MODES.map((m) => `<button data-mode="${m}" class="${m}" title="Alert state: ${MODE_INFO[m].label}">${MODE_INFO[m].label}</button>`).join('')}
+      </div>
+      <span class="net hide-phone" data-net></span>
+      <button class="icon-btn ptt" data-ptt hidden aria-label="Hold to give a voice command" title="Hold to talk (or hold V)">${icon('mic')}</button>
+      <button class="icon-btn" data-global aria-label="Global intel" title="Global intel (G)">${icon('globe')}</button>
+      <button class="icon-btn" data-terminal aria-label="Terminal" title="Terminal (\`)">${icon('terminal')}</button>
+      <button class="icon-btn" data-mute aria-label="Alert sounds on/off" title="Alert sounds on/off"></button>
+      <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">${icon('fullscreen')}</button>
+      ${MODE === 'hq' ? `<button class="small" data-recruit title="Recruit an Agent">${icon('plus')}<span class="hide-phone">Recruit</span></button>` : ''}
+      <button class="icon-btn" data-settings aria-label="Settings" title="Settings">${icon('settings')}</button>
+      <button class="icon-btn" data-lock aria-label="Lock" title="Lock (Shift+L)">${icon('lock')}</button>
+    </header>
+    <nav class="rail" aria-label="Views" data-rail></nav>
+    <main class="viewroot" data-viewroot></main>
+    <footer class="statusbar" data-statusbar role="status" aria-label="Status"></footer>
+  </div>`;
+  renderMute(); renderPtt();
+  if (!VIEWS.find((v) => v.id === S.view && allowed(v))) S.view = 'ops';
+  showView(S.view, true);
+  if (!shellWired) { app.addEventListener('click', onClick); shellWired = true; }
+}
+function renderRail() {
+  const rail = $('[data-rail]');
+  if (!rail) return;
+  rail.innerHTML = VIEWS.filter(allowed).map((v, i) => `<button data-view="${v.id}" aria-current="${v.id === S.view ? 'page' : 'false'}" title="${esc(v.label)} (${i + 1})">${icon(v.icon)}<span>${esc(v.label)}</span>${v.badge ? `<b class="rail-badge" data-badge="${v.id}" hidden></b>` : ''}</button>`).join('')
+    + `<span class="grow"></span><button data-global title="Global intel (G)">${icon('globe')}<span>Global</span></button><button data-settings title="Settings">${icon('settings')}<span>Settings</span></button>`;
+  for (const v of VIEWS) v.badge?.();
+}
+function showView(id, force = false) {
+  const v = VIEWS.find((x) => x.id === id && allowed(x)) || VIEWS[0];
+  if (!force && currentView === v.id) return;
+  if (currentView) VIEWS.find((x) => x.id === currentView)?.leave?.();
+  currentView = S.view = v.id;
+  try { localStorage.setItem('sentinel.view', v.id); } catch { /* ignore */ }
+  const t = $('[data-viewtitle]');
+  if (t) t.textContent = v.label;
+  renderRail();
+  const root = $('[data-viewroot]');
+  root.dataset.view = v.id;
+  root.innerHTML = '';
+  v.render(root);
+  renderAll();
+}
+
+// ---------------- OPERATIONS: the configurable workspace ----------------
+const OPS_PANELS = () => [
+  { id: 'map', title: 'Site map', defaultW: 6, defaultH: 15, minW: 3, minH: 7, html: `<div class="panel-head"><h2>Site map</h2>
+      <div class="filters" role="group" aria-label="Map view">${HAS_GL ? '<button data-mapview="3d">3D</button>' : ''}<button data-mapview="plan">Plan</button><button data-mapview="radar">Overview</button></div>
+      <button class="small" data-replay aria-pressed="false" title="Play back the day’s events on the map">${icon('play')}Replay</button>
+      <button class="small" data-heat aria-pressed="${!!S.heat?.on}" title="Show which rooms were busiest">${icon('heat')}Heatmap</button>
+      ${MODE === 'hq' ? `<button class="small" data-build title="Edit floor plan">${icon('house')}<span class="hide-narrow">Floor plan</span></button>` : ''}</div>
+    <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
+      <div class="map3d" data-map3d hidden></div>
+      <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="world-chip mono" data-worldchip hidden></span><span class="grow"></span><button class="small" data-iso aria-pressed="${!!S.iso}" title="Isometric view">Iso</button><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
+      <div class="map-hint" data-maphint hidden></div>
+      <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
+      <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>` },
+  { id: 'state', title: 'Alert state', defaultW: 3, defaultH: 7, html: '<div class="panel-head"><h2>Alert state</h2></div><div class="wp-body" data-peoplelist></div>' },
+  { id: 'agents', title: 'Agents', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="wp-body agents" data-agents></div>' },
+  { id: 'network', title: 'Network', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Network</h2></div><div class="wp-body"><dl class="kv netinfo" data-network></dl><div data-netchart></div><div data-netextra></div></div>' },
+  { id: 'comms', title: 'Messages', defaultW: 3, defaultH: 8, html: `<div class="panel-head"><h2>Messages to Agents</h2></div><div class="wp-body">
       <form data-comms class="comms-form">
         <select name="target" aria-label="Send to" data-commstarget></select>
         <input name="text" maxlength="200" placeholder="Message, e.g. Dinner is ready" required autocomplete="off">
-        <div class="row" style="justify-content:space-between"><label class="row small" style="gap:6px"><input type="checkbox" name="speak" checked> Read aloud on the Agent</label><button class="btn-primary">Transmit</button></div>
+        <div class="row" style="justify-content:space-between"><label class="row small" style="gap:6px"><input type="checkbox" name="speak" checked> Read aloud on the Agent</label><button class="btn-primary">Send</button></div>
         <div class="quick">${['Dinner is ready', 'Lights out in 10 minutes', 'Leaving in 5 minutes', 'Come downstairs'].map((q) => `<button type="button" class="small" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
       </form>
-      <ol class="sent" data-sent></ol>`)}
-    ${panel('p-intel', 0.3, '<div class="panel-head"><h2>Situation</h2></div><div data-intel></div>')}
-    ${panel('p-log', 0.4, `<div class="panel-head"><h2>Mission Log</h2></div>
-      <div class="filters" role="group" aria-label="Filter" style="margin-bottom:8px">${[['all', 'All'], ['alerts', 'Alerts'], ['motion', 'Motion'], ['door', 'Door'], ['agent', 'Agents']].map(([k, l]) => `<button data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div>
-      <ol class="log" data-log aria-live="polite"></ol>
-      <div class="row" style="justify-content:center;margin-top:8px"><button class="btn-ghost small" data-older>Load older</button></div>`)}
-    </div>
-  </main>`;
-  radar = new Radar($('[data-radar]'), { onPick: openAgent, fx: S.settings.fx });
-  renderMute(); renderPtt();
-  map3d?.destroy(); map3d = null;
-  if (S.mapView === undefined) S.mapView = houseHasRooms() ? (HAS_GL ? '3d' : 'plan') : 'radar';
-  launchMapView();
-  if (!shellWired) { app.addEventListener('click', onClick); shellWired = true; }
+      <ol class="sent" data-sent></ol></div>` },
+  { id: 'situation', title: 'Situation', defaultW: 3, defaultH: 12, html: '<div class="panel-head"><h2>Situation</h2></div><div class="wp-body" data-intel></div>' },
+  { id: 'log', title: 'Event log', defaultW: 6, defaultH: 9, html: `<div class="panel-head"><h2>Event log</h2>
+      <div class="filters" role="group" aria-label="Filter">${[['all', 'All'], ['alerts', 'Alerts'], ['motion', 'Motion'], ['door', 'Door'], ['agent', 'Agents']].map(([k, l]) => `<button data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}</div></div>
+      <div class="wp-body"><ol class="log" data-log aria-live="polite"></ol>
+      <div class="row" style="justify-content:center;margin-top:6px"><button class="btn-ghost small" data-older>Load older</button></div></div>` },
+];
+export const OPS_EXTRA_PANELS = []; // later parts add panels (e.g. the Triage queue)
+const OPS_PRESETS = {
+  Standard: [{ id: 'state', x: 0, y: 0, w: 3, h: 7 }, { id: 'agents', x: 0, y: 7, w: 3, h: 9 }, { id: 'network', x: 0, y: 16, w: 3, h: 9 }, { id: 'map', x: 3, y: 0, w: 6, h: 16 }, { id: 'log', x: 3, y: 16, w: 6, h: 9 }, { id: 'comms', x: 9, y: 0, w: 3, h: 9 }, { id: 'situation', x: 9, y: 9, w: 3, h: 16 }],
+  'Map focus': [{ id: 'map', x: 0, y: 0, w: 9, h: 19 }, { id: 'state', x: 9, y: 0, w: 3, h: 7 }, { id: 'log', x: 9, y: 7, w: 3, h: 12 }, { id: 'agents', x: 0, y: 19, w: 4, h: 8 }, { id: 'network', x: 4, y: 19, w: 4, h: 8, hidden: true }, { id: 'comms', x: 8, y: 19, w: 4, h: 8, hidden: true }, { id: 'situation', x: 8, y: 19, w: 4, h: 8, hidden: true }],
+  'Event review': [{ id: 'log', x: 0, y: 0, w: 7, h: 12 }, { id: 'map', x: 7, y: 0, w: 5, h: 12 }, { id: 'state', x: 0, y: 12, w: 4, h: 7 }, { id: 'agents', x: 4, y: 12, w: 4, h: 7 }, { id: 'network', x: 8, y: 12, w: 4, h: 7 }, { id: 'comms', x: 0, y: 19, w: 6, h: 8, hidden: true }, { id: 'situation', x: 6, y: 19, w: 6, h: 8, hidden: true }],
+};
+let ws = null;
+registerView({
+  id: 'ops', label: 'Operations', icon: 'grid',
+  render(root) {
+    ws = createWorkspace(root, {
+      panels: [...OPS_PANELS(), ...OPS_EXTRA_PANELS.map((f) => f())], presets: OPS_PRESETS,
+      onRender: () => {
+        radar?.destroy?.(); radar = null;
+        const c = $('[data-radar]');
+        if (c) radar = new Radar(c, { onPick: openAgent, fx: false });
+        map3d?.destroy(); map3d = null;
+        if (S.mapView === undefined) S.mapView = houseHasRooms() ? (HAS_GL ? '3d' : 'plan') : 'radar';
+        launchMapView();
+        renderAll(); setNet(net);
+      },
+    });
+    ws.render();
+  },
+  leave() { map3d?.destroy(); map3d = null; radar?.destroy?.(); radar = null; ws = null; },
+});
+window.__ws = () => ws; // for the automated tests
+
+// ---------------- status bar ----------------
+function hqHealth() {
+  const issues = [];
+  if (net.state !== 'online') issues.push(`Uplink ${net.state}`);
+  if (S.net && S.net.online === false) issues.push('Internet down');
+  if (MODE === 'hq' && S.info.persistent === false) issues.push('Storage not persistent');
+  return { ok: !issues.length, issues };
 }
+const hms = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); return [t / 3600, (t / 60) % 60, t % 60].map((x) => String(Math.floor(x)).padStart(2, '0')).join(':'); };
+function renderStatus() {
+  const sb = $('[data-statusbar]');
+  if (!sb) return;
+  if (!sb.firstChild) {
+    sb.innerHTML = `
+      <span class="sb"><i>Operator</i><b data-sbop></b></span>
+      <span class="sb"><i>Role</i><b data-sbrole></b></span>
+      <span class="sb"><i>Session</i><b class="mono" data-sbsess></b></span>
+      <span class="sb"><i>Alert state</i><b data-sbstate></b></span>
+      <span class="sb hide-phone"><i>UTC</i><b class="mono" data-sbutc></b></span>
+      <span class="sb"><i>Local</i><b class="mono" data-sblocal></b></span>
+      <span class="sb"><i>HQ</i><b data-sbhealth></b></span>
+      <span class="sb"><i>Agents</i><b class="mono" data-sbagents></b></span>
+      <span class="grow"></span>
+      <span class="sb hide-phone sb-keys"><kbd>Ctrl</kbd><kbd>K</kbd> commands · <kbd>?</kbd> shortcuts</span>`;
+  }
+  const set = (k, v) => { const el = sb.querySelector(`[data-${k}]`); if (el && el.innerHTML !== v) el.innerHTML = v; };
+  const now = Date.now(), h = hqHealth(), mode = S.settings.mode || 'home';
+  set('sbop', esc(S.operator || '—'));
+  set('sbrole', esc(S.role || 'DIRECTOR'));
+  set('sbsess', hms(now - (S.sessionStart || now)));
+  set('sbstate', `<span class="state-chip m-${mode}">${MODE_INFO[mode].label.toUpperCase()}</span>`);
+  set('sbutc', new Date(now).toISOString().slice(11, 19));
+  set('sblocal', clock(now));
+  set('sbhealth', `<span class="dot ${h.ok ? 'on' : 'warn'}"></span> ${h.ok ? 'Nominal' : 'Degraded'}`);
+  sb.querySelector('[data-sbhealth]').title = h.ok ? 'All HQ services running' : h.issues.join(' · ');
+  set('sbagents', `${S.agents.filter((a) => a.online).length}/${S.agents.length}`);
+}
+
+// ---------------- command palette + keyboard shortcuts ----------------
+function paletteActions() {
+  const A = [];
+  VIEWS.filter(allowed).forEach((v, i) => A.push({ group: 'Go to', label: v.label, keys: String(i + 1), run: () => showView(v.id) }));
+  A.push({ group: 'Go to', label: 'Global intel', keys: 'G', keywords: ['iss', 'aircraft', 'earthquakes', 'ships', 'globe'], run: () => openGlobal() });
+  A.push({ group: 'Go to', label: 'Settings', keywords: ['preferences', 'location', 'theme'], run: () => openSettings(S, { onChange: (x) => { S.settings = x; settingsChanged(); } }) });
+  A.push({ group: 'Go to', label: 'Terminal', keys: '`', run: () => term.open() });
+  for (const m of MODES) A.push({ group: 'Alert state', label: `Set ${MODE_INFO[m].label.toUpperCase()}`, hint: MODE_INFO[m].summary, keywords: [m, 'mode', 'state'], run: () => setMode(m) });
+  A.push({ group: 'Alert state', label: 'Raise PANIC', keywords: ['emergency'], run: () => panic() });
+  A.push({ group: 'Alert state', label: 'Stand down alarm', keywords: ['silence', 'siren'], run: () => T.api('/alarm/stop', { method: 'POST' }).then(() => toast('Alarm stood down')) });
+  const toOps = async () => { if (S.view !== 'ops') showView('ops'); };
+  if (HAS_GL) A.push({ group: 'Map', label: '3D view', run: async () => { await toOps(); S.mapView = '3d'; launchMapView(); } });
+  A.push({ group: 'Map', label: 'Plan view', run: async () => { await toOps(); S.mapView = 'plan'; launchMapView(); } });
+  A.push({ group: 'Map', label: 'Overview', run: async () => { await toOps(); S.mapView = 'radar'; launchMapView(); } });
+  if (HAS_GL) A.push({ group: 'Map', label: 'Isometric on/off', run: async () => { await toOps(); toggleIso(); } });
+  A.push({ group: 'Map', label: 'Replay today', run: async () => { await toOps(); timeline.startReplay(0); } });
+  A.push({ group: 'Map', label: 'Replay yesterday', run: async () => { await toOps(); timeline.startReplay(1); } });
+  A.push({ group: 'Map', label: 'Heatmap on/off', run: async () => { await toOps(); timeline.setHeat(!S.heat.on); } });
+  if (MODE === 'hq') A.push({ group: 'Map', label: 'Edit floor plan', run: () => $('[data-build]') ? $('[data-build]').click() : openBuilder(S, { files: T.files, onClose: () => launchMapView() }) });
+  for (const a of S.agents) A.push({ group: 'Agents', label: a.codename, hint: `${a.label}${a.name ? ` · ${a.name}` : ''} · ${a.online ? 'online' : 'offline'}`, keywords: [a.name || '', a.label], run: () => openAgent(a.id) });
+  if (MODE === 'hq') A.push({ group: 'Actions', label: 'Recruit an Agent', run: () => recruit() });
+  A.push({ group: 'Actions', label: 'Mission briefing', keywords: ['sitrep', 'summary'], run: () => openBriefing(S) });
+  if (MODE === 'hq') A.push({ group: 'Actions', label: 'Run internet speed test', run: () => T.api('/net/speedtest', { method: 'POST' }).then((r) => toast(`Speed test: ${r.down} Mbps down`)).catch((x) => toast(x.message, { kind: 'err' })) });
+  A.push({ group: 'Actions', label: 'Lock console', keys: 'Shift L', run: () => lockNow('Locked. HQ is still guarding the house.') });
+  A.push({ group: 'Actions', label: 'Keyboard shortcuts', keys: '?', run: () => shortcutsSheet() });
+  A.push({ group: 'Workspace', label: 'Edit layout', keys: 'Shift E', run: async () => { await toOps(); ws?.setEdit(!ws.edit); } });
+  for (const n of ws?.names() || Object.keys(OPS_PRESETS)) A.push({ group: 'Workspace', label: `Layout: ${n}`, run: async () => { await toOps(); ws?.use(n); } });
+  return A;
+}
+function commandPalette() {
+  if (!unlocked) return;
+  openPalette(paletteActions, { fallback: async (q) => { const r = await term.run(q); toast(r.reply || 'Done', { kind: r.ok ? '' : 'err', ms: 5000 }); } });
+}
+function shortcutsSheet() {
+  const rows = [['Ctrl K', 'Command palette — jump anywhere, run anything'], ['1 – 9', 'Switch view (Operations, Triage, …)'], ['G', 'Global intel'], ['`', 'Terminal'], ['M', 'Map: switch 3D / plan'], ['Shift E', 'Edit the workspace layout'], ['Shift L', 'Lock the console'], ['V (hold)', 'Push-to-talk voice command (if switched on)'], ['Esc', 'Close a window'], ['?', 'This list']];
+  sheet(`<table class="keys-table">${rows.map(([k, d]) => `<tr><td>${k.split(' ').map((x) => `<kbd>${esc(x)}</kbd>`).join(' ')}</td><td>${esc(d)}</td></tr>`).join('')}</table>`, { title: 'Keyboard shortcuts' });
+}
+function toggleIso() { S.iso = !S.iso; try { localStorage.setItem('sentinel.iso', S.iso ? '1' : ''); } catch { /* ignore */ } map3d?.setIso(S.iso); $$('[data-iso]').forEach((b) => b.setAttribute('aria-pressed', String(S.iso))); }
+try { S.iso = localStorage.getItem('sentinel.iso') === '1'; } catch { S.iso = false; }
+async function setMode(m) {
+  if (m === S.settings.mode) return;
+  if (m === 'lockdown' && !(await confirmBox('Enter LOCKDOWN?', 'Every Agent is armed. Any activity is an intrusion and Agents may sound the alarm (Settings › Security).', { ok: 'Lockdown', danger: true }))) return;
+  try { S.settings = await T.api('/settings', { method: 'PATCH', body: { mode: m } }); renderTop(); renderPeople(); renderStatus(); if (m === 'lockdown') sfx('alert'); } catch (x) { toast(x.message, { kind: 'err' }); }
+}
+document.addEventListener('keydown', (e) => {
+  if (!unlocked) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); commandPalette(); return; }
+  if (e.target.matches?.('input, textarea, select, [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey || paletteOpen() || document.querySelector('.sheet-backdrop, .builder, .atlas')) return;
+  if (e.key === '?') { e.preventDefault(); shortcutsSheet(); }
+  else if (e.key === 'L' && e.shiftKey) { e.preventDefault(); lockNow('Locked. HQ is still guarding the house.'); }
+  else if (e.key === 'E' && e.shiftKey) { e.preventDefault(); if (S.view !== 'ops') showView('ops'); ws?.setEdit(!ws.edit); }
+  else if (e.key === 'g' || e.key === 'G') { e.preventDefault(); openGlobal(); }
+  else if (e.key === 'm' || e.key === 'M') { if (S.view === 'ops') { S.mapView = S.mapView === '3d' ? 'plan' : HAS_GL ? '3d' : 'plan'; launchMapView(); } }
+  else if (/^[1-9]$/.test(e.key)) { const v = VIEWS.filter(allowed)[Number(e.key) - 1]; if (v) showView(v.id); }
+});
 let shellWired = false;
 
 function renderMute() { const b = $('[data-mute]'); if (b) { const p = sfxPrefs(); b.innerHTML = icon(p.muted || !p.volume ? 'mute' : 'sound'); b.setAttribute('aria-pressed', String(!p.muted)); } }
@@ -226,7 +372,9 @@ async function onClick(e) {
   if (li) return flyToAgent(li.dataset.evagent);
   const b = e.target.closest('button');
   if (!b) return;
-  sfx('click');
+  if ('palette' in b.dataset) { commandPalette(); return; }
+  if (b.dataset.view) { showView(b.dataset.view); return; }
+  if ('iso' in b.dataset) { toggleIso(); return; }
   if ('terminal' in b.dataset) { term.toggle(); return; }
   if ('global' in b.dataset) { openGlobal(); return; }
   if ('briefing' in b.dataset) { openBriefing(S); return; }
@@ -248,11 +396,7 @@ async function onClick(e) {
   if ('standdown' in b.dataset) { try { await T.api('/alarm/stop', { method: 'POST' }); toast('Alarm stood down on all Agents'); } catch (x) { toast(x.message, { kind: 'err' }); } return; }
   if (b.dataset.dismiss) { S.dismissed = { ...(S.dismissed || {}), [b.dataset.dismiss]: Date.now() }; renderPeople(); return; }
   if (b.dataset.mode) {
-    const m = b.dataset.mode;
-    if (m === S.settings.mode) return;
-    if (m === 'lockdown' && !(await confirmBox('Enter LOCKDOWN?', 'Every Agent is armed. Any activity is an intrusion and Agents may sound the alarm (Settings › Security).', { ok: 'Lockdown', danger: true }))) return;
-    try { S.settings = await T.api('/settings', { method: 'PATCH', body: { mode: m } }); renderTop(); renderPeople(); sfx(m === 'lockdown' ? 'alert' : 'beep'); } catch (x) { toast(x.message, { kind: 'err' }); }
-  } else if ('recruit' in b.dataset) recruit();
+    setMode(b.dataset.mode);  } else if ('recruit' in b.dataset) recruit();
   else if ('settings' in b.dataset) openSettings(S, { onChange: (s) => { S.settings = s; settingsChanged(); } });
   else if (b.dataset.agent) openAgent(b.dataset.agent);
   else if (b.dataset.filter) { S.filter = b.dataset.filter; $$('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderLog(); }
@@ -313,15 +457,9 @@ addEventListener('hashchange', async () => {
   openGlobal(parseHash(location.hash));
 });
 
-// ---------------- live world: sun, night vision, weather on the map, cinematic idle mode ----------------
-const world = createWorld({
-  S, mode: MODE, map3d: () => map3d, isUnlocked: () => unlocked,
-  show3d: async () => { if (!HAS_GL || !houseHasRooms()) return false; if (S.mapView !== '3d') { S.mapView = '3d'; await launchMapView(); } return !!map3d; },
-  restoreView: (v) => { S.mapView = v; launchMapView(); },
-  canCinematic: () => HAS_GL && houseHasRooms() && !document.hidden && !timeline.replaying && !document.querySelector('.sheet-backdrop, .builder, .term'),
-});
+// ---------------- live world: the real sun lights the 3D map ----------------
+const world = createWorld({ S, map3d: () => map3d });
 window.__world = world; // for the automated tests
-addEventListener('sentinel:world', () => world.update(true));
 
 // ---------------- terminal + push-to-talk voice ----------------
 const term = createTerminal({
@@ -334,8 +472,6 @@ const term = createTerminal({
   replay: (daysAgo) => timeline.startReplay(daysAgo),
   stopReplay: () => timeline.stopReplay(),
   heat: (on, days) => timeline.setHeat(on, days),
-  nightVision: (mode) => { setWorldPrefs({ nv: mode }, MODE); return world.update(true); },
-  cinematic: () => world.startCinematic(),
   global: (initial) => openGlobal(initial),
 });
 window.__term = term; // for the automated tests
@@ -393,16 +529,14 @@ function agents3d() { clearTimeout(agents3dTimer); agents3dTimer = setTimeout(()
 function settingsChanged() {
   const themeWas = document.documentElement.dataset.theme;
   applyTheme(S.settings.theme);
-  if (map3d) { map3d.fx = S.settings.fx; if (themeWas !== S.settings.theme) map3d.setTheme(); }
-  document.body.classList.toggle('fx', S.settings.fx);
-  radar?.setFx(S.settings.fx);
-  renderTop(); renderPeople(); renderIntel(); world.update();
+  if (map3d && themeWas !== S.settings.theme) map3d.setTheme();
+  renderTop(); renderPeople(); renderIntel(); renderStatus(); world.update();
 }
 function eventSound(ev) {
   if (Date.now() - ev.ts > 10000) return;
+  // sounds only for genuine alerts
   if (ev.level === 'alert' || ev.kind === 'threat' && /RED/.test(ev.message)) sfx('alert');
   else if (ev.level === 'warn') sfx('warn');
-  else sfx('blip');
 }
 function upsert(a) { const i = S.agents.findIndex((x) => x.id === a.id); if (i >= 0) S.agents[i] = a; else S.agents.push(a); S.agents.sort((x, y) => x.number - y.number); }
 
@@ -414,16 +548,15 @@ function addEvent(ev) {
   if (!matchesFilter(ev)) return;
   const ol = $('[data-log]');
   if (!ol) return;
-  const li = logItem(ev, true);
+  const li = logItem(ev);
   ol.prepend(li);
-  typewrite(li.querySelector('[data-msg]'), li.querySelector('[data-msg]').dataset.text, { fx: S.settings.fx });
   while (ol.children.length > 300) ol.lastChild.remove();
   renderRadar();
   renderStats();
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); }
+function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); renderStatus(); for (const v of VIEWS) v.badge?.(); }
 
 // ---------------- the floor plan on the map panel (the 3D map replaces this in the next upgrade) ----------------
 const houseHasRooms = () => !!S.house?.floors?.some((f) => f.rooms.length);
@@ -451,7 +584,7 @@ async function start3d() {
       const { Map3D, getQuality } = await import('./map3d.js');
       if (!box.isConnected) return;
       map3d = new Map3D(box, {
-        fx: S.settings.fx, quality: getQuality(),
+        quality: getQuality(), iso: !!S.iso,
         onPick: (id) => openAgent(id),
         onPlace: (id, floorId, x, y) => placeAgent(id, floorId, x, y),
         onHover: (h) => mapTip(h && timeline.heatTip(h.roomId), h?.x, h?.y),
@@ -483,7 +616,7 @@ async function flyToAgent(id) {
   if (!a) return;
   if (!a.place || !houseHasRooms() || !HAS_GL) return openAgent(id);
   if (S.mapView !== '3d') { S.mapView = '3d'; await launchMapView(); }
-  if (map3d?.flyTo(id)) { sfx('scan'); $('.p-map')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  if (map3d?.flyTo(id)) { sfx('scan'); $('.wp-map')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 }
 function hint(text) { const h = $('[data-maphint]'); if (h) { h.textContent = text; h.hidden = !text; } }
 /** Start "place on map": the next click on the 3D map puts the Agent there. */
@@ -495,7 +628,7 @@ async function startPlacing(a) {
   if (!map3d) return;
   map3d.placeMode(a.id);
   hint(`Select ${a.codename}'s position on the map — or drag its card from the Agents list`);
-  $('.p-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('.wp-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function renderPlan() {
   const box = $('[data-plan]');
@@ -524,11 +657,11 @@ function renderPlan() {
 function renderTop() {
   const t = S.threat || { level: 'GREEN', reason: '' };
   const el = $('[data-threat]');
-  if (el) { el.className = `threat ${t.level}`; el.innerHTML = `Threat level · ${t.level}`; }
+  if (el) { el.className = `threat ${t.level}`; el.innerHTML = `Status · ${{ GREEN: 'Normal', AMBER: 'Elevated', RED: 'Alert' }[t.level] || t.level}`; el.title = t.reason || ''; }
   const r = $('[data-reason]');
   if (r && !r.classList.contains('c-red')) r.textContent = `> ${t.reason || ''}`;
   $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === S.settings.mode)));
-  document.title = `${t.level === 'GREEN' ? '' : `[${t.level}] `}SENTINEL // Command Centre`;
+  document.title = `${t.level === 'GREEN' ? '' : `[${t.level === 'RED' ? 'ALERT' : 'ELEVATED'}] `}SENTINEL`;
 }
 
 function recentLevel(agentId) {
@@ -541,13 +674,13 @@ function renderRadar() { radar?.setAgents(S.agents.map((a) => ({ ...a, warn: rec
 function agentCard(a) {
   const m = missionById(a.mission);
   const st = a.status || {};
-  const batt = a.online && typeof st.battery === 'number' ? `${Math.round(st.battery * 100)}%${st.charging ? '⚡' : ''}` : '';
+  const batt = a.online && typeof st.battery === 'number' ? `${Math.round(st.battery * 100)}%${st.charging ? ' +' : ''}` : '';
   const level = a.online && typeof st.level === 'number' ? (a.mission === 'sound' ? `${Math.round(st.level)} dB` : a.mission === 'light' ? `${Math.round(st.level)}% light` : '') : '';
   return `<button class="agent ${a.online ? '' : 'offline'}" data-agent="${esc(a.id)}" draggable="true">
     <span class="dot ${a.online ? (recentLevel(a.id) ? 'warn' : 'on') : ''}"></span>
     <span class="a-name"><small>${esc(a.label)}</small>${esc(a.codename)}${a.name ? ` <small>· ${esc(a.name)}</small>` : ''}</span>
-    <span class="a-mission">${m ? `${m.glyph} ${esc(m.name)}` : ''}</span>
-    <span class="a-sub"><span>${a.online ? '<span class="c-green">ONLINE</span>' : 'OFFLINE'}</span><span data-ago="${a.online ? (st.at || a.lastSeen || '') : (a.lastSeen || '')}">last signal ${ago(a.online ? st.at || a.lastSeen : a.lastSeen)}</span>${batt ? `<span class="batt">▮ ${batt}</span>` : ''}${level ? `<span>${level}</span>` : ''}${a.online && st.rtt != null ? `<span class="mono">${st.rtt} ms</span>` : ''}${st.state ? `<span>${esc(st.state)}</span>` : ''}</span>
+    <span class="a-mission">${m ? esc(m.name) : ''}</span>
+    <span class="a-sub"><span>${a.online ? '<span class="c-green">ONLINE</span>' : 'OFFLINE'}</span><span data-ago="${a.online ? (st.at || a.lastSeen || '') : (a.lastSeen || '')}">last signal ${ago(a.online ? st.at || a.lastSeen : a.lastSeen)}</span>${batt ? `<span class="batt">${batt}</span>` : ''}${level ? `<span>${level}</span>` : ''}${a.online && st.rtt != null ? `<span class="mono">${st.rtt} ms</span>` : ''}${st.state ? `<span>${esc(st.state)}</span>` : ''}</span>
   </button>`;
 }
 
@@ -559,6 +692,7 @@ function renderAgents() {
   $('[data-count]').textContent = S.agents.length ? `(${S.agents.filter((a) => a.online).length}/${S.agents.length} online)` : '';
   box.innerHTML = S.agents.length ? S.agents.map(agentCard).join('')
     : '<div class="empty"><div class="big">No agents deployed</div>Select <b>Recruit</b> and scan the code with a spare phone or tablet.</div>';
+  renderStatus();
   renderRadar();
   renderStats();
   renderNetwork();
@@ -566,10 +700,10 @@ function renderAgents() {
 
 const KIND = { motion: 'MOTION', door: 'DOOR', sound: 'SOUND', light: 'LIGHT', knock: 'KNOCK', agent: 'AGENT', system: 'SYSTEM', threat: 'THREAT', arrival: 'HOME', departure: 'AWAY', recon: 'RECON' };
 const matchesFilter = (e) => S.filter === 'all' || (S.filter === 'alerts' ? e.level !== 'info' : S.filter === 'agent' ? e.kind === 'agent' : e.kind === S.filter);
-function logItem(e, fresh = false) {
+function logItem(e) {
   const li = document.createElement('li');
   if (e.agentId) { li.dataset.evagent = e.agentId; li.tabIndex = 0; li.title = 'Show on the map'; }
-  li.innerHTML = `<time datetime="${new Date(e.ts).toISOString()}">${esc(dayClock(e.ts))}</time><span class="${esc(e.level)}"><span class="k">[${KIND[e.kind] || e.kind.toUpperCase()}]</span><span data-msg data-text="${esc(e.message)}">${fresh ? '' : esc(e.message)}</span></span>`;
+  li.innerHTML = `<time datetime="${new Date(e.ts).toISOString()}">${esc(dayClock(e.ts))}</time><span class="${esc(e.level)}"><span class="k">[${KIND[e.kind] || e.kind.toUpperCase()}]</span><span data-msg>${esc(e.message)}</span></span>`;
   return li;
 }
 function renderLog() {
@@ -579,7 +713,7 @@ function renderLog() {
   if (!ol.children.length) ol.innerHTML = '<li><time></time><span class="muted">Nothing logged yet.</span></li>';
 }
 
-/** The Security panel: current mode, what it means, suggestions, PANIC. */
+/** The Alert state panel: the formal state, what it means, a change log, suggestions, PANIC. */
 function renderPeople() {
   const box = $('[data-peoplelist]');
   if (!box) return;
@@ -587,14 +721,17 @@ function renderPeople() {
   const lastActivity = S.events.find((e) => ACTIVITY_KINDS.has(e.kind))?.ts || null;
   const sug = suggestMode({ mode, now: new Date(), nightStart: S.settings.nightStart, nightEnd: S.settings.nightEnd, lastActivity });
   const showSug = sug && !(S.dismissed?.[sug.mode] && Date.now() - S.dismissed[sug.mode] < 3600000);
+  const changes = S.events.filter((e) => e.kind === 'system' && /^Security mode: /.test(e.message)).slice(0, 5);
+  const by = (e) => /\(by ([^)]+)\)/.exec(e.message)?.[1] || 'HQ';
   box.innerHTML = `
-    <div class="secmode m-${mode}"><span class="secmode-label">${MODE_INFO[mode].label}</span><span class="small muted">${esc(MODE_INFO[mode].summary)}</span></div>
-    <div class="modes-mobile" role="group" aria-label="Security mode">${MODES.map((m) => `<button data-mode="${m}" class="${m}" aria-pressed="${m === mode}">${MODE_INFO[m].label}</button>`).join('')}</div>
+    <div class="secmode m-${mode}"><span class="secmode-label">${MODE_INFO[mode].label}</span><span class="small muted">${esc(MODE_INFO[mode].summary)}</span>${changes[0] ? `<span class="small muted mono">Since ${esc(dayClock(changes[0].ts))} · ${esc(by(changes[0]))}</span>` : ''}</div>
+    <div class="modes-mobile" role="group" aria-label="Alert state">${MODES.map((m) => `<button data-mode="${m}" class="${m}" aria-pressed="${m === mode}">${MODE_INFO[m].label}</button>`).join('')}</div>
     ${showSug ? `<div class="suggest"><span class="grow small">${esc(sug.why)}</span><button class="small" data-mode="${sug.mode}">Switch to ${MODE_INFO[sug.mode].label}</button><button class="small btn-ghost" data-dismiss="${sug.mode}" aria-label="Not now">Not now</button></div>` : ''}
     <div class="row" style="margin-top:10px">
       <button class="btn-danger panic" data-panic>${icon('alert')}Panic</button>
       ${mode === 'lockdown' ? '<button class="small" data-standdown>Stand down alarm</button>' : ''}
-    </div>`;
+    </div>
+    ${changes.length ? `<h3 class="sub">State changes</h3><ol class="state-log">${changes.map((e) => { const st = /^Security mode: (\w+)/.exec(e.message)[1]; return `<li><time>${esc(dayClock(e.ts))}</time><span class="state-chip m-${st.toLowerCase()}">${esc(st)}</span><span class="muted">${esc(by(e))}</span></li>`; }).join('')}</ol>` : ''}`;
 }
 
 /** PANIC: hold-to-confirm, then straight to LOCKDOWN with every Agent alerted. */
@@ -604,32 +741,13 @@ async function panic() {
 }
 
 function tick() {
-  const c = $('[data-clock]');
-  if (c) c.textContent = clock(Date.now());
   $$('[data-ago]').forEach((el) => { const t = Number(el.dataset.ago); el.textContent = `last signal ${ago(t)}`; });
   if (Date.now() % 60000 < 1000) renderPeople();
-  const up = $('[data-stat="uptime"]');
-  if (up) { const t = Math.floor((Date.now() - started) / 1000); up.textContent = [t / 3600, (t / 60) % 60, t % 60].map((x) => String(Math.floor(x)).padStart(2, '0')).join(':'); }
+  renderStatus();
   renderIntel();
 }
-
-// ---------------- stats strip (numbers tick up) ----------------
-function renderStats() {
-  const today = new Date().setHours(0, 0, 0, 0);
-  const todays = S.events.filter((e) => e.ts >= today);
-  countUp($('[data-stat="online"]'), S.agents.filter((a) => a.online).length, `/${S.agents.length}`);
-  countUp($('[data-stat="events"]'), todays.length);
-  countUp($('[data-stat="alerts"]'), todays.filter((e) => e.level !== 'info').length);
-}
-function countUp(el, to, suffix = '') {
-  if (!el) return;
-  const from = Number(el.dataset.v || 0);
-  el.dataset.v = to;
-  if (from === to || !S.settings.fx) { el.textContent = `${to}${suffix}`; return; }
-  const t0 = performance.now(), dur = 700;
-  const step = (now) => { const k = Math.min(1, (now - t0) / dur); el.textContent = `${Math.round(from + (to - from) * (1 - (1 - k) ** 3))}${suffix}`; if (k < 1) requestAnimationFrame(step); };
-  requestAnimationFrame(step);
-}
+/** (The old key-figures strip is now the status bar.) */
+function renderStats() { renderStatus(); }
 
 // ---------------- network panel: internet health, speed tests, Agent links ----------------
 function renderNetwork() {
@@ -772,7 +890,7 @@ function drawAgent(a) {
     <form class="row" data-rename><label class="field grow" style="margin:0"><span>Codename</span><input name="codename" value="${esc(a.codename)}" maxlength="24" autocomplete="off"></label>
       <label class="field grow" style="margin:0"><span>Where is it?</span><input name="name" value="${esc(a.name)}" placeholder="e.g. Hallway" maxlength="40" autocomplete="off"></label><button style="align-self:end">Save</button></form>
     <label class="row small" style="gap:8px"><input type="checkbox" data-nightarmed ${a.nightArmed !== false ? 'checked' : ''}> Armed in NIGHT mode <span class="muted">(untick for bedrooms and other rooms in use at night)</span></label>
-    <div><h2 style="margin-bottom:8px">Mission</h2><div class="missions">${S.missions.map((x) => `<button class="mission" data-mission="${x.id}" aria-pressed="${x.id === a.mission}"><b>${x.glyph} ${esc(x.name)}</b><span>${esc(x.summary)}</span></button>`).join('')}</div></div>
+    <div><h2 style="margin-bottom:8px">Mission</h2><div class="missions">${S.missions.map((x) => `<button class="mission" data-mission="${x.id}" aria-pressed="${x.id === a.mission}"><b>${esc(x.name)}</b><span>${esc(x.summary)}</span></button>`).join('')}</div></div>
     ${m?.settings.length ? `<form data-msettings><h2 style="margin-bottom:8px">${esc(m.name)} settings</h2>${m.settings.map((s) => settingField(s, a.settings?.[s.key] ?? s.default)).join('')}<button class="btn-primary">Send to Agent</button></form>` : ''}
     <div class="row"><button class="btn-primary" data-liveview ${a.online ? '' : 'disabled'}>${icon('camera')}Live view</button><button data-place>${icon('pin')}${a.place ? 'Move on map' : 'Place on map'}</button><button data-cmd="find" ${a.online ? '' : 'disabled'}>${icon('target')}Locate</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>${icon('refresh')}Restart</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
   </div>`;
@@ -871,7 +989,7 @@ async function recruit() {
         <ol>
           <li>On the old phone or tablet, open the <b>Camera</b> and scan this code.</li>
           <li>Tap the link. Allow the camera/microphone if it asks.</li>
-          <li>It appears on the radar a few seconds later. Then pick its mission.</li>
+          <li>It appears in the Agents panel a few seconds later. Then pick its mission.</li>
         </ol>
         <p class="small muted" style="margin-top:14px">No camera? On the device open <span class="mono c-green">${esc(agentPage.host + agentPage.pathname)}</span> and type:</p>
         <div class="row" style="gap:18px"><div><div class="small muted">HQ code</div><div class="code-big" data-hqcode>${esc(hqCode())}</div></div><div><div class="small muted">Recruit code</div><div class="code-big" data-code>${esc(p.code)}</div></div></div>

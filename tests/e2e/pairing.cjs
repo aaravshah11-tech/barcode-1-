@@ -95,7 +95,7 @@ const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.
   await dash.waitForSelector('text=No agents deployed');
   check(true, 'Disconnect: the Agent stops and leaves the list');
   await phone.reload();
-  await phone.waitForSelector('text=NOT RECRUITED');
+  await phone.waitForSelector('text=Not yet an Agent');
   check(true, 'a disconnected Agent has to be recruited again');
   await shot(phone, 'agent-not-recruited');
 

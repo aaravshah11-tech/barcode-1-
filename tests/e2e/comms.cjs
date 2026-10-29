@@ -32,6 +32,7 @@ const SHOTS = process.argv[2] || '';
   await page.waitForSelector('[data-log] >> text=Internet connection restored');
   check((await page.textContent('[data-network]')).includes('outage'), 'restored: logged; uptime and outage count shown');
   // Hover tooltip on the chart
+  await page.locator('.netchart svg').scrollIntoViewIfNeeded();
   const svg = await page.locator('.netchart svg').boundingBox();
   await page.mouse.move(svg.x + svg.width - 4, svg.y + svg.height / 2);
   await page.waitForSelector('.netchart .tip:not([hidden])');

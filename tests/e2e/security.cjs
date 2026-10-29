@@ -26,7 +26,7 @@ const SHOTS = process.argv[2] || '';
   check(await lastLevel() === 'info', 'HOME: a sensor going off is logged, not an alarm');
 
   // NIGHT
-  await page.click('.top [data-mode="night"]');
+  await page.click('.presence [data-mode="night"]');
   await page.waitForSelector('.secmode.m-night');
   await page.waitForSelector('[data-log] >> text=Security mode: NIGHT');
   check(true, 'switch to NIGHT from the top bar (logged)');
@@ -42,7 +42,7 @@ const SHOTS = process.argv[2] || '';
   await shot(page, 'security-night');
 
   // LOCKDOWN (with confirmation) → Agents flash
-  await page.click('.top [data-mode="lockdown"]');
+  await page.click('.presence [data-mode="lockdown"]');
   await page.click('.sheet [data-ok]');
   await page.waitForSelector('.secmode.m-lockdown');
   await agent.p.waitForSelector('.alarm-screen >> text=LOCKDOWN', { timeout: 10000 });
@@ -58,7 +58,7 @@ const SHOTS = process.argv[2] || '';
   check(true, 'Stand down alarm stops it on the Agents');
 
   // Back to HOME, then PANIC
-  await page.click('.top [data-mode="home"]');
+  await page.click('.presence [data-mode="home"]');
   await page.waitForSelector('.secmode.m-home');
   await page.click('[data-panic]');
   await page.click('.sheet [data-ok]');
@@ -67,7 +67,7 @@ const SHOTS = process.argv[2] || '';
   await agent.p.waitForSelector('.alarm-screen >> text=PANIC', { timeout: 10000 });
   check(true, 'PANIC → LOCKDOWN at once, logged, every Agent alerted');
   await page.click('[data-standdown]');
-  await page.click('.top [data-mode="home"]');
+  await page.click('.presence [data-mode="home"]');
   await agent.p.waitForSelector('.alarm-screen', { state: 'detached', timeout: 10000 });
 
   // Suggestion: night hours that include now
