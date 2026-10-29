@@ -68,3 +68,18 @@ test('helpers', () => {
   assert.deepEqual(complete('s'), ['status', 'send', 'speedtest', 'standdown']);
   assert.equal(complete('zz'), null);
 });
+
+test('part 8 commands: where is everyone, briefing, weather, diag', () => {
+  assert.deepEqual(p('Sentinel, where is everyone?', ctx), { cmd: 'whereis' });
+  assert.deepEqual(p('whos home', ctx), { cmd: 'whereis' });
+  assert.deepEqual(p('is anyone home', ctx), { cmd: 'whereis' });
+  assert.deepEqual(p('where is kestrel', ctx), { cmd: 'find', agentId: 'a2' }, 'naming an Agent still finds it');
+  assert.deepEqual(p('briefing'), { cmd: 'briefing', daysAgo: 1 });
+  assert.deepEqual(p('briefing today'), { cmd: 'briefing', daysAgo: 0 });
+  assert.deepEqual(p('give me the morning briefing'), { cmd: 'briefing', daysAgo: 1 });
+  assert.deepEqual(p("what's the weather like"), { cmd: 'weather' });
+  assert.deepEqual(p('is it going to rain'), { cmd: 'weather' });
+  assert.deepEqual(p('diag', ctx), { cmd: 'diag', agentId: null });
+  assert.deepEqual(p('battery nightjar', ctx), { cmd: 'diag', agentId: 'a1' });
+  assert.equal(p('diag bob', ctx).cmd, 'error');
+});

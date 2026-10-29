@@ -30,6 +30,8 @@ let hmacKey = null;
 const outbox = [];
 let lastState = null;
 let lastCmd = null;
+const startedAt = Date.now(); // "on duty" since
+let linkMs = null; // round-trip time to HQ, as HQ measured it
 
 function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
 function save(c) { creds = c; try { if (c) localStorage.setItem(KEY, JSON.stringify(c)); else localStorage.removeItem(KEY); } catch { /* private mode */ } }
@@ -98,10 +100,18 @@ function notRecruited(error = '') {
 // ---------------- screen ----------------
 function shell() {
   main.innerHTML = `
-    <div class="id-card">${LOGO}<div class="grow"><div class="who"><small data-label>${esc(creds.label)}</small><span data-codename>${esc(creds.codename)}</span></div>
-      <div class="link-state" data-link>Contacting HQ…</div></div></div>
+    <header class="ag-head">
+      <div class="ag-radar" aria-hidden="true"><i></i><i></i><i></i><span class="sweep"></span><b></b></div>
+      <div class="grow"><small class="ag-label" data-label>${esc(creds.label)}</small><div class="ag-code" data-codename>${esc(creds.codename)}</div>
+        <div class="ag-mission mono" data-mname></div></div>
+    </header>
+    <div class="ag-strip mono" role="group" aria-label="Agent status">
+      <span><small>Link</small><b data-linkms>—</b></span><span><small>Battery</small><b data-batt>—</b></span>
+      <span><small>On duty</small><b data-duty>0 min</b></span><span><small>Time</small><b data-aclock></b></span>
+    </div>
+    <div class="link-state" data-link>Contacting HQ…</div>
     <section class="mission-area panel" data-area aria-live="polite"></section>
-    <div class="foot"><span data-batt></span><span data-wake></span><span class="grow"></span><button class="btn-ghost small" data-leave>Leave HQ</button></div>`;
+    <div class="foot"><span data-wake></span><span class="grow"></span><button class="btn-ghost small" data-leave>Leave HQ</button></div>`;
   main.querySelector('[data-leave]').addEventListener('click', () => {
     if (!confirm('Stop being an Agent? This device forgets HQ. (Remove it on HQ too.)')) return;
     stopped = true; link?.close(); stopMission(); save(null); banner.hidden = true; notRecruited();
@@ -110,7 +120,17 @@ function shell() {
   keepAwake();
   watchBattery();
   armDimmer();
+  tickStrip();
 }
+/** The status strip: link time, on-duty time and the clock (updated every 15 s — cheap on old phones). */
+function tickStrip() {
+  const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.textContent = v; };
+  set('[data-linkms]', !connected ? 'LOST' : linkMs == null ? '…' : `${linkMs} ms`);
+  const m = Math.floor((Date.now() - startedAt) / 60000);
+  set('[data-duty]', m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`);
+  set('[data-aclock]', new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+}
+setInterval(tickStrip, 15000);
 
 function setBanner() {
   if (!creds) { banner.hidden = true; return; }
@@ -118,6 +138,10 @@ function setBanner() {
   banner.hidden = false;
   if (live && connected) { banner.textContent = 'LIVE VIEW – HQ IS WATCHING THIS CAMERA'; banner.className = 'banner-active watching live'; return; }
   banner.textContent = connected ? `SENTINEL AGENT ACTIVE – ${def.name}` : `SENTINEL AGENT – ${def.name} – RECONNECTING TO HQ`;
+  const mn = document.querySelector('[data-mname]');
+  if (mn) mn.textContent = `Mission: ${def.name}${connected ? '' : ' · offline'}`;
+  document.body.dataset.hqlink = connected ? 'up' : 'down';
+  tickStrip();
   banner.className = `banner-active ${!connected ? 'offline' : def.needs.some((n) => n === 'camera' || n === 'microphone') ? 'watching' : ''}`;
   const linkEl = document.querySelector('[data-link]');
   if (linkEl) linkEl.textContent = connected ? 'Linked to HQ · encrypted' : stopped ? 'Disconnected' : `Lost contact with HQ — reconnecting…${lastWhy ? ` (${lastWhy})` : ''}`;
@@ -179,7 +203,7 @@ async function onMessage(msg) {
     return command(msg.cmd);
   }
   if (msg.t === 'pong') return;
-  if (msg.t === 'hqping') { send({ t: 'hqpong', ts: msg.ts }); return; }
+  if (msg.t === 'hqping') { send({ t: 'hqpong', ts: msg.ts }); if (typeof msg.rtt === 'number') { linkMs = msg.rtt; tickStrip(); } return; }
   if (msg.t === 'state') lastState = msg;
   mission.inst?.onHq?.(msg); // INTEL SCREEN gets the dashboard's live updates
 }
@@ -327,14 +351,16 @@ function stopLive() {
 // ---------------- status, battery, wake lock, dimming ----------------
 let battery = null;
 function statusNow() {
-  return { battery: battery ? battery.level : undefined, charging: battery ? battery.charging : undefined, visible: document.visibilityState === 'visible' };
+  const c = navigator.connection;
+  return { battery: battery ? battery.level : undefined, charging: battery ? battery.charging : undefined, visible: document.visibilityState === 'visible', since: startedAt,
+    net: c?.type && c.type !== 'unknown' ? c.type : c?.effectiveType, downlink: typeof c?.downlink === 'number' ? c.downlink : undefined };
 }
 function sendStatus(extra = {}) { send({ t: 'status', ...statusNow(), ...extra }); }
 async function watchBattery() {
   try {
     battery = await navigator.getBattery?.();
-    if (!battery) { const el = document.querySelector('[data-batt]'); if (el) el.textContent = ''; return; }
-    const show = () => { const el = document.querySelector('[data-batt]'); if (el) el.textContent = `▮ ${Math.round(battery.level * 100)}%${battery.charging ? ' ⚡' : ''}`; sendStatus(); };
+    if (!battery) { const el = document.querySelector('[data-batt]'); if (el) el.textContent = 'n/a'; return; }
+    const show = () => { const el = document.querySelector('[data-batt]'); if (el) el.textContent = `${Math.round(battery.level * 100)}%${battery.charging ? ' +' : ''}`; el.classList.toggle('low', battery.level < 0.2 && !battery.charging); sendStatus(); };
     battery.addEventListener('levelchange', show);
     battery.addEventListener('chargingchange', show);
     show();

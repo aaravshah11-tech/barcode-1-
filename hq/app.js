@@ -14,6 +14,9 @@ import { icon } from '../shared/icons.js';
 import { MODES, MODE_INFO, suggestMode, ACTIVITY_KINDS } from '../shared/threat.js';
 import { centroid, openingEnds, bbox, fixtureLines } from '../shared/house.js';
 import { createTerminal } from './terminal.js';
+import { renderIntel as drawIntel } from './intel.js';
+import { openBriefing, maybeAutoBriefing } from './briefing.js';
+import { renderDiagnostics } from './diagnostics.js';
 import { voicePrefs, voiceSupported, createPushToTalk, speak } from './voice.js';
 
 const app = $('#app');
@@ -133,10 +136,11 @@ function launch() {
   ticker = setInterval(tick, 1000);
   tick();
   if (MODE === 'hq') keepAwake();
+  setTimeout(() => maybeAutoBriefing(S), 1200);
 }
 
 function apply(st) {
-  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || [];
+  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || []; S.weather = st.weather ?? S.weather ?? null;
 }
 
 const started = Date.now();
@@ -215,6 +219,8 @@ async function onClick(e) {
   if (!b) return;
   sfx('click');
   if ('terminal' in b.dataset) { term.toggle(); return; }
+  if ('briefing' in b.dataset) { openBriefing(S); return; }
+  if ('setloc' in b.dataset) { openSettings(S, { onChange: (s) => { S.settings = s; settingsChanged(); } }); setTimeout(() => $('[data-locsearch] input')?.focus(), 50); return; }
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
   if ('lock' in b.dataset) { lockNow('Locked. HQ is still guarding the house.'); return; }
@@ -299,6 +305,7 @@ function onMsg(msg) {
   else if (msg.t === 'net') { S.net = msg.net; renderNetwork(); }
   else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
+  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); }
   else if (msg.t === 'house') { S.house = msg.house; renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); }
 }
 let agents3dTimer = null;
@@ -309,7 +316,7 @@ function settingsChanged() {
   if (map3d) { map3d.fx = S.settings.fx; if (themeWas !== S.settings.theme) map3d.setTheme(); }
   document.body.classList.toggle('fx', S.settings.fx);
   radar?.setFx(S.settings.fx);
-  renderTop(); renderPeople();
+  renderTop(); renderPeople(); renderIntel();
 }
 function eventSound(ev) {
   if (Date.now() - ev.ts > 10000) return;
@@ -611,24 +618,11 @@ document.addEventListener('submit', async (e) => {
   } catch (x) { toast(x.message, { kind: 'err' }); }
 });
 
-// ---------------- intel panel: local time + world clocks ----------------
-const WORLD = [['LONDON', 'Europe/London'], ['NEW YORK', 'America/New_York'], ['TOKYO', 'Asia/Tokyo'], ['SYDNEY', 'Australia/Sydney']];
-function renderIntel() {
-  const box = $('[data-intel]');
-  if (!box) return;
-  const now = new Date();
-  const t = (tz) => now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-  if (!box.firstChild) {
-    box.innerHTML = `<div class="intel-time" data-itime></div><div class="small muted" data-idate></div>
-      <div class="world">${WORLD.map(([n, tz]) => `<div><span>${n}</span><b class="mono" data-tz="${tz}"></b></div>`).join('')}</div>`;
-  }
-  box.querySelector('[data-itime]').textContent = now.toLocaleTimeString('en-GB');
-  box.querySelector('[data-idate]').textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  box.querySelectorAll('[data-tz]').forEach((el) => { el.textContent = t(el.dataset.tz); });
-}
+// ---------------- intel panel: time, weather, sun, world clocks (see intel.js) ----------------
+function renderIntel() { drawIntel($('[data-intel]'), S); }
 
 // ---------------- one Agent ----------------
-let drawer = null;
+let drawer = null, diagAt = 0;
 function openAgent(id) {
   const a = S.agents.find((x) => x.id === id);
   if (!a) return;
@@ -645,6 +639,8 @@ function refreshDrawer() {
   drawer.el.querySelector('.sheet-head h2').textContent = `${a.label} // ${a.codename}`;
   drawer.body.querySelectorAll('[data-mission]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mission === a.mission)));
   drawer.body.querySelectorAll('[data-cmd], [data-liveview]').forEach((b) => { b.disabled = !a.online; });
+  const dg = drawer.body.querySelector('[data-diag]');
+  if (dg && Date.now() - diagAt > 30000 && !dg.matches(':hover')) { diagAt = Date.now(); renderDiagnostics(dg, a, T.api); }
   if (drawer.body.dataset.mission !== a.mission) drawAgent(a);
 }
 function liveHtml(a) {
@@ -683,6 +679,7 @@ function drawAgent(a) {
   const m = missionById(a.mission);
   box.innerHTML = `<div class="drawer-grid">
     <div data-live>${liveHtml(a)}</div>
+    <div class="diag" data-diag><p class="small muted">Loading diagnostics…</p></div>
     <form class="row" data-rename><label class="field grow" style="margin:0"><span>Codename</span><input name="codename" value="${esc(a.codename)}" maxlength="24" autocomplete="off"></label>
       <label class="field grow" style="margin:0"><span>Where is it?</span><input name="name" value="${esc(a.name)}" placeholder="e.g. Hallway" maxlength="40" autocomplete="off"></label><button style="align-self:end">Save</button></form>
     <label class="row small" style="gap:8px"><input type="checkbox" data-nightarmed ${a.nightArmed !== false ? 'checked' : ''}> Armed in NIGHT mode <span class="muted">(untick for bedrooms and other rooms in use at night)</span></label>
@@ -690,6 +687,7 @@ function drawAgent(a) {
     ${m?.settings.length ? `<form data-msettings><h2 style="margin-bottom:8px">${esc(m.name)} settings</h2>${m.settings.map((s) => settingField(s, a.settings?.[s.key] ?? s.default)).join('')}<button class="btn-primary">Send to Agent</button></form>` : ''}
     <div class="row"><button class="btn-primary" data-liveview ${a.online ? '' : 'disabled'}>${icon('camera')}Live view</button><button data-place>${icon('pin')}${a.place ? 'Move on map' : 'Place on map'}</button><button data-cmd="find" ${a.online ? '' : 'disabled'}>${icon('target')}Locate</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>${icon('refresh')}Restart</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
   </div>`;
+  diagAt = Date.now(); renderDiagnostics(box.querySelector('[data-diag]'), a, T.api);
   box.querySelectorAll('input[type=range]').forEach((r) => r.addEventListener('input', () => {
     const def = m.settings.find((s) => s.key === r.name);
     box.querySelector(`[data-out="${r.name}"]`).textContent = `${r.value}${def.unit || ''}`;

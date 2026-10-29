@@ -4,6 +4,7 @@ import { forgetViewer } from './transport.js';
 import { THEMES } from '../shared/themes.js';
 import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 import { voicePrefs, setVoicePrefs, voiceSupported, PRIVACY } from './voice.js';
+import { geocodeUrl, roughly } from '../shared/weather.js';
 
 const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
@@ -45,6 +46,12 @@ function general(body, S, onChange) {
     <label class="field" style="margin-top:12px"><span>3D map quality (this device)</span><select data-q3d style="max-width:260px">${[['low', 'Low — smooth on older laptops'], ['medium', 'Medium'], ['high', 'High — sharpest']].map(([k, l]) => `<option value="${k}" ${q3d() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${local ? `<label class="field" style="margin-top:12px"><span>Automatic internet speed test</span><select data-speedevery style="max-width:260px">${[[0, 'Off (run it by hand)'], [24, 'Once a day'], [6, 'Every 6 hours'], [1, 'Every hour (uses ~250 MB a day)']].map(([v, l]) => `<option value="${v}" ${Number(st.speedEvery || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Each test downloads about 8 MB and uploads 2 MB.</div></label>` : ''}
     <label class="field" style="margin-top:12px"><span>Sound volume (this device)</span><div class="row"><input type="range" min="0" max="100" step="5" value="${Math.round(sp.volume * 100)}" data-volume style="flex:1"><label class="row small" style="gap:6px"><input type="checkbox" data-muted ${sp.muted ? 'checked' : ''}> Mute</label></div></label>
+    ${hr}<h2 style="margin-bottom:8px">Location (weather, sunrise and sunset)</h2>
+    <p class="small" data-locnow>${st.location ? `Set to <b>${esc(st.location.name)}</b> <span class="muted mono">(${st.location.lat}, ${st.location.lon})</span> <button class="link-btn" data-locclear>remove</button>` : 'Not set.'}</p>
+    <form class="row" data-locsearch><input name="q" placeholder="Town or postcode area, e.g. Guildford" maxlength="60" style="flex:1;min-width:160px" autocomplete="off"><button>Search</button><button type="button" data-locgps>Use this device’s location</button></form>
+    <ul class="loc-results" data-locresults></ul>
+    <p class="help">Only the town’s rough position (to about 1 km) is sent to Open-Meteo, a free weather service, to get the forecast. Sunrise and sunset are worked out on this computer.</p>
+    <label class="field row" style="margin-top:8px"><input type="checkbox" data-briefingauto ${st.briefingAuto !== false ? 'checked' : ''}><span style="margin:0">Show the Mission Briefing (yesterday’s summary) the first time HQ is opened each morning</span></label>
     ${hr}<h2 style="margin-bottom:8px">Voice commands (this device)</h2>
     ${voiceSupported() ? `<label class="field row"><input type="checkbox" data-voiceon ${voicePrefs().on ? 'checked' : ''}><span style="margin:0">Push-to-talk voice commands: hold the microphone button at the top (or the V key) and speak, e.g. “switch to night mode”.</span></label>
       <label class="field row"><input type="checkbox" data-voicereply ${voicePrefs().reply ? 'checked' : ''}><span style="margin:0">Answer out loud</span></label>
@@ -91,6 +98,28 @@ function general(body, S, onChange) {
     toast('Voice commands on. Hold the microphone button (or V) and speak.');
   });
   $('[data-voicereply]', body)?.addEventListener('change', (e) => setVoicePrefs({ reply: e.target.checked }));
+  const setLoc = async (location) => {
+    try { const s = await S.api('/settings', { method: 'PATCH', body: { location } }); onChange?.(s); toast(location ? `Location set: ${location.name}` : 'Location removed'); general(body, S, onChange); } catch (x) { toast(x.message, { kind: 'err' }); }
+  };
+  $('[data-locsearch]', body).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = e.target.q.value.trim(), ul = $('[data-locresults]', body);
+    if (!q) return;
+    ul.innerHTML = '<li class="muted small">Searching…</li>';
+    try {
+      const r = await fetch(geocodeUrl(q)).then((x) => { if (!x.ok) throw new Error(`search said ${x.status}`); return x.json(); });
+      const hits = r.results || [];
+      ul.innerHTML = hits.length ? hits.map((h, i) => `<li><button type="button" class="small" data-lochit="${i}">${esc([h.name, h.admin1, h.country].filter(Boolean).join(', '))}</button></li>`).join('') : '<li class="muted small">No places found. Try the nearest town.</li>';
+      ul.querySelectorAll('[data-lochit]').forEach((b) => b.addEventListener('click', () => { const h = hits[Number(b.dataset.lochit)]; setLoc({ name: h.name, lat: roughly(h.latitude), lon: roughly(h.longitude) }); }));
+    } catch (x) { ul.innerHTML = `<li class="c-red small">Couldn’t search (${esc(x.message)}). Check the internet connection.</li>`; }
+  });
+  $('[data-locgps]', body).addEventListener('click', () => {
+    if (!navigator.geolocation) return toast('This browser can’t share its location. Search for your town instead.', { kind: 'err' });
+    navigator.geolocation.getCurrentPosition((p) => setLoc({ name: 'Home', lat: roughly(p.coords.latitude), lon: roughly(p.coords.longitude) }),
+      () => toast('Location not allowed. Search for your town instead.', { kind: 'err' }), { timeout: 15000, maximumAge: 3600000 });
+  });
+  $('[data-locclear]', body)?.addEventListener('click', () => setLoc(null));
+  $('[data-briefingauto]', body).addEventListener('change', async (e) => { try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { briefingAuto: e.target.checked } })); } catch (x) { toast(x.message, { kind: 'err' }); } });
   $('[data-pin]', body).addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;

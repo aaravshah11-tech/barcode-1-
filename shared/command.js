@@ -14,6 +14,10 @@ export const COMMANDS = [
   ['find', 'find <agent>', 'Make an Agent flash its codename (and fly to it on the map)'],
   ['send', 'send <all|agent|room> <message>', 'Send a message (also: broadcast <message>)'],
   ['log', 'log [number] | alerts', 'Show the latest Mission Log entries'],
+  ['whereis', 'whereis', 'Where has there been movement in the last 30 minutes? (“where is everyone?”)'],
+  ['briefing', 'briefing [today]', 'Yesterday’s Mission Briefing (or today so far)'],
+  ['weather', 'weather', 'Weather now and rain coming up'],
+  ['diag', 'diag [agent]', 'Agent health: battery, link time, uptime'],
   ['net', 'net', 'Internet status'],
   ['speedtest', 'speedtest', 'Run an internet speed test'],
   ['standdown', 'standdown', 'Silence the alarm on every Agent'],
@@ -104,6 +108,13 @@ export function parseCommand(input, ctx = {}) {
   if (w === 'map') return { cmd: 'error', error: 'Map views: 3d, plan, radar.' };
 
   if (w === 'theme') return THEME_NAMES.includes(rest.replace(/\s/g, '')) ? { cmd: 'theme', theme: rest.replace(/\s/g, '') } : { cmd: 'error', error: `Themes: ${THEME_NAMES.join(', ')}.` };
+
+  if (/^whereis$/.test(t) || /^(?:where (?:is |are )?|wheres )(?:everyone|everybody|people|the family)$/.test(t) || /^(?:whos|who is) (?:home|in|about|around)$/.test(t) || /^(?:is )?any(?:one|body) (?:home|in|about)$/.test(t)) return { cmd: 'whereis' };
+  const brief = t.match(/^(?:(?:give me |show |read )?(?:the |my )?(?:morning |mission |daily )?(?:briefing|brief|debrief))(?: (today|yesterday|for today|for yesterday))?$/);
+  if (brief) return { cmd: 'briefing', daysAgo: /today/.test(brief[1] || '') ? 0 : 1 };
+  if (/^(weather|forecast)$/.test(t) || /^(?:whats|what is) the (?:weather|forecast)/.test(t) || /^(?:is it|will it|is it going to) (?:rain|snow)/.test(t)) return { cmd: 'weather' };
+  const diagM = t.match(/^(?:diag|diagnostics|battery|batteries|health)(?: (?:of |for )?(.+))?$/);
+  if (diagM) { if (!diagM[1] || /^(all|agents|everyone)$/.test(diagM[1])) return { cmd: 'diag', agentId: null }; const a = findAgent(diagM[1], ctx); return a ? { cmd: 'diag', agentId: a.id } : { cmd: 'error', error: `No Agent called “${diagM[1]}”.` }; }
 
   const findM = t.match(/^(?:find|locate|ping|where is|wheres) (.+)$/);
   if (findM) { const a = findAgent(findM[1], ctx); return a ? { cmd: 'find', agentId: a.id } : { cmd: 'error', error: `No Agent called “${findM[1]}”. Type agents to list them.` }; }

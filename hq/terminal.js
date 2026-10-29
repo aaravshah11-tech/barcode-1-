@@ -2,7 +2,9 @@
 // Voice commands go through the same place, so typing and talking always do the same thing.
 import { esc, $, confirmBox, clock } from '../shared/ui.js';
 import { parseCommand, complete, COMMANDS } from '../shared/command.js';
-import { MODE_INFO } from '../shared/threat.js';
+import { MODE_INFO, ACTIVITY_KINDS } from '../shared/threat.js';
+import { fmtDuration } from '../shared/diag.js';
+import { rainLine } from './intel.js';
 import { icon } from '../shared/icons.js';
 import { sfx } from '../shared/sfx.js';
 
@@ -50,6 +52,39 @@ export function createTerminal(env) {
         const evs = S.events.filter((e) => !c.alerts || e.level !== 'info').slice(0, c.n);
         if (!evs.length) return ok(c.alerts ? 'No alerts.' : 'The Mission Log is empty.');
         return ok(`${c.alerts ? 'Latest alerts' : 'Mission Log'} (${evs.length}):`, evs.map((e) => `  ${clock(e.ts)}  ${(e.level === 'info' ? '' : e.level.toUpperCase()).padEnd(6)} ${e.message}`));
+      }
+      case 'whereis': {
+        const since = Date.now() - 30 * 60000, seen = new Map();
+        for (const e of S.events) { if (e.ts < since) break; if (!ACTIVITY_KINDS.has(e.kind)) continue; const a = S.agents.find((x) => x.id === e.agentId); const where = a ? roomName(a) || a.name || a.codename : '?'; if (!seen.has(where)) seen.set(where, e.ts); }
+        if (!seen.size) return ok(`No movement reported in the last 30 minutes. Mode: ${MODE_INFO[S.settings.mode || 'home'].label}.`);
+        const list = [...seen].map(([w, ts]) => `${w} ${Math.max(1, Math.round((Date.now() - ts) / 60000))} min ago`);
+        return ok(`Activity in the last 30 minutes: ${list.join(', ')}.`);
+      }
+      case 'briefing': {
+        const b = await env.api(`/briefing?daysAgo=${c.daysAgo}`);
+        const hm = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const extra = b.empty ? [] : [
+          `  Sensor reports ${b.counts.activity} · alerts ${b.counts.alerts} · doors ${b.counts.doors} · outages ${b.counts.outages}`,
+          ...(b.busiest.length ? [`  Busiest: ${b.busiest.map((r) => `${r.name} (${r.count})`).join(', ')}`] : []),
+          ...(b.departures.length || b.arrivals.length ? [`  Departures ${b.departures.map(hm).join(' ') || '—'} · arrivals ${b.arrivals.map(hm).join(' ') || '—'}`] : []),
+          ...b.health.filter((h) => !h.ok).map((h) => `  ${h.label} ${h.codename}: ${h.offline} dropout${h.offline === 1 ? '' : 's'}${h.lowBattery ? ', low battery' : ''}`),
+          '  Full briefing: the Mission briefing button in the Situation panel.',
+        ];
+        return ok(`${c.daysAgo ? 'Yesterday' : 'Today so far'}: ${b.summary}`, extra);
+      }
+      case 'weather': {
+        const w = S.weather;
+        if (!S.settings.location) return no('No location set. Settings › General › Location.');
+        if (!w) return no('No forecast yet. Check HQ’s internet connection.');
+        return ok(`${w.temp} degrees and ${w.text.toLowerCase()} in ${S.settings.location.name}. ${rainLine(w)}.`, [`  Feels ${w.feels}° · wind ${w.wind} mph${w.high != null ? ` · high ${w.high}° low ${w.low}°` : ''}`]);
+      }
+      case 'diag': {
+        const list = c.agentId ? S.agents.filter((a) => a.id === c.agentId) : S.agents;
+        if (!list.length) return ok('No Agents deployed.');
+        const row = (a) => { const st = a.status || {}; return `  ${a.label.padEnd(9)} ${a.codename.padEnd(12)} ${(a.online ? 'ONLINE' : 'OFFLINE').padEnd(8)} battery ${typeof st.battery === 'number' ? `${Math.round(st.battery * 100)}%${st.charging ? '+' : ''}` : 'n/a'} · link ${st.rtt != null ? `${st.rtt} ms` : '—'} · on duty ${st.since ? fmtDuration(Date.now() - st.since) : '—'}`; };
+        const low = list.filter((a) => typeof a.status?.battery === 'number' && a.status.battery < 0.2 && !a.status.charging);
+        const off = list.filter((a) => !a.online);
+        return ok(low.length || off.length ? `${[low.length ? `${low.length} low on battery` : '', off.length ? `${off.length} offline` : ''].filter(Boolean).join(', ')}.` : `${list.length === 1 ? `${list[0].codename} is` : `All ${list.length} Agents are`} healthy.`, list.map(row));
       }
       case 'net': {
         const n = S.net;

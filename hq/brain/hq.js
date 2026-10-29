@@ -5,12 +5,16 @@ import { inQuietHours } from '../../shared/alert-rules.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
 import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
 import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js';
+import { addDiagSample, batteryAlert } from '../../shared/diag.js';
+import { buildBriefing, dayStart } from '../../shared/briefing.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
   fx: true, retentionDays: 30, mode: 'home', theme: 'mi6', autoLockMin: 15, speedEvery: 0,
   nightStart: '22:30', nightEnd: '07:00', // when NIGHT is suggested (and the siren stays quiet)
   alarm: { enabled: true, siren: true, volume: 60, seconds: 30, quietStart: '23:00', quietEnd: '07:00' }, // LOCKDOWN alarm protocol
+  location: null, // { name, lat, lon } (rounded to ~1 km) for weather and sunrise/sunset
+  briefingAuto: true, // show the Mission Briefing each morning
 };
 const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
 const THEMES = ['mi6', 'classic', 'redops'];
@@ -68,10 +72,16 @@ export class HQ extends Emitter {
       s.alarm = a;
     }
     if ('theme' in patch && THEMES.includes(patch.theme)) s.theme = patch.theme;
+    if ('briefingAuto' in patch) s.briefingAuto = !!patch.briefingAuto;
+    if ('location' in patch) {
+      const l = patch.location, lat = Number(l?.lat), lon = Number(l?.lon);
+      s.location = l && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+        ? { name: String(l.name || 'Home').replace(/[<>]/g, '').slice(0, 60), lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 } : null;
+    }
     if ('autoLockMin' in patch) s.autoLockMin = [0, 5, 15, 30, 60].includes(Number(patch.autoLockMin)) ? Number(patch.autoLockMin) : 15;
     this.db.setSetting('hq', s);
     if ('mode' in patch && s.mode !== prevMode) {
-      this.logEvent({ kind: 'system', level: s.mode === 'lockdown' ? 'alert' : 'info', message: `Security mode: ${s.mode.toUpperCase()}${patch.by ? ` (by ${String(patch.by).slice(0, 40)})` : ''} — ${MODE_INFO[s.mode].summary}` });
+      this.logEvent({ kind: 'system', level: s.mode === 'lockdown' ? 'alert' : 'info', message: `Security mode: ${s.mode.toUpperCase()}${patch.by ? ` (by ${String(patch.by).slice(0, 40)})` : ''} — ${MODE_INFO[s.mode].summary}`, data: { mode: s.mode, from: prevMode } });
       if (s.mode === 'lockdown') this.alarm({ reason: 'LOCKDOWN', siren: false, seconds: 8 });
       if (prevMode === 'lockdown') this.standDown();
       this.recomputeThreat();
@@ -106,6 +116,7 @@ export class HQ extends Emitter {
       settings: this.settings(),
       house: this.house(),
       net: this.netSummary?.() || null,
+      weather: this.weather || null,
       messages: this.messages || [],
       missions: MISSIONS,
       info: this.info,
@@ -224,12 +235,46 @@ export class HQ extends Emitter {
     if (typeof status.state === 'string') clean.state = status.state.slice(0, 80);
     if (typeof status.level === 'number') clean.level = Math.round(status.level * 10) / 10; // e.g. sound dB or brightness %
     if (typeof status.rtt === 'number') clean.rtt = Math.max(0, Math.min(60000, Math.round(status.rtt))); // link round-trip time (ms)
+    if (typeof status.since === 'number' && status.since <= this.now() + 60000) clean.since = status.since; // when the Agent page started
+    if (typeof status.net === 'string') clean.net = status.net.slice(0, 12); // e.g. "4g", "wifi"
+    if (typeof status.downlink === 'number') clean.downlink = Math.max(0, Math.min(10000, Math.round(status.downlink * 10) / 10));
     o.status = { ...o.status, ...clean, at: this.now() };
     const patch = { lastSeen: this.now() };
     if ('battery' in clean) patch.battery = clean.battery;
     if ('charging' in clean) patch.charging = clean.charging;
+    // diagnostics history + low-battery alerts
+    if ('battery' in clean || 'rtt' in clean || 'charging' in clean) {
+      const all = this.diagAll();
+      all[agentId] = addDiagSample(all[agentId] || [], { battery: o.status.battery, charging: o.status.charging, rtt: clean.rtt }, this.now());
+      this.db.setSetting('diag', all);
+    }
+    const a = this.db.agent(agentId);
+    if (a && typeof o.status.battery === 'number') {
+      const r = batteryAlert(a.battAlert || null, o.status.battery, !!o.status.charging);
+      if (r.state !== (a.battAlert || null)) patch.battAlert = r.state;
+      if (r.alert) this.logEvent({ kind: 'agent', agentId, level: 'warn', message: `${agentLabel(a)} ${a.codename}: battery ${r.alert} (${Math.round(o.status.battery * 100)}%) — plug it in` });
+    }
     this.db.updateAgent(agentId, patch);
     this.pushAgent(agentId);
+  }
+  diagAll() { return this.db.getSetting('diag', {}) || {}; }
+  /** Everything the Agent window's Diagnostics section shows. */
+  agentDiag(id) {
+    const a = this.db.agent(id);
+    if (!a) return null;
+    const o = this.online.get(id);
+    const since = this.now() - 86400000;
+    return {
+      samples: this.diagAll()[id] || [],
+      online: !!o, connectedAt: o?.connectedAt || null, status: o?.status || null, lastSeen: a.lastSeen || null,
+      offline24h: this.db.events({ limit: 500, since }).filter((e) => e.agentId === id && e.kind === 'agent' && /offline$/.test(e.message)).length,
+      ua: a.ua || null,
+    };
+  }
+  /** MISSION BRIEFING for a day (0 = today so far, 1 = yesterday). */
+  briefing(daysAgo = 1) {
+    const now = this.now(), from = dayStart(now, daysAgo), to = daysAgo ? dayStart(now, daysAgo - 1) : now;
+    return buildBriefing({ events: this.db.events({ limit: 20000, since: from }), agents: this.db.agents().map((a) => this.agentView(a)), house: this.house(), diag: this.diagAll(), from, to, now });
   }
   /** An Agent reports something (motion, door, sound…). Only text and numbers are accepted. */
   agentEvent(agentId, e) {
@@ -380,6 +425,7 @@ export class HQ extends Emitter {
     if (!a) return false;
     this.command(id, 'disconnect', {});
     this.db.revokeAgent(id);
+    const diag = this.diagAll(); if (diag[id]) { delete diag[id]; this.db.setSetting('diag', diag); }
     const o = this.online.get(id);
     this.online.delete(id);
     setTimeout(() => o?.close?.('disconnected'), 300);

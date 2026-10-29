@@ -86,7 +86,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
           conn2 = { token: String(msg.token), sendRaw: (text) => send(text), close };
           send(hq.agentOnline(a, conn2));
           // measure the link's round-trip time now and then (shown in Agent diagnostics)
-          const pingAgent = () => send({ t: 'hqping', ts: Date.now() });
+          const pingAgent = () => send({ t: 'hqping', ts: Date.now(), rtt: hq.online.get(a.id)?.status?.rtt ?? null }); // the Agent shows its own link time
           setTimeout(pingAgent, 1500);
           rttTimer = setInterval(pingAgent, 20000);
           if (a.mission === 'intel') send(hq.snapshot());

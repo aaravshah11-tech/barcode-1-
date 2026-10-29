@@ -8,6 +8,7 @@ import { makeApi } from './brain/api.js';
 import { startHost } from './brain/host.js';
 import { makeAuth } from './brain/auth.js';
 import { startNetmon } from './brain/netmon.js';
+import { startWeather } from './brain/weather.js';
 import { dial } from '../shared/link.js';
 
 export async function startLocal({ onStatus }) {
@@ -27,6 +28,7 @@ export async function startLocal({ onStatus }) {
   const netmon = startNetmon({ hq, db });
   hq.netSummary = () => netmon.summary();
   hq.netmon = netmon;
+  startWeather({ hq, db });
   const call = makeApi({ hq, db, auth });
   const listeners = new Set();
   hq.dashboards.add({ send: (text) => { const msg = JSON.parse(text); listeners.forEach((f) => f(msg)); } });

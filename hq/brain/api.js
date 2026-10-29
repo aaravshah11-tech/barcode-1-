@@ -83,6 +83,10 @@ export function makeApi({ hq, db, auth }) {
       if (body.on && !body.renew) { const a = hq.db.agent(mm[1]); hq.logEvent({ kind: 'agent', agentId: a.id, message: `Live view opened on ${a.codename}` }); }
       return { ok: true };
     }
+    mm = p.match(/^\/agents\/([\w-]{1,64})\/diag$/);
+    if (mm && m === 'GET') { const d = hq.agentDiag(mm[1]); if (!d) throw fail(404, 'No such Agent.'); return d; }
+    if (p === '/briefing' && m === 'GET') return hq.briefing(Math.min(30, Math.max(0, Math.round(Number(url.searchParams.get('daysAgo') ?? 1)) || 0)));
+    if (p === '/weather/refresh' && m === 'POST') { if (!hq.refreshWeather) throw fail(409, 'Weather is fetched by the HQ computer.'); return hq.refreshWeather(); }
     if (p === '/viewers' && m === 'GET') return hq.viewers();
     mm = p.match(/^\/viewers\/([\w-]{1,64})$/);
     if (mm && m === 'DELETE') { if (!hq.removeViewer(mm[1])) throw fail(404, 'No such phone.'); return { ok: true }; }

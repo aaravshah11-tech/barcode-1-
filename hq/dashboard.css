@@ -273,3 +273,57 @@ body { background: transparent; }
 .ptt-heard { margin-top: 6px; color: var(--text); letter-spacing: 0; }
 @keyframes pttPulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .ptt-dot { animation: none; } }
+
+/* ---------- intel panel: weather + sun ---------- */
+.link-btn { all: unset; cursor: pointer; color: var(--green); text-decoration: underline; text-underline-offset: 2px; font: inherit; }
+.link-btn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.wx-empty { margin: 10px 0 0; }
+.wx { display: flex; gap: 12px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: .85rem; }
+.wx-temp { font-size: 1.7rem; font-weight: 500; color: var(--text); }
+.wx-rain { margin-top: 6px; color: var(--muted); font-family: var(--mono); font-size: .72rem; }
+.wx-rain.wet { color: var(--amber); }
+.kv.sun { margin-top: 8px; grid-template-columns: auto 1fr auto 1fr; }
+.brief-btn { margin-top: 12px; width: 100%; }
+
+/* ---------- time charts (diagnostics) ---------- */
+.tchart { margin: 0; position: relative; }
+.tchart figcaption { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.tchart svg { width: 100%; height: 70px; display: block; background: var(--bg-2); border: 1px solid var(--line); overflow: visible; }
+.tchart .line { fill: none; stroke: var(--green); stroke-width: 2px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.tchart .axis { stroke: var(--line-2); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.tchart .thresh { stroke: var(--amber); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.tchart .shade { fill: rgba(var(--accent-rgb), .1); }
+.tchart .cross { stroke: var(--text); stroke-width: 1px; vector-effect: non-scaling-stroke; opacity: .6; }
+.tchart text { font: 7px var(--mono); fill: var(--muted); }
+.tchart .tip { position: absolute; top: 18px; background: var(--panel-2); border: 1px solid var(--line-2); padding: 3px 7px; font-size: .7rem; pointer-events: none; white-space: nowrap; }
+.tlegend { display: flex; gap: 14px; margin-top: 4px; }
+.tlegend i { display: inline-block; width: 14px; height: 8px; margin-right: 6px; vertical-align: middle; }
+.k-thresh { border-top: 1px dashed var(--amber); height: 0 !important; }
+.k-shade { background: rgba(var(--accent-rgb), .2); }
+.diag { border-top: 1px solid var(--line); padding-top: 12px; }
+.diag-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0 8px; }
+@media (max-width: 640px) { .diag-charts { grid-template-columns: 1fr; } }
+
+/* ---------- mission briefing ---------- */
+.brief-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.brief-head { font: 600 1.25rem var(--sans); letter-spacing: .04em; margin: 14px 0; color: var(--text); }
+.brief-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.brief-stats .stat { background: var(--bg-2); border: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 2px; }
+.brief-stats .stat b { font: 500 1.5rem var(--mono); }
+.brief-stats .stat span { font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin-top: 18px; }
+.brief-grid h3 { font: 600 .7rem var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.brief-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: .82rem; }
+.brief-list li { display: flex; gap: 10px; }
+.brief-list .mono { color: var(--muted); flex: none; }
+.brief-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .82rem; }
+.brief-bars li { display: grid; grid-template-columns: minmax(80px, 1fr) 2fr auto; gap: 10px; align-items: center; }
+.brief-bars .bar { height: 8px; background: var(--bg-2); }
+.brief-bars .bar i { display: block; height: 100%; background: var(--green); border-radius: 0 4px 4px 0; }
+.brief-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.brief-table th { text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.brief-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+@media (max-width: 700px) { .brief-stats { grid-template-columns: repeat(2, 1fr); } .brief-grid { grid-template-columns: 1fr; } }
+
+/* ---------- settings: location search ---------- */
+.loc-results { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
