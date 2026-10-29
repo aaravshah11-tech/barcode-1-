@@ -65,7 +65,7 @@ test('helpers', () => {
   assert.equal(findAgent('Hallway', ctx).id, 'a1');
   assert.equal(findAgent('agent 2', ctx).id, 'a2');
   assert.equal(complete('spe'), 'speedtest');
-  assert.deepEqual(complete('s'), ['status', 'send', 'speedtest', 'standdown']);
+  assert.ok(['status', 'send', 'speedtest', 'standdown', 'ship'].every((c) => complete('s').includes(c)));
   assert.equal(complete('zz'), null);
 });
 
@@ -103,4 +103,13 @@ test('part 10 commands: night vision, cinematic', () => {
   assert.deepEqual(p('Sentinel, turn on night vision'), { cmd: 'nightvision', mode: 'on' });
   assert.deepEqual(p('cinematic'), { cmd: 'cinematic' });
   assert.deepEqual(p('start patrol'), { cmd: 'cinematic' });
+});
+
+test('part 11 commands: global intel', () => {
+  assert.deepEqual(p('global'), { cmd: 'global' });
+  assert.deepEqual(p('Sentinel, where is the ISS?'), { cmd: 'global', sel: { type: 'iss' }, say: 'iss' });
+  assert.deepEqual(p('when is the next ISS pass'), { cmd: 'global', sel: { type: 'iss' }, say: 'iss' });
+  assert.deepEqual(p('any planes overhead'), { cmd: 'global', say: 'air' });
+  assert.deepEqual(p('earthquakes'), { cmd: 'global', say: 'quakes' });
+  assert.deepEqual(p('ship 235052123'), { cmd: 'global', sel: { type: 'ship', id: '235052123' }, say: 'ship' });
 });

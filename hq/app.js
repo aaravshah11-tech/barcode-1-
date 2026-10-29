@@ -140,6 +140,7 @@ function launch() {
   tick();
   if (MODE === 'hq') keepAwake();
   setTimeout(() => maybeAutoBriefing(S), 1200);
+  if (MODE === 'hq' && /^#(iss|ship=|flight=|quake=)/.test(location.hash)) openGlobal(); // a link straight to an item
 }
 
 function apply(st) {
@@ -162,6 +163,7 @@ function shell() {
     </div>
     <span class="clock" data-clock></span>
     <button class="icon-btn ptt" data-ptt hidden aria-label="Hold to give a voice command" title="Hold to talk (or hold V)">${icon('mic')}</button>
+    <button class="icon-btn" data-global aria-label="Global intel" title="Global intel: ISS, aircraft, earthquakes, ships">${icon('globe')}</button>
     <button class="icon-btn" data-terminal aria-label="Terminal" title="Terminal (press \`)">${icon('terminal')}</button>
     <button class="icon-btn" data-mute aria-label="Sound on/off" title="Sound on/off"></button>
     <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">${icon('fullscreen')}</button>
@@ -226,6 +228,7 @@ async function onClick(e) {
   if (!b) return;
   sfx('click');
   if ('terminal' in b.dataset) { term.toggle(); return; }
+  if ('global' in b.dataset) { openGlobal(); return; }
   if ('briefing' in b.dataset) { openBriefing(S); return; }
   if ('replay' in b.dataset) { if (timeline.replaying) timeline.stopReplay(); else timeline.startReplay(0); return; }
   if ('heat' in b.dataset) { timeline.setHeat(!S.heat.on); return; }
@@ -298,6 +301,18 @@ document.addEventListener('pointermove', (e) => {
   mapTip(g && timeline.heatTip(g.dataset.proom), e.clientX - r.left, e.clientY - r.top);
 });
 
+// ---------------- GLOBAL INTEL (see atlas/atlas.js) ----------------
+async function openGlobal(initial = null) {
+  try { const { openAtlas } = await import('./atlas/atlas.js'); return await openAtlas(S, { initial }); } catch (x) { console.error(x); toast(`Global intel couldn’t open: ${x.message}`, { kind: 'err' }); return null; }
+}
+
+// a link like …/hq/#ship=235052123 pasted while HQ is open
+addEventListener('hashchange', async () => {
+  if (MODE !== 'hq' || !unlocked || !/^#(iss|ship=|flight=|quake=)/.test(location.hash)) return;
+  const { parseHash } = await import('../shared/feeds.js');
+  openGlobal(parseHash(location.hash));
+});
+
 // ---------------- live world: sun, night vision, weather on the map, cinematic idle mode ----------------
 const world = createWorld({
   S, mode: MODE, map3d: () => map3d, isUnlocked: () => unlocked,
@@ -321,6 +336,7 @@ const term = createTerminal({
   heat: (on, days) => timeline.setHeat(on, days),
   nightVision: (mode) => { setWorldPrefs({ nv: mode }, MODE); return world.update(true); },
   cinematic: () => world.startCinematic(),
+  global: (initial) => openGlobal(initial),
 });
 window.__term = term; // for the automated tests
 const ptt = createPushToTalk({

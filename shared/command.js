@@ -22,6 +22,11 @@ export const COMMANDS = [
   ['heatmap', 'heatmap [on|off|week]', 'Tint rooms by how busy they were'],
   ['nightvision', 'nightvision [on|off|auto]', 'Green night-vision look on the 3D map'],
   ['cinematic', 'cinematic', 'Slowly circle the house (touch anything to stop)'],
+  ['global', 'global', 'Open Global intel: globe, ISS, aircraft, earthquakes, ships'],
+  ['iss', 'iss', 'Where the Space Station is, and its next pass over HQ'],
+  ['airspace', 'airspace', 'Planes over the house right now'],
+  ['quakes', 'quakes', 'Earthquakes in the last 24 hours'],
+  ['ship', 'ship <MMSI>', 'Track a ship (opens it in Argos Atlas from the card)'],
   ['net', 'net', 'Internet status'],
   ['speedtest', 'speedtest', 'Run an internet speed test'],
   ['standdown', 'standdown', 'Silence the alarm on every Agent'],
@@ -128,6 +133,13 @@ export function parseCommand(input, ctx = {}) {
   const nvM = t.match(/^(?:night ?vision|nv)(?: (on|off|auto))?$/) || t.match(/^(?:switch|turn) (on|off) night ?vision$/);
   if (nvM) return { cmd: 'nightvision', mode: nvM[1] || 'on' };
   if (/^(cinematic|cinematic mode|screensaver|patrol)$/.test(t) || /^(?:start|begin) (?:cinematic|patrol)/.test(t)) return { cmd: 'cinematic' };
+
+  if (/^(global|global intel|globe|world|atlas)$/.test(t) || /^(?:open|show) (?:the )?(?:global|globe|world map|atlas)/.test(t)) return { cmd: 'global' };
+  if (/^(iss|space station)$/.test(t) || /^(?:where is|wheres|when is|whens|track) (?:the )?(?:iss|space station)/.test(t) || /next (?:iss|space station) pass/.test(t)) return { cmd: 'global', sel: { type: 'iss' }, say: 'iss' };
+  if (/^(airspace|planes|aircraft|flights)$/.test(t) || /^(?:any )?(?:planes|aircraft|flights) (?:overhead|nearby|above)/.test(t) || /^what(?:s| is) (?:flying )?overhead/.test(t)) return { cmd: 'global', say: 'air' };
+  if (/^(quakes|earthquakes)$/.test(t) || /^(?:any |recent )?earthquakes/.test(t)) return { cmd: 'global', say: 'quakes' };
+  const shipM = t.match(/^(?:ship|track ship|vessel|mmsi) (\d{9})$/);
+  if (shipM) return { cmd: 'global', sel: { type: 'ship', id: shipM[1] }, say: 'ship' };
 
   const findM = t.match(/^(?:find|locate|ping|where is|wheres) (.+)$/);
   if (findM) { const a = findAgent(findM[1], ctx); return a ? { cmd: 'find', agentId: a.id } : { cmd: 'error', error: `No Agent called “${findM[1]}”. Type agents to list them.` }; }

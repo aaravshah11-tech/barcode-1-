@@ -7,6 +7,7 @@ import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
 import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js';
 import { addDiagSample, batteryAlert } from '../../shared/diag.js';
 import { buildBriefing, dayStart } from '../../shared/briefing.js';
+import { cleanShips } from '../../shared/feeds.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -16,6 +17,8 @@ export const DEFAULT_SETTINGS = {
   location: null, // { name, lat, lon } (rounded to ~1 km) for weather and sunrise/sunset
   briefingAuto: true, // show the Mission Briefing each morning
   northDeg: 0, // which compass direction the top of the floor plan faces (for sun and shadows)
+  ships: [], // GLOBAL INTEL ship watch list: [{ mmsi, name }]
+  airspaceKm: 40, // GLOBAL INTEL airspace radar range
 };
 const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
 const THEMES = ['mi6', 'classic', 'redops'];
@@ -74,6 +77,8 @@ export class HQ extends Emitter {
     }
     if ('theme' in patch && THEMES.includes(patch.theme)) s.theme = patch.theme;
     if ('briefingAuto' in patch) s.briefingAuto = !!patch.briefingAuto;
+    if ('ships' in patch) s.ships = cleanShips(patch.ships);
+    if ('airspaceKm' in patch) s.airspaceKm = [10, 25, 40, 80].includes(Number(patch.airspaceKm)) ? Number(patch.airspaceKm) : 40;
     if ('northDeg' in patch) s.northDeg = [0, 45, 90, 135, 180, 225, 270, 315].includes(Number(patch.northDeg)) ? Number(patch.northDeg) : 0;
     if ('location' in patch) {
       const l = patch.location, lat = Number(l?.lat), lon = Number(l?.lon);

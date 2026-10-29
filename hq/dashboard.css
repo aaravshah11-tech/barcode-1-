@@ -381,3 +381,101 @@ body.cinematic .map3d-ui, body.cinematic .p-map .panel-head > :not(h2), body.cin
 .cine-cap .cine-tag { font-size: .6rem; letter-spacing: .3em; text-transform: uppercase; color: var(--green); }
 .cine-cap .cine-line { font-size: clamp(.8rem, 1.6vw, 1.05rem); letter-spacing: .12em; color: var(--text); background: color-mix(in srgb, var(--bg) 70%, transparent); padding: 6px 14px; animation: cineIn .8s ease-out; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes cineIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* ============ GLOBAL INTEL (live-tracking atlas) ============ */
+body.atlas-open { overflow: hidden; }
+.atlas { position: fixed; inset: 0; z-index: 800; display: grid; grid-template-columns: 260px minmax(0, 1fr) 340px; grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "top top top" "left globe right" "wire wire wire"; background: #03070b; color: var(--text); font-family: var(--sans); }
+.at-top { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 80%, #000); }
+.at-title { display: flex; align-items: center; gap: 8px; font-size: .74rem; letter-spacing: .2em; text-transform: uppercase; }
+.at-title svg { width: 18px; height: 18px; color: var(--green); }
+.at-utc { color: var(--muted); letter-spacing: .08em; }
+.at-search { position: relative; flex: 0 1 380px; }
+.at-search input { width: 100%; background: var(--bg-2); border: 1px solid var(--line-2); padding: 7px 10px; font-size: .82rem; }
+.at-results { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; background: var(--panel); border: 1px solid var(--line-2); display: grid; }
+.at-results button { justify-content: flex-start; border: 0; border-bottom: 1px solid var(--line); text-transform: none; letter-spacing: 0; font-size: .8rem; min-height: 34px; }
+.at-left, .at-right { overflow: auto; padding: 12px; display: grid; align-content: start; gap: 10px; background: color-mix(in srgb, var(--panel) 70%, #000); }
+.at-left { grid-area: left; border-right: 1px solid var(--line); }
+.at-right { grid-area: right; border-left: 1px solid var(--line); }
+.atlas h3 { font: 600 .62rem var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin: 6px 0 0; }
+.atlas h4 { font: 600 .66rem var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
+.at-layers, .at-ships, .at-flights, .at-passes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.at-layers li { display: grid; gap: 1px; }
+.at-layers button, .at-ships button { justify-content: flex-start; gap: 9px; text-transform: none; letter-spacing: 0; font-size: .8rem; padding: 7px 9px; min-height: 0; border-color: var(--line); background: transparent; text-align: left; }
+.at-layers button[aria-pressed="false"] { opacity: .45; }
+.at-layers button b { font-weight: 500; color: var(--text); }
+.at-layers .st { font: .62rem var(--mono); color: var(--muted); padding-left: 30px; letter-spacing: .06em; }
+.at-layers .st.live { color: var(--ok); } .at-layers .st.bad { color: var(--amber); }
+.at-ships button small { display: block; font-size: .64rem; }
+.at-ships button svg, .at-card-head + * svg { width: 16px; height: 16px; flex: none; color: var(--green); }
+.at-ships button[aria-pressed="true"] { border-color: var(--green); background: var(--green-dim); }
+.at-addship { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.at-addship input { background: var(--bg-2); border: 1px solid var(--line-2); padding: 6px 8px; font-size: .78rem; }
+.at-addship button { font-size: .7rem; }
+.at-note { line-height: 1.5; margin-top: 8px; }
+/* layer keys (dots) */
+.lk { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.lk-iss { background: var(--amber); border-radius: 2px; transform: rotate(45deg); width: 9px; height: 9px; }
+.lk-air { background: var(--green); clip-path: polygon(50% 0, 100% 100%, 50% 80%, 0 100%); border-radius: 0; }
+.lk-quakes { border: 2px solid var(--muted); background: transparent; } .lk-quakes.mid { border-color: var(--amber); } .lk-quakes.high { border-color: var(--red); }
+.lk-ships { background: var(--text); border-radius: 2px; }
+.lk-night { background: linear-gradient(90deg, #0f2232 50%, #000 50%); border: 1px solid var(--line-2); }
+/* globe */
+.at-globe { grid-area: globe; position: relative; min-height: 0; background: radial-gradient(ellipse at center, #08131d 0%, #03070b 70%); }
+.globe-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+.globe-canvas:active { cursor: grabbing; }
+.at-hint { position: absolute; left: 12px; top: 10px; color: var(--muted); z-index: 1; pointer-events: none; }
+.at-legend { position: absolute; left: 12px; bottom: 10px; z-index: 1; display: flex; gap: 14px; color: var(--muted); pointer-events: none; }
+.at-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); margin-right: 6px; vertical-align: -1px; }
+.at-legend .q-mid { border-color: var(--amber); } .at-legend .q-high { border-color: var(--red); } .at-legend .q-iss { border: 0; background: var(--amber); border-radius: 1px; transform: rotate(45deg); width: 8px; height: 8px; }
+.at-noglobe { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; }
+/* selected item card */
+.at-card { border: 1px solid var(--line-2); background: var(--panel); padding: 12px; display: grid; gap: 8px; }
+.at-card-head { display: flex; gap: 10px; align-items: center; }
+.at-card-head .lk { width: 12px; height: 12px; }
+.at-card-head b { display: block; font-size: 1rem; letter-spacing: .06em; }
+.at-card-head small { display: block; font-size: .72rem; }
+.at-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: .8rem; }
+.at-kv dt, .at-card > .at-kv > span { color: var(--muted); font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; padding-top: 2px; }
+.at-kv dd { margin: 0; font-family: var(--mono); font-size: .78rem; }
+.at-passes li { display: grid; gap: 1px; font-size: .76rem; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.at-passes span { color: var(--muted); }
+.at-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.at-links .btn { font-size: .66rem; padding: 6px 10px; text-decoration: none; }
+/* airspace radar */
+.at-air { border: 1px solid var(--line); padding: 10px; display: grid; gap: 8px; }
+.at-air-head { display: flex; justify-content: space-between; align-items: center; }
+.at-air-head h3 { margin: 0; }
+.at-air .filters button { padding: 3px 6px; min-height: 0; font-size: .58rem; }
+.at-radar { width: 100%; max-width: 300px; margin: 0 auto; display: block; background: radial-gradient(circle, rgba(var(--accent-rgb), .06), transparent 70%); }
+.at-radar .ring { fill: none; stroke: rgba(var(--accent-rgb), .25); stroke-width: 1; }
+.at-radar .axis { stroke: rgba(var(--accent-rgb), .12); stroke-width: 1; }
+.at-radar .n, .at-radar .rng { fill: var(--muted); font: 9px var(--mono); }
+.at-radar .hq { fill: var(--text); }
+.at-radar .ac { cursor: pointer; }
+.at-radar .ac path { fill: var(--green); }
+.at-radar .ac.gnd path { fill: var(--muted); }
+.at-radar .ac.sel path { fill: var(--amber); }
+.at-radar .ac .hit { fill: transparent; }
+.at-radar .ac text { fill: var(--text); font: 8px var(--mono); }
+.at-radar .ac text.fl { fill: var(--muted); }
+.at-flights button { width: 100%; display: grid; grid-template-columns: 1fr auto auto; gap: 10px; text-transform: none; letter-spacing: 0; font: .72rem var(--mono); padding: 5px 8px; min-height: 0; border-color: var(--line); background: transparent; }
+/* INTEL WIRE */
+.at-wire { grid-area: wire; display: flex; align-items: center; border-top: 1px solid var(--line); background: #02050a; height: 34px; overflow: hidden; }
+.at-wire-tag { flex: none; padding: 0 12px; height: 100%; display: grid; place-items: center; background: var(--green); color: var(--on-accent); font-size: .64rem; letter-spacing: .2em; text-transform: uppercase; }
+.at-wire-track { flex: 1; overflow: hidden; height: 100%; position: relative; }
+.at-wire-run { position: absolute; white-space: nowrap; top: 0; bottom: 0; display: flex; align-items: center; gap: 0; font-size: .74rem; padding-left: 100%; animation: wire 60s linear infinite; }
+.at-wire-track:hover .at-wire-run { animation-play-state: paused; }
+.at-wire-run a { color: var(--text); text-decoration: none; }
+.at-wire-run a:hover { text-decoration: underline; }
+.at-wire-run i { color: var(--muted); font-style: normal; }
+.w-sep { color: var(--green); margin: 0 18px; font-size: .5rem; }
+.w-iss { color: var(--amber); } .w-quake { color: var(--amber) !important; }
+@keyframes wire { to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) { .at-wire-run { animation: none; padding-left: 12px; } .at-wire-track { overflow-x: auto; } }
+@media (max-width: 1000px) {
+  .atlas { grid-template-columns: 1fr; grid-template-rows: auto 52vh auto auto auto; grid-template-areas: "top" "globe" "right" "left" "wire"; overflow: auto; }
+  .at-left, .at-right { overflow: visible; border: 0; border-top: 1px solid var(--line); }
+  .at-search { flex: 1 1 auto; } .at-utc { display: none; }
+  .at-wire { position: sticky; bottom: 0; }
+}

@@ -12,6 +12,8 @@ import { sfx } from '../shared/sfx.js';
  * env = { S, api, lock(), setMapView(view), flyTo(agentId), openLive(agent), onSettings(settings) }
  * Returns { open, close, toggle, run(text, { voice }) → Promise<{ ok, reply }> }.
  */
+const waitFor = (fn, ms = 20000) => new Promise((res) => { const t0 = Date.now(); const tick = () => (fn() || Date.now() - t0 > ms ? res() : setTimeout(tick, 250)); tick(); });
+
 export function createTerminal(env) {
   const { S } = env;
   const lines = []; // what the terminal shows (kept while the page is open)
@@ -107,6 +109,16 @@ export function createTerminal(env) {
         setTimeout(() => env.cinematic(), 700); // after the terminal closes; any key or touch stops it
         setTimeout(close, 0);
         return ok('Cinematic mode. Touch anything to stop.');
+      }
+      case 'global': {
+        setTimeout(close, 0);
+        const at = await env.global(c.sel || null);
+        if (!at) return no('Global intel couldn’t open.');
+        if (c.say === 'iss') { await waitFor(() => at.state.iss || at.state.status.iss === 'offline'); const s = at.state; if (!s.iss) return no(`No orbit data (${s.err.iss || 'offline'}).`); const p = s.passes[0]; return ok(`The ISS is ${s.iss.altKm} km up${p ? `. Next pass over HQ ${new Date(p.start).toLocaleString('en-GB', { weekday: 'long', hour: '2-digit', minute: '2-digit' })}, up to ${p.maxEl} degrees` : ''}.`); }
+        if (c.say === 'air') { await waitFor(() => ['live', 'offline', 'off'].includes(at.state.status.air)); const s = at.state; if (s.status.air === 'off') return no('Set your location first: Settings › General.'); if (s.status.air !== 'live') return no(`Aircraft feed offline (${s.err.air}).`); const n = s.aircraft.filter((a) => a.km <= s.range); return ok(n.length ? `${n.length} aircraft within ${s.range} km. Nearest: ${n[0].callsign}, ${n[0].km} km away.` : `No aircraft within ${s.range} km right now.`); }
+        if (c.say === 'quakes') { await waitFor(() => at.state.status.quakes !== 'loading'); const q = at.state.quakes; if (!q.length) return ok('No earthquakes above magnitude 2.5 reported in the last 24 hours.'); const big = [...q].sort((a, b) => b.mag - a.mag)[0]; at.select({ type: 'quake', id: big.id }); return ok(`${q.length} earthquakes in the last 24 hours. Strongest: magnitude ${big.mag.toFixed(1)}, ${big.place}.`); }
+        if (c.say === 'ship') return ok(`Ship ${c.sel.id} selected. Use “Open live position in Argos Atlas” on the card.`);
+        return ok('Global intel open. Esc closes it.');
       }
       case 'net': {
         const n = S.net;
