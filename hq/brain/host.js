@@ -100,6 +100,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
           clearTimeout(deny);
           role = 'viewer'; me = v;
           hq.db.updateViewer(v.id, { lastSeen: Date.now() });
+          hq.deviceSeen({ id: `viewer:${v.id}`, label: v.label, type: 'phone', owner: v.owner || '' });
           dash = { send: (text) => send(text), viewerId: v.id };
           // Nothing is shown until the codename + PIN are entered (or a recent login is still valid).
           if (auth.valid(String(msg.session || ''))) { session = String(msg.session); unlockDash(); } else send({ t: 'locked' });

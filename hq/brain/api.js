@@ -43,6 +43,15 @@ export function makeApi({ hq, db, auth }) {
       for (const id of ids) { try { done.push(ops.act(id, body.action, { by, reason: body.reason })); } catch { /* already handled */ } }
       return { done: done.length };
     }
+    // ----- analysis: correlation rules + pattern of life -----
+    const an = hq.analytics;
+    if (p === '/rules' && m === 'GET') return { rules: an.rules(), matches: an.matches() };
+    if (p === '/rules/test' && m === 'POST') return an.testRule(body, Math.min(30, Math.max(1, Number(body.days) || 7)));
+    am = p.match(/^\/rules\/([\w-]{1,64})$/);
+    if (am && m === 'PUT') return an.saveRule({ ...body, id: am[1] });
+    if (am && m === 'DELETE') return an.deleteRule(am[1]);
+    if (p === '/patterns' && m === 'GET') return an.patterns();
+    if (p === '/patterns/rebuild' && m === 'POST') { an.rebuild(); return an.patterns(); }
     if (p === '/incidents' && m === 'GET') return ops.incidents();
     if (p === '/incidents' && m === 'POST') return ops.createIncident({ title: body.title, severity: body.severity, alertIds: (Array.isArray(body.alertIds) ? body.alertIds : []).slice(0, 100).map(String), assignee: body.assignee, note: body.note, by });
     am = p.match(/^\/incidents\/([\w-]{1,64})$/);

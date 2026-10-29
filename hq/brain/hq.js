@@ -9,6 +9,7 @@ import { addDiagSample, batteryAlert } from '../../shared/diag.js';
 import { buildBriefing, dayStart } from '../../shared/briefing.js';
 import { cleanShips } from '../../shared/feeds.js';
 import { Ops } from './ops.js';
+import { Analytics } from './analytics.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -43,6 +44,8 @@ export class HQ extends Emitter {
     this.timers = [];
     this.info = {}; // filled in by the network layer (HQ's address etc.)
     this.ops = new Ops({ hq: this, db }); // triage queue + incidents
+    this.analytics = new Analytics({ hq: this, db }); // correlation rules + pattern of life
+    this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
   start() {
@@ -50,9 +53,18 @@ export class HQ extends Emitter {
     this.timers.push(setInterval(() => this.recomputeThreat(), 30000));
     this.timers.push(setInterval(() => this.prune(), 3600000));
     this.prune();
+    this.analytics.start();
     return this;
   }
-  stop() { this.timers.forEach(clearInterval); this.timers = []; }
+  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); }
+
+  /** A known phone or device appeared (a linked phone connected, or the network register saw it). */
+  deviceSeen({ id, label, type = 'phone', owner = '' }) {
+    const now = this.now(), last = this.devicesSeen.get(id) || 0;
+    this.devicesSeen.set(id, now);
+    if (now - last < 10 * 60000) return null; // reconnects within 10 min are the same visit
+    return this.logEvent({ kind: 'device', message: `${type === 'phone' ? 'Phone' : 'Device'} “${String(label).slice(0, 40)}” ${type === 'phone' ? 'connected' : 'seen on the network'}`, data: { device: String(label).slice(0, 40), owner: String(owner || '').slice(0, 30), type } });
+  }
 
   settings() {
     const s = { ...DEFAULT_SETTINGS, ...(this.db.getSetting('hq', {}) || {}) };

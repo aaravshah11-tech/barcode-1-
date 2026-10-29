@@ -604,3 +604,28 @@ h3.sub { font: 600 .64rem var(--sans); letter-spacing: .1em; text-transform: upp
   .triage-table td.c-actions { text-align: left; }
   .vh-search { min-width: 0 !important; flex: 1; }
 }
+
+/* ===== Analysis: rules + pattern of life ===== */
+.lead { margin: 0; max-width: 900px; }
+.rules-table .seq { line-height: 1.7; }
+.match-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: .82rem; }
+.rule-form .flabel { display: block; font: 600 .62rem var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.steps { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
+.step-row { display: grid; grid-template-columns: 18px 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+.modes-pick { border: 0; padding: 0; display: flex; gap: 14px; flex-wrap: wrap; }
+.modes-pick label { display: flex; gap: 6px; align-items: center; }
+.modes-pick input { width: 16px; min-height: 0; }
+.pol-status { display: grid; gap: 6px; }
+.pol-status .row { gap: 12px; }
+.meter-line { height: 4px; background: var(--bg-2); border: 1px solid var(--line); }
+.meter-line i { display: block; height: 100%; background: var(--green); }
+.pol-grid { overflow-x: auto; }
+.pol-legend { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.pol-ramp { display: inline-flex; gap: 2px; }
+.pol-ramp i { width: 14px; height: 10px; background: var(--green); }
+.pol-table { border-collapse: separate; border-spacing: 2px; font-size: .74rem; }
+.pol-table th { font: 500 .6rem var(--mono); color: var(--muted); text-align: left; padding: 0 2px; }
+.pol-table th.pol-place { font: 500 .8rem var(--sans); color: var(--text); padding-right: 10px; white-space: nowrap; }
+.pol-cell { width: 22px; height: 16px; padding: 0; background: var(--bg-2); }
+.pol-cell i { display: block; width: 100%; height: 16px; background: var(--green); }
+@media (max-width: 700px) { .step-row { grid-template-columns: 18px 1fr; } .step-row input, .step-row select:nth-of-type(2) { grid-column: 2; } }

@@ -24,6 +24,7 @@ import { createWorkspace } from './workspace.js';
 import { openPalette, paletteOpen } from './palette.js';
 import { createTriage } from './views/triage.js';
 import { createIncidents } from './views/incidents.js';
+import { createAnalysis } from './views/analysis.js';
 import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
@@ -287,6 +288,8 @@ registerView({
   id: 'incidents', label: 'Incidents', icon: 'case', render: (root) => incidents.render(root),
   badge() { const b = $('[data-badge="incidents"]'); if (!b) return; const n = (S.incidents || []).filter((i) => i.status === 'open' || i.status === 'investigating').length; b.hidden = !n; b.textContent = n; },
 });
+const analysis = createAnalysis({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'analysis', label: 'Analysis', icon: 'pulse', render: (root) => analysis.render(root) });
 function renderQueue() {
   const box = $('[data-minique]');
   if (!box) return;
@@ -541,6 +544,7 @@ function onMsg(msg) {
     addEvent(msg.event); renderStats();
     if (!timeline.replaying) { map3d?.event(msg.event); const a = S.agents.find((x) => x.id === msg.event.agentId); if (a?.place?.roomId && ACTIVITY_KINDS.has(msg.event.kind)) planFlash(a.place.roomId, msg.event.level === 'alert'); }
     timeline.liveEvent(msg.event);
+    if (['correlation', 'anomaly'].includes(msg.event.kind) && S.view === 'analysis') analysis.refresh();
     if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S);
   }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
