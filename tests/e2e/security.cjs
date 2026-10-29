@@ -28,7 +28,7 @@ const SHOTS = process.argv[2] || '';
   // NIGHT
   await page.click('.presence [data-mode="night"]');
   await page.waitForSelector('.secmode.m-night');
-  await page.waitForSelector('[data-log] >> text=Security mode: NIGHT');
+  await page.waitForSelector('[data-log] >> text=Alert state: NIGHT');
   check(true, 'switch to NIGHT from the top bar (logged)');
   await knock();
   await page.waitForSelector('[data-threat].RED');

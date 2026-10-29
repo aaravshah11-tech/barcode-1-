@@ -12,6 +12,7 @@ async function setup() {
   const now = { t: Date.UTC(2026, 9, 29, 12, 0) };
   const db = await openStore({ memory: true });
   const hq = new HQ({ db, now: () => now.t });
+  hq.localRole = 'DIRECTOR'; // signed in on the HQ computer
   const { agentId, token } = hq.claimPairCode(hq.newPairCode().code);
   hq.agentOnline(db.agent(agentId), { token, sendRaw() {}, close() {} });
   hq.updateAgent(agentId, { mission: 'motion', codename: 'wolf' });

@@ -2,7 +2,7 @@
 import { ACTIVITY_KINDS } from './threat.js';
 
 const hhmm = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-const modeOf = (e) => e.data?.mode || (e.kind === 'system' && /^Security mode: (\w+)/.exec(e.message)?.[1]?.toLowerCase()) || null;
+const modeOf = (e) => e.data?.mode || (e.kind === 'system' && /^(?:Security mode|Alert state): (\w+)/.exec(e.message)?.[1]?.toLowerCase()) || null;
 
 /** Midnight (local time) at the start of the day `daysAgo` days before `now`. */
 export function dayStart(now, daysAgo = 0) {

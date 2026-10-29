@@ -191,6 +191,8 @@ test('Mission Log: auto-delete after N days, CSV export, backup and restore', as
 test('API: what the Command Centre can do (and what linked phones can’t)', async () => {
   const { hq, db } = await mkHQ();
   const api = makeApi({ hq, db, auth: makeAuth({ db }) });
+  await assert.rejects(api('PATCH', '/settings', { mode: 'away' }), /Locked/, 'nothing changes until someone signs in');
+  hq.localRole = 'DIRECTOR';
   assert.equal((await api('PATCH', '/settings', { mode: 'away' })).mode, 'away');
   assert.equal((await api('PATCH', '/settings', { mode: 'hack' })).mode, 'away');
   assert.equal((await api('PATCH', '/settings', { mode: 'night' })).mode, 'night');

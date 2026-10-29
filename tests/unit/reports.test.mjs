@@ -34,6 +34,7 @@ async function setup() {
   const clock = { t: new Date(2026, 9, 26, 9, 0).getTime() }; // Monday 26 Oct 2026
   const db = await openStore({ memory: true });
   const hq = new HQ({ db, now: () => clock.t });
+  hq.localRole = 'DIRECTOR'; // signed in on the HQ computer
   hq.localOperator = 'NIGHTOWL';
   const api = makeApi({ hq, db, auth: makeAuth({ db }) });
   const call = (m, p, b) => api(m, p, b, { remote: false });

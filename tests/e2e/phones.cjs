@@ -46,7 +46,7 @@ const SHOTS = process.argv[2] || '';
 
   // Live: switching to AWAY on the phone shows on HQ
   await phone.click('.modes-mobile [data-mode="away"]');
-  await dash.waitForSelector('[data-log] >> text=Security mode: AWAY');
+  await dash.waitForSelector('[data-log] >> text=Alert state: AWAY');
   check(true, 'AWAY pressed on the phone → HQ switches to AWAY');
 
   // Reloading the phone keeps the login for a while (no PIN needed again straight away)

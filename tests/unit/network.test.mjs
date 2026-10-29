@@ -66,6 +66,7 @@ test('HQ: register lists SENTINEL’s own devices; import raises “new device�
   const clock = { t: Date.UTC(2026, 9, 29, 12) };
   const db = await openStore({ memory: true });
   const hq = new HQ({ db, now: () => clock.t });
+  hq.localRole = 'DIRECTOR'; // signed in on the HQ computer
   const api = makeApi({ hq, db, auth: makeAuth({ db }) });
   const call = (m, p, b) => api(m, p, b, { remote: false });
   const { agentId, token } = hq.claimPairCode(hq.newPairCode().code);

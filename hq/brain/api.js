@@ -4,6 +4,9 @@ import { toCsv } from '../../shared/export.js';
 import { missionById, MISSIONS } from '../../shared/missions.js';
 import { coverage } from '../../shared/coverage.js';
 import { hardwareFromUA, uptimePct } from '../../shared/register.js';
+import { denied } from '../../shared/roles.js';
+import { describe } from './auditlog.js';
+import { sha256 } from '../../shared/crypto.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
@@ -13,23 +16,106 @@ export function makeApi({ hq, db, auth }) {
    * `who.remote` = a linked phone: it must log in with codename + PIN first (`who.session`),
    * and can't make backups/restores or set up the Director.
    */
-  return async function api(method, path, body = {}, who = {}) {
+  /** What isn't worth an audit entry: ordinary reading, and very frequent small updates. */
+  const quiet = (m, p, url, body) => (m === 'GET' ? !/^\/(export|backup|audit|audit\/export)$/.test(p) : p === '/auth/status' || (p === '/house' && !url.searchParams.get('final')) || (/\/live$/.test(p) && body?.renew));
+  function record(m, path, body, who, actor, ok, out) {
+    const url = new URL(path, 'https://hq'), p = url.pathname;
+    if (quiet(m, p, url, body) || !hq.audit) return;
+    const d = describe(m, p, body, ok ? out : null);
+    const via = who.remote ? `Phone “${who.label || 'linked phone'}”` : 'HQ computer';
+    const name = actor.who || (p === '/auth/unlock' ? d.target || '?' : who.remote ? who.label || 'linked phone' : 'HQ');
+    hq.audit.add({ who: name, role: actor.role || '', via, action: d.action, target: d.target, detail: ok ? d.detail : `${d.detail ? `${d.detail} — ` : ''}refused: ${out?.message || 'error'}`, ok });
+  }
+  async function api(method, path, body = {}, who = {}) {
+    const actor = {};
+    body ||= {};
+    try { const r = await handle(method, path, body, who, actor); record(method.toUpperCase(), path, body, who, actor, true, r); return r; }
+    catch (e) { record(method.toUpperCase(), path, body, who, actor, false, e); throw e; }
+  }
+  return api;
+
+  async function handle(method, path, body, who, actor) {
     const url = new URL(path, 'https://hq');
     const p = url.pathname, m = method.toUpperCase();
-    body ||= {};
 
     // ----- login -----
     if (p === '/auth/status' && m === 'GET') return auth.status();
     if (p === '/auth/setup' && m === 'POST') { if (who.remote) throw fail(403, 'Set up the Director on the HQ computer.'); const r = await auth.setup(body); hq.logEvent({ kind: 'system', message: `Director ${r.codename} enrolled` }); return r; }
     if (p === '/auth/unlock' && m === 'POST') {
-      try { const r = await auth.unlock(body); if (!who.remote) hq.localOperator = r.codename; hq.logEvent({ kind: 'system', message: `${r.codename} logged in${who.remote ? ' from a linked phone' : ''}` }); return r; }
-      catch (e) { if (e.status === 401 || e.status === 429) hq.logEvent({ kind: 'system', level: 'warn', message: `Failed login attempt${who.remote ? ' from a linked phone' : ''}` }); throw e; }
+      try {
+        const r = await auth.unlock(body, who.remote ? `Phone “${who.label || 'linked phone'}”` : 'HQ computer');
+        if (!who.remote) { hq.localOperator = r.codename; hq.localRole = r.role; hq.localSession = r.session; }
+        actor.who = r.codename; actor.role = r.role;
+        hq.logEvent({ kind: 'system', message: `${r.codename} (${r.role}) signed in${who.remote ? ' from a linked phone' : ''}` });
+        return r;
+      } catch (e) { if ((e.status === 401 && !e.needOtp) || e.status === 429) hq.logEvent({ kind: 'system', level: 'warn', message: `Failed login attempt${who.remote ? ' from a linked phone' : ''}` }); throw e; }
     }
-    if (p === '/auth/lock' && m === 'POST') { auth.lock(who.session || body.session); return { ok: true }; }
+    if (p === '/auth/lock' && m === 'POST') {
+      const s = auth.session(who.remote ? who.session : hq.localSession);
+      actor.who = s?.codename || (who.remote ? who.label || 'linked phone' : hq.localOperator); actor.role = s?.role || (who.remote ? null : hq.localRole);
+      auth.lock(who.session || body.session || (!who.remote ? hq.localSession : null));
+      if (!who.remote) { hq.localRole = null; hq.localSession = null; }
+      return { ok: true };
+    }
     if (who.remote && !auth.valid(who.session)) throw fail(401, 'Locked — log in with your codename and PIN.');
-    if (p === '/auth/change' && m === 'POST') return auth.change(body);
+    if (!who.remote && hq.localSession && !auth.valid(hq.localSession)) { hq.localRole = null; hq.localSession = null; }
 
-    const by = who.remote ? (auth.whoIs(who.session) || who.label || 'a linked phone') : (hq.localOperator || 'HQ');
+    // ----- who is asking, and may they? (checked here for every request) -----
+    const sess = who.remote ? auth.session(who.session) : null;
+    const role = who.remote ? sess?.role : hq.localRole;
+    const by = who.remote ? (sess?.codename || who.label || 'a linked phone') : (hq.localOperator || 'HQ');
+    actor.who = role ? by : null; actor.role = role || null;
+    if (!role) { if (who.remote || m !== 'GET' || denied('OBSERVER', m, p)) throw fail(401, 'Locked — sign in first.'); }
+    else { const why = denied(role, m, p, body); if (why) throw fail(403, why); }
+
+    if (p === '/me' && m === 'GET') return { username: by, role, twoFactor: !!auth.users().find((u) => u.username === by)?.twoFactor };
+    if (p === '/auth/change' && m === 'POST') return auth.change({ ...body, codename: by });
+
+    // ----- users, sessions, two-step sign-in (Director only, except your own 2FA) -----
+    if (p === '/users' && m === 'GET') return auth.users();
+    if (p === '/users' && m === 'POST') { const u = await auth.addUser(body, by); hq.logEvent({ kind: 'system', message: `User ${u.username} (${u.role}) added by ${by}` }); return u; }
+    let um = p.match(/^\/users\/([\w%-]{1,64})$/);
+    if (um && m === 'PATCH') { const u = auth.updateUser(decodeURIComponent(um[1]), body); hq.logEvent({ kind: 'system', message: `User ${u.username}: ${u.disabled ? 'disabled' : u.role} (by ${by})` }); return u; }
+    if (um && m === 'DELETE') { const r = auth.removeUser(decodeURIComponent(um[1])); hq.logEvent({ kind: 'system', message: `User ${decodeURIComponent(um[1]).toUpperCase()} removed by ${by}` }); return r; }
+    if (p === '/auth/sessions' && m === 'GET') return auth.sessions(who.remote ? who.session : hq.localSession);
+    if (p === '/auth/sessions' && m === 'DELETE') return auth.endAll(who.remote ? who.session : hq.localSession);
+    um = p.match(/^\/auth\/sessions\/([\w-]{1,32})$/);
+    if (um && m === 'DELETE') return auth.endSession(um[1]);
+    if (p === '/auth/totp/begin' && m === 'POST') return auth.totpBegin(by, body.pin);
+    if (p === '/auth/totp/enable' && m === 'POST') { const r = await auth.totpEnable(by, body.code); hq.logEvent({ kind: 'system', message: `Two-step sign-in turned on for ${by}` }); return r; }
+    if (p === '/auth/totp/disable' && m === 'POST') { const r = await auth.totpDisable(by, body.pin); hq.logEvent({ kind: 'system', level: 'warn', message: `Two-step sign-in turned off for ${by}` }); return r; }
+
+    // ----- audit trail (Director only; it can be read and exported, never edited) -----
+    if (p === '/audit' && m === 'GET') return { entries: hq.audit.list({ limit: Math.min(2000, Number(url.searchParams.get('limit')) || 300), before: Number(url.searchParams.get('before')) || null }), verify: hq.audit.verify() };
+    if (p === '/audit/export' && m === 'GET') {
+      const rows = hq.audit.all(), v = hq.audit.verify();
+      const csvq = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
+      const text = ['seq,time,user,role,via,action,target,detail,ok,prev,hash', ...rows.map((e) => [e.seq, new Date(e.ts).toISOString(), e.who, e.role, e.via, e.action, e.target, e.detail, e.ok, e.prev, e.hash].map(csvq).join(','))].join('\n');
+      return { filename: `sentinel-audit-${new Date(hq.now()).toISOString().slice(0, 10)}.csv`, type: 'text/csv', text, sha256: sha256(text), verify: v };
+    }
+
+    // ----- shift log + handover notes -----
+    if (p === '/shift' && m === 'GET') return db.docs('shift').sort((a, b) => b.ts - a.ts).slice(0, 200);
+    if (p === '/shift' && m === 'POST') {
+      const text = String(body.text || '').replace(/[<>]/g, '').trim().slice(0, 2000);
+      if (!text) throw fail(400, 'Write something first.');
+      const snap = hq.snapshot();
+      const entry = { id: `sh-${hq.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, ts: hq.now(), by, role, text, handover: !!body.handover, acks: [],
+        summary: body.handover ? { state: snap.settings.mode.toUpperCase(), unhandled: hq.ops.unhandled(), incidents: hq.ops.incidents().filter((i) => i.status === 'open' || i.status === 'investigating').map((i) => i.ref), offline: snap.agents.filter((a) => !a.online).map((a) => a.codename) } : null };
+      db.putDoc('shift', entry, 1000);
+      hq.logEvent({ kind: 'system', message: `${entry.handover ? 'Handover note' : 'Shift log entry'} by ${by}` });
+      hq.broadcast({ t: 'shift' });
+      return entry;
+    }
+    um = p.match(/^\/shift\/([\w-]{1,40})\/ack$/);
+    if (um && m === 'POST') {
+      const e = db.doc('shift', um[1]);
+      if (!e) throw fail(404, 'No such entry.');
+      if (!e.acks.some((a) => a.by === by)) e.acks.push({ by, ts: hq.now() });
+      db.putDoc('shift', e, 1000);
+      hq.broadcast({ t: 'shift' });
+      return e;
+    }
 
     if (p === '/state' && m === 'GET') return hq.snapshot();
 
@@ -83,7 +169,7 @@ export function makeApi({ hq, db, auth }) {
     if (am && m === 'POST') return ops.addNote(am[1], body.text, { by });
     am = p.match(/^\/incidents\/([\w-]{1,64})\/alerts$/);
     if (am && m === 'POST') return ops.linkAlerts(am[1], (Array.isArray(body.alertIds) ? body.alertIds : []).slice(0, 100).map(String), { by });
-    if (p === '/settings' && m === 'PATCH') return hq.updateSettings(body);
+    if (p === '/settings' && m === 'PATCH') return hq.updateSettings('mode' in body ? { ...body, by } : body);
     if (p === '/house' && m === 'GET') return hq.house();
     if (p === '/net/speedtest' && m === 'POST') { if (!hq.netmon) throw fail(409, 'Speed tests run on the HQ computer.'); return hq.netmon.speedTest(); }
     if (p === '/comms' && m === 'POST') {
@@ -181,5 +267,5 @@ export function makeApi({ hq, db, auth }) {
       return { ok: true };
     }
     throw fail(404, 'Not found');
-  };
+  }
 }

@@ -1,4 +1,4 @@
-// Sign-in: plain and professional. Username + PIN or password (2FA arrives with access control).
+// Sign-in: plain and professional. Username + PIN or password, then a 6-digit code if two-step sign-in is on.
 import { esc, $, LOGO } from '../shared/ui.js';
 
 /**
@@ -18,6 +18,7 @@ export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
         <label class="field"><span>Username</span><input name="codename" maxlength="24" autocapitalize="none" spellcheck="false" required autofocus autocomplete="username"></label>
         <label class="field"><span>PIN or password</span><input name="pin" type="password" minlength="4" maxlength="64" required class="mono" autocomplete="${setup ? 'new-password' : 'current-password'}"></label>
         ${setup ? '<label class="field"><span>Confirm PIN or password</span><input name="pin2" type="password" minlength="4" maxlength="64" required class="mono" autocomplete="new-password"></label>' : ''}
+        <label class="field" data-otpfield hidden><span>6-digit code from your authenticator app</span><input name="otp" inputmode="numeric" pattern="[0-9]*" maxlength="6" class="mono otp" autocomplete="one-time-code"></label>
         <p class="c-red small" data-err role="alert"></p>
         <button class="btn-primary login-btn">${setup ? 'Create account' : 'Sign in'}</button>
       </form>
@@ -34,12 +35,17 @@ export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
       btn.disabled = true; btn.textContent = setup ? 'Creating…' : 'Signing in…';
       try {
         if (setup) await api('/auth/setup', { method: 'POST', body: { codename, pin } });
-        const r = await api('/auth/unlock', { method: 'POST', body: { codename, pin } });
+        const otpField = form.querySelector('[data-otpfield]');
+        const r = await api('/auth/unlock', { method: 'POST', body: { codename, pin, ...(otpField.hidden ? {} : { otp: form.elements.otp.value }) } });
         resolve(r);
       } catch (x) {
         err.textContent = x.message;
-        form.pin.value = '';
         btn.disabled = false; btn.textContent = setup ? 'Create account' : 'Sign in';
+        if (x.needOtp || /6-digit code|code is wrong/.test(x.message)) { // the PIN was right: now the code
+          const f = form.querySelector('[data-otpfield]'); f.hidden = false; form.elements.otp.value = ''; form.elements.otp.focus();
+          return;
+        }
+        form.pin.value = '';
         form.pin.focus();
       }
     });

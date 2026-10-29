@@ -92,6 +92,7 @@ test('HQ: a correlation rule raises a triage alert; anomalies reach triage with 
   const clock = { t: new Date(2026, 9, 29, 3, 0).getTime() };
   const db = await openStore({ memory: true });
   const hq = new HQ({ db, now: () => clock.t });
+  hq.localRole = 'DIRECTOR'; // signed in on the HQ computer
   const api = makeApi({ hq, db, auth: makeAuth({ db }) });
   const call = (m, p, b) => api(m, p, b, { remote: false });
   const { agentId, token } = hq.claimPairCode(hq.newPairCode().code);

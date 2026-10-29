@@ -13,6 +13,7 @@ import { Analytics } from './analytics.js';
 import { Tamper } from './tamper.js';
 import { NetSecurity } from './network.js';
 import { Reports } from './reports.js';
+import { makeAudit } from './auditlog.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -46,6 +47,7 @@ export class HQ extends Emitter {
     this.threat = null;
     this.timers = [];
     this.info = {}; // filled in by the network layer (HQ's address etc.)
+    this.audit = makeAudit({ db, now: () => this.now() }); // who did what (hash-chained)
     this.ops = new Ops({ hq: this, db }); // triage queue + incidents
     this.analytics = new Analytics({ hq: this, db }); // correlation rules + pattern of life
     this.tamper = new Tamper({ hq: this, db }); // moved, covered, unplugged, fast drain, unexpected offline
@@ -111,7 +113,8 @@ export class HQ extends Emitter {
     if ('autoLockMin' in patch) s.autoLockMin = [0, 5, 15, 30, 60].includes(Number(patch.autoLockMin)) ? Number(patch.autoLockMin) : 15;
     this.db.setSetting('hq', s);
     if ('mode' in patch && s.mode !== prevMode) {
-      this.logEvent({ kind: 'system', level: s.mode === 'lockdown' ? 'alert' : 'info', message: `Security mode: ${s.mode.toUpperCase()}${patch.by ? ` (by ${String(patch.by).slice(0, 40)})` : ''} — ${MODE_INFO[s.mode].summary}`, data: { mode: s.mode, from: prevMode } });
+      const reason = String(patch.reason || '').replace(/[<>]/g, '').trim().slice(0, 80);
+      this.logEvent({ kind: 'system', level: s.mode === 'lockdown' ? 'alert' : 'info', message: `Alert state: ${s.mode.toUpperCase()}${patch.by ? ` (by ${String(patch.by).slice(0, 40)})` : ''} — ${reason ? `${reason}. ` : ''}${MODE_INFO[s.mode].summary}`, data: { mode: s.mode, from: prevMode, by: patch.by ? String(patch.by).slice(0, 40) : null, reason } });
       if (s.mode === 'lockdown') this.alarm({ reason: 'LOCKDOWN', siren: false, seconds: 8 });
       if (prevMode === 'lockdown') this.standDown();
       this.recomputeThreat();

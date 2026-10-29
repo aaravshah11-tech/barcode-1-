@@ -701,3 +701,20 @@ tr.clickable { cursor: pointer; }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 14px; }
 .check-grid label { display: flex; gap: 8px; align-items: center; font-size: .86rem; }
 .check-grid input { width: 16px; min-height: 0; }
+
+/* ===== Access + shift log ===== */
+.role-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.role-cards p { margin: 4px 0 0; }
+.verify { padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--ok); background: var(--panel); font-size: .86rem; }
+.verify.bad { border-left-color: var(--red); background: var(--red-dim); }
+.audit-table tr.refused td { color: var(--muted); }
+.audit-table tr.tainted td { background: var(--red-dim); }
+.qr-box { display: grid; place-items: center; padding: 10px; background: #fff; width: 220px; margin: 6px 0 10px; }
+.qr-box svg { width: 200px; height: 200px; }
+input.otp { letter-spacing: .4em; font-size: 1.2rem; }
+.shift-form { max-width: 900px; }
+.shift-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-width: 900px; }
+.shift-list li p { margin: 6px 0; white-space: pre-wrap; }
+.shift-list li.handover { border-left: 3px solid var(--green); }
+.handover-sum { display: flex; gap: 16px; flex-wrap: wrap; padding: 6px 8px; background: var(--bg-2); border: 1px solid var(--line); margin: 6px 0; }
+@media (max-width: 900px) { .role-cards { grid-template-columns: 1fr; } }

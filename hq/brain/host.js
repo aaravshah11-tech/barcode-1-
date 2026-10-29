@@ -57,7 +57,11 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
     const send = (obj) => { if (conn.open) try { conn.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
     const close = () => { try { conn.close(); } catch { /* ignore */ } };
     const deny = setTimeout(() => { if (!role) close(); }, 10000);
-    const watch = setInterval(() => { if (Date.now() - lastMsg > SILENT_LIMIT) close(); }, 5000);
+    const watch = setInterval(() => {
+      if (Date.now() - lastMsg > SILENT_LIMIT) close();
+      // a phone whose session was ended (by the Director, by idling, or the user was disabled) is signed out at once
+      if (role === 'viewer' && session && !auth.alive(session)) { session = null; hq.dashboards.delete(dash); send({ t: 'locked' }); }
+    }, 3000);
 
     conn.on('data', async (raw) => {
       lastMsg = Date.now();

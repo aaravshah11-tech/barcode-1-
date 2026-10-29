@@ -29,6 +29,8 @@ import { createCoverage } from './views/coverage.js';
 import { createRegister } from './views/register.js';
 import { createNetwork } from './views/network.js';
 import { createReports } from './views/reports.js';
+import { createAccess, twoStepSheet } from './views/access.js';
+import { createShift, showHandover } from './views/shift.js';
 import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
@@ -150,6 +152,8 @@ function launch() {
   tick();
   if (MODE === 'hq') keepAwake();
   setTimeout(() => maybeAutoBriefing(S), 1200);
+  setTimeout(() => showHandover({ S, api: (...a) => T.api(...a) }), 1500);
+  document.body.dataset.role = S.role || '';
   if (MODE === 'hq' && /^#(iss|ship=|flight=|quake=)/.test(location.hash)) openGlobal(); // a link straight to an item
 }
 
@@ -302,6 +306,10 @@ const networkView = createNetwork({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'network', label: 'Network', icon: 'network', render: (root) => networkView.render(root) });
 const reportsView = createReports({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'reports', label: 'Reports', icon: 'doc', render: (root) => reportsView.render(root) });
+const shiftView = createShift({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'shift', label: 'Shift log', icon: 'doc', render: (root) => shiftView.render(root) });
+const accessView = createAccess({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'access', label: 'Access', icon: 'key', roles: ['DIRECTOR'], render: (root) => accessView.render(root) });
 let viewRefresh = null;
 /** Coverage and the Agent register follow Agent changes (debounced). */
 function refreshAgentViews() { clearTimeout(viewRefresh); viewRefresh = setTimeout(() => { if (S.view === 'coverage') coverageView.refresh(); else if (S.view === 'register') registerViewer.refresh(); }, 400); }
@@ -343,7 +351,7 @@ function renderStatus() {
   const set = (k, v) => { const el = sb.querySelector(`[data-${k}]`); if (el && el.innerHTML !== v) el.innerHTML = v; };
   const now = Date.now(), h = hqHealth(), mode = S.settings.mode || 'home';
   set('sbop', esc(S.operator || '—'));
-  set('sbrole', esc(S.role || 'DIRECTOR'));
+  set('sbrole', `${esc(S.role || 'DIRECTOR')}${S.role === 'OBSERVER' ? ' <span class="tag">read-only</span>' : ''}`);
   set('sbsess', hms(now - (S.sessionStart || now)));
   set('sbstate', `<span class="state-chip m-${mode}">${MODE_INFO[mode].label.toUpperCase()}</span>`);
   set('sbutc', new Date(now).toISOString().slice(11, 19));
@@ -360,6 +368,8 @@ function paletteActions() {
   A.push({ group: 'Go to', label: 'Global intel', keys: 'G', keywords: ['iss', 'aircraft', 'earthquakes', 'ships', 'globe'], run: () => openGlobal() });
   A.push({ group: 'Go to', label: 'Settings', keywords: ['preferences', 'location', 'theme'], run: () => openSettings(S, { onChange: (x) => { S.settings = x; settingsChanged(); } }) });
   A.push({ group: 'Go to', label: 'Terminal', keys: '`', run: () => term.open() });
+  A.push({ group: 'Account', label: 'Two-step sign-in (authenticator app)', keywords: ['2fa', 'totp', 'security', 'mfa'], run: async () => { const me = await T.api('/me').catch(() => ({})); twoStepSheet({ S, api: (...a) => T.api(...a) }, { enabled: !!me.twoFactor }); } });
+  A.push({ group: 'Account', label: 'Write a handover note', keywords: ['shift', 'handover', 'notes'], run: () => showView('shift') });
   for (const m of MODES) A.push({ group: 'Alert state', label: `Set ${MODE_INFO[m].label.toUpperCase()}`, hint: MODE_INFO[m].summary, keywords: [m, 'mode', 'state'], run: () => setMode(m) });
   A.push({ group: 'Alert state', label: 'Raise PANIC', keywords: ['emergency'], run: () => panic() });
   A.push({ group: 'Alert state', label: 'Stand down alarm', keywords: ['silence', 'siren'], run: () => T.api('/alarm/stop', { method: 'POST' }).then(() => toast('Alarm stood down')) });
@@ -572,6 +582,7 @@ function onMsg(msg) {
   else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
   else if (msg.t === 'assets') networkView.refresh();
   else if (msg.t === 'reports') reportsView.refresh();
+  else if (msg.t === 'shift') shiftView.refresh();
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
   else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); }
   else if (msg.t === 'house') { S.house = msg.house; refreshAgentViews(); renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
@@ -773,7 +784,7 @@ function renderPeople() {
   const lastActivity = S.events.find((e) => ACTIVITY_KINDS.has(e.kind))?.ts || null;
   const sug = suggestMode({ mode, now: new Date(), nightStart: S.settings.nightStart, nightEnd: S.settings.nightEnd, lastActivity });
   const showSug = sug && !(S.dismissed?.[sug.mode] && Date.now() - S.dismissed[sug.mode] < 3600000);
-  const changes = S.events.filter((e) => e.kind === 'system' && /^Security mode: /.test(e.message)).slice(0, 5);
+  const changes = S.events.filter((e) => e.kind === 'system' && /^(Security mode|Alert state): /.test(e.message)).slice(0, 5);
   const by = (e) => /\(by ([^)]+)\)/.exec(e.message)?.[1] || 'HQ';
   box.innerHTML = `
     <div class="secmode m-${mode}"><span class="secmode-label">${MODE_INFO[mode].label}</span><span class="small muted">${esc(MODE_INFO[mode].summary)}</span>${changes[0] ? `<span class="small muted mono">Since ${esc(dayClock(changes[0].ts))} · ${esc(by(changes[0]))}</span>` : ''}</div>
@@ -783,7 +794,7 @@ function renderPeople() {
       <button class="btn-danger panic" data-panic>${icon('alert')}Panic</button>
       ${mode === 'lockdown' ? '<button class="small" data-standdown>Stand down alarm</button>' : ''}
     </div>
-    ${changes.length ? `<h3 class="sub">State changes</h3><ol class="state-log">${changes.map((e) => { const st = /^Security mode: (\w+)/.exec(e.message)[1]; return `<li><time>${esc(dayClock(e.ts))}</time><span class="state-chip m-${st.toLowerCase()}">${esc(st)}</span><span class="muted">${esc(by(e))}</span></li>`; }).join('')}</ol>` : ''}`;
+    ${changes.length ? `<h3 class="sub">Alert state log</h3><ol class="state-log">${changes.map((e) => { const st = /^(?:Security mode|Alert state): (\w+)/.exec(e.message)[1]; return `<li><time>${esc(dayClock(e.ts))}</time><span class="state-chip m-${st.toLowerCase()}">${esc(st)}</span><span class="muted">${esc(by(e))}</span></li>`; }).join('')}</ol>` : ''}`;
 }
 
 /** PANIC: hold-to-confirm, then straight to LOCKDOWN with every Agent alerted. */

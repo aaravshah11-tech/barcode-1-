@@ -9,19 +9,20 @@ const DB = 'sentinel-hq';
 function idb() {
   return new Promise((resolve) => {
     try {
-      const req = indexedDB.open(DB, 2);
+      const req = indexedDB.open(DB, 3);
       req.onupgradeneeded = () => {
         const d = req.result;
         if (!d.objectStoreNames.contains('events')) d.createObjectStore('events', { keyPath: 'id' });
         if (!d.objectStoreNames.contains('files')) d.createObjectStore('files'); // floor-plan pictures, 3D scans
+        if (!d.objectStoreNames.contains('audit')) d.createObjectStore('audit', { keyPath: 'seq' }); // the audit trail (append-only)
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
     } catch { resolve(null); }
   });
 }
-const all = (db) => new Promise((resolve) => {
-  const r = db.transaction('events').objectStore('events').getAll();
+const all = (db, store = 'events') => new Promise((resolve) => {
+  const r = db.transaction(store).objectStore(store).getAll();
   r.onsuccess = () => resolve(r.result || []);
   r.onerror = () => resolve([]);
 });
@@ -36,6 +37,7 @@ export async function openStore({ memory = false, storage = globalThis.localStor
   if (!memory) { try { meta = { ...blank, ...JSON.parse(storage.getItem(META) || '{}') }; } catch { meta = blank; } }
   const db = memory ? null : await idb();
   let events = db ? (await all(db)).sort((a, b) => a.id - b.id) : [];
+  let audit = db ? (await all(db, 'audit')).sort((a, b) => a.seq - b.seq) : [];
   const persistent = !!db || memory;
   const memFiles = new Map();
 
@@ -133,6 +135,25 @@ export async function openStore({ memory = false, storage = globalThis.localStor
       return gone.length;
     },
 
+    // ---------- audit trail (append-only; there is deliberately no edit or delete) ----------
+    addAudit(e) {
+      audit.push(copy(e));
+      if (db) try { db.transaction('audit', 'readwrite').objectStore('audit').add(e); } catch { /* ignore */ }
+      if (audit.length > 50000) { // keep the newest 45,000; remember where the chain continues from
+        const gone = audit.splice(0, audit.length - 45000);
+        meta.auditAnchor = { seq: gone.at(-1).seq, hash: gone.at(-1).hash };
+        saveMeta();
+        if (db) try { const st = db.transaction('audit', 'readwrite').objectStore('audit'); gone.forEach((g) => st.delete(g.seq)); } catch { /* ignore */ }
+      }
+      return copy(e);
+    },
+    lastAudit: () => copy(audit.at(-1) || null),
+    auditAnchor: () => copy(meta.auditAnchor || null),
+    auditEntries: ({ limit = 500, before = null } = {}) => { const out = []; for (let i = audit.length - 1; i >= 0 && out.length < limit; i--) if (!before || audit[i].seq < before) out.push(copy(audit[i])); return out; },
+    allAudit: () => audit.map(copy),
+    /** (tests only) */
+    _auditRaw: () => audit,
+
     // ---------- big files (floor-plan pictures, 3D scans) ----------
     putFile(key, blob) {
       if (!db) { memFiles.set(key, blob); return Promise.resolve(); }
@@ -148,12 +169,16 @@ export async function openStore({ memory = false, storage = globalThis.localStor
     },
 
     // ---------- full backup (to move HQ to another computer/browser) ----------
-    backup: () => ({ sentinel: 'hq-backup', version: 1, at: Date.now(), meta: copy(meta), events: events.map(copy) }),
+    backup: () => ({ sentinel: 'hq-backup', version: 2, at: Date.now(), meta: copy(meta), events: events.map(copy), audit: audit.map(copy) }),
     restore(b) {
       if (b?.sentinel !== 'hq-backup' || !b.meta || !Array.isArray(b.events)) throw new Error('That isn’t a SENTINEL HQ backup file.');
       del(events.map((e) => e.id));
       meta = { ...blank, ...copy(b.meta) };
       events = b.events.map(copy).sort((x, y) => x.id - y.id);
+      if (Array.isArray(b.audit)) {
+        if (db) try { const st = db.transaction('audit', 'readwrite').objectStore('audit'); st.clear(); b.audit.forEach((x) => st.put(x)); } catch { /* ignore */ }
+        audit = b.audit.map(copy).sort((x, y) => x.seq - y.seq);
+      }
       meta.nextEventId = Math.max(meta.nextEventId || 1, ...events.map((e) => e.id + 1));
       saveMeta();
       events.forEach(put);

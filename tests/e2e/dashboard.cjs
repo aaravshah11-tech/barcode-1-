@@ -109,7 +109,7 @@ const SHOTS = process.argv[2] || '';
   // HOME / AWAY
   await page.click('[data-mode="away"]');
   await page.waitForSelector('[data-mode="away"][aria-pressed="true"]');
-  await page.waitForSelector('[data-log] >> text=Security mode: AWAY');
+  await page.waitForSelector('[data-log] >> text=Alert state: AWAY');
   check((await page.textContent('[data-peoplelist]')).toUpperCase().includes('AWAY'), 'AWAY switch saved, logged and shown');
   await page.click('[data-mode="home"]');
 
@@ -128,7 +128,7 @@ const SHOTS = process.argv[2] || '';
   check(!(await page.$('[name=fx]')), 'no “effects” switch any more');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-export="csv"]')]);
   const csvText = require('fs').readFileSync(await csv.path(), 'utf8');
-  check(csv.suggestedFilename().endsWith('.csv') && csvText.includes('Security mode: AWAY'), 'Mission Log exports as CSV');
+  check(csv.suggestedFilename().endsWith('.csv') && csvText.includes('Alert state: AWAY'), 'Mission Log exports as CSV');
   const [bk] = await Promise.all([page.waitForEvent('download'), page.click('[data-backup]')]);
   const backup = JSON.parse(require('fs').readFileSync(await bk.path(), 'utf8'));
   check(backup.sentinel === 'hq-backup' && backup.events.length > 2, 'HQ backup downloads');
@@ -144,7 +144,7 @@ const SHOTS = process.argv[2] || '';
   // Data survives a reload (kept in this browser)
   await page.reload();
   await login(page, { codename: 'nightowl', pin: '13579' });
-  await page.waitForSelector('[data-log] >> text=Security mode: AWAY', { timeout: 15000 });
+  await page.waitForSelector('[data-log] >> text=Alert state: AWAY', { timeout: 15000 });
   check(true, 'Mission Log is still there after reloading the page');
   await page.waitForFunction(() => document.querySelector('[data-net]')?.textContent.toUpperCase().includes('UPLINK'), null, { timeout: 30000 });
   check(true, 'HQ comes back ONLINE with the same HQ code after a reload');
