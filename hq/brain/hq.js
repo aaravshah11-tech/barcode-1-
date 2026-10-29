@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS = {
   alarm: { enabled: true, siren: true, volume: 60, seconds: 30, quietStart: '23:00', quietEnd: '07:00' }, // LOCKDOWN alarm protocol
   location: null, // { name, lat, lon } (rounded to ~1 km) for weather and sunrise/sunset
   briefingAuto: true, // show the Mission Briefing each morning
+  northDeg: 0, // which compass direction the top of the floor plan faces (for sun and shadows)
 };
 const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
 const THEMES = ['mi6', 'classic', 'redops'];
@@ -73,6 +74,7 @@ export class HQ extends Emitter {
     }
     if ('theme' in patch && THEMES.includes(patch.theme)) s.theme = patch.theme;
     if ('briefingAuto' in patch) s.briefingAuto = !!patch.briefingAuto;
+    if ('northDeg' in patch) s.northDeg = [0, 45, 90, 135, 180, 225, 270, 315].includes(Number(patch.northDeg)) ? Number(patch.northDeg) : 0;
     if ('location' in patch) {
       const l = patch.location, lat = Number(l?.lat), lon = Number(l?.lon);
       s.location = l && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180

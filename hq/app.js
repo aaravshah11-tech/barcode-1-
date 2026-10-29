@@ -18,6 +18,7 @@ import { renderIntel as drawIntel } from './intel.js';
 import { openBriefing, maybeAutoBriefing } from './briefing.js';
 import { renderDiagnostics } from './diagnostics.js';
 import { createTimeline } from './timeline.js';
+import { createWorld, setWorldPrefs } from './world.js';
 import { heatLevel, heatOpacity } from '../shared/replay.js';
 import { voicePrefs, voiceSupported, createPushToTalk, speak } from './voice.js';
 
@@ -78,7 +79,7 @@ async function lockNow(reason = 'Locked.') {
   if (!unlocked) return;
   unlocked = false;
   closeAllSheets();
-  term.close(); ptt.stop();
+  term.close(); ptt.stop(); world.stopCinematic();
   try { await T.api('/auth/lock', { method: 'POST', body: {} }); } catch { /* fine */ }
   await unlock(reason);
   launch();
@@ -182,10 +183,10 @@ function shell() {
         ${MODE === 'hq' ? `<button data-build>${icon('house')}Edit floor plan</button>` : ''}</div>
       <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
         <div class="map3d" data-map3d hidden></div>
-        <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="grow"></span><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
+        <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="world-chip mono" data-worldchip hidden></span><span class="grow"></span><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
         <div class="map-hint mono" data-maphint hidden></div>
         <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
-        <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
+        <div class="replay-bar" data-replaybar hidden></div><div class="cine-cap mono" data-cinecap hidden></div></div><p class="threat-reason" data-reason></p>`, 'Tactical map')}
     <div class="col-l">
     ${panel('p-agents', 0.25, '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="agents" data-agents></div>')}
     ${panel('p-home', 0.35, '<div class="panel-head"><h2>Security</h2></div><div data-peoplelist></div>')}
@@ -297,6 +298,16 @@ document.addEventListener('pointermove', (e) => {
   mapTip(g && timeline.heatTip(g.dataset.proom), e.clientX - r.left, e.clientY - r.top);
 });
 
+// ---------------- live world: sun, night vision, weather on the map, cinematic idle mode ----------------
+const world = createWorld({
+  S, mode: MODE, map3d: () => map3d, isUnlocked: () => unlocked,
+  show3d: async () => { if (!HAS_GL || !houseHasRooms()) return false; if (S.mapView !== '3d') { S.mapView = '3d'; await launchMapView(); } return !!map3d; },
+  restoreView: (v) => { S.mapView = v; launchMapView(); },
+  canCinematic: () => HAS_GL && houseHasRooms() && !document.hidden && !timeline.replaying && !document.querySelector('.sheet-backdrop, .builder, .term'),
+});
+window.__world = world; // for the automated tests
+addEventListener('sentinel:world', () => world.update(true));
+
 // ---------------- terminal + push-to-talk voice ----------------
 const term = createTerminal({
   S, api: (...a) => T.api(...a),
@@ -308,6 +319,8 @@ const term = createTerminal({
   replay: (daysAgo) => timeline.startReplay(daysAgo),
   stopReplay: () => timeline.stopReplay(),
   heat: (on, days) => timeline.setHeat(on, days),
+  nightVision: (mode) => { setWorldPrefs({ nv: mode }, MODE); return world.update(true); },
+  cinematic: () => world.startCinematic(),
 });
 window.__term = term; // for the automated tests
 const ptt = createPushToTalk({
@@ -356,8 +369,8 @@ function onMsg(msg) {
   else if (msg.t === 'net') { S.net = msg.net; renderNetwork(); }
   else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
-  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); }
-  else if (msg.t === 'house') { S.house = msg.house; renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); }
+  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); }
+  else if (msg.t === 'house') { S.house = msg.house; renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
 }
 let agents3dTimer = null;
 function agents3d() { clearTimeout(agents3dTimer); agents3dTimer = setTimeout(() => map3d?.setAgents(S.agents), 150); }
@@ -367,7 +380,7 @@ function settingsChanged() {
   if (map3d) { map3d.fx = S.settings.fx; if (themeWas !== S.settings.theme) map3d.setTheme(); }
   document.body.classList.toggle('fx', S.settings.fx);
   radar?.setFx(S.settings.fx);
-  renderTop(); renderPeople(); renderIntel();
+  renderTop(); renderPeople(); renderIntel(); world.update();
 }
 function eventSound(ev) {
   if (Date.now() - ev.ts > 10000) return;
@@ -430,6 +443,7 @@ async function start3d() {
       map3d.setHouse(S.house);
       map3d.setAgents(S.agents);
       timeline.refresh();
+      world.update(true);
       renderFloorButtons();
       if (MODE === 'hq' && S.house.model && T.files) T.files.get('model').then((f) => map3d?.setModel(f, S.house.model));
     } catch (x) { console.error(x); toast(`3D map couldn’t start: ${x.message}. Showing the plan instead.`, { kind: 'err' }); S.mapView = 'plan'; map3d = null; launchMapView(); }

@@ -85,3 +85,15 @@ test('briefing: yesterday summed up', () => {
   assert.match(b.summary, /1 Agent needs attention/);
   assert.ok(buildBriefing({ events: [], agents: [], from, to }).empty);
 });
+
+test('weather: 15-minute steps give a precise rain time', () => {
+  const now = Date.parse('2026-10-26T10:02:00Z');
+  const j = {
+    utc_offset_seconds: 0,
+    current: { temperature_2m: 10, weather_code: 3, precipitation: 0 },
+    hourly: { time: ['2026-10-26T10:00', '2026-10-26T11:00'], precipitation_probability: [20, 90], precipitation: [0, 2], weather_code: [3, 63] },
+    minutely_15: { time: ['2026-10-26T10:00', '2026-10-26T10:15', '2026-10-26T10:30'], precipitation: [0, 0, 0.4] },
+  };
+  assert.equal(parseWeather(j, now).rainIn, 28, 'rain from 10:30 → 28 minutes away (not 58 from the hourly forecast)');
+  assert.ok(forecastUrl(51.5, -0.1).includes('minutely_15=precipitation'));
+});

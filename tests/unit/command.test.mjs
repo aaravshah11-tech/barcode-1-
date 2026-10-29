@@ -95,3 +95,12 @@ test('part 9 commands: replay and heatmap', () => {
   assert.deepEqual(p('Sentinel, show the heat map'), { cmd: 'heatmap', on: true, days: 1 });
   assert.deepEqual(p('hide the heatmap'), { cmd: 'heatmap', on: false, days: 1 });
 });
+
+test('part 10 commands: night vision, cinematic', () => {
+  assert.deepEqual(p('nightvision'), { cmd: 'nightvision', mode: 'on' });
+  assert.deepEqual(p('night vision off'), { cmd: 'nightvision', mode: 'off' });
+  assert.deepEqual(p('nightvision auto'), { cmd: 'nightvision', mode: 'auto' });
+  assert.deepEqual(p('Sentinel, turn on night vision'), { cmd: 'nightvision', mode: 'on' });
+  assert.deepEqual(p('cinematic'), { cmd: 'cinematic' });
+  assert.deepEqual(p('start patrol'), { cmd: 'cinematic' });
+});

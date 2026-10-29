@@ -20,6 +20,8 @@ export const COMMANDS = [
   ['diag', 'diag [agent]', 'Agent health: battery, link time, uptime'],
   ['replay', 'replay [today|yesterday|stop]', 'Play back the day’s sensor events on the map'],
   ['heatmap', 'heatmap [on|off|week]', 'Tint rooms by how busy they were'],
+  ['nightvision', 'nightvision [on|off|auto]', 'Green night-vision look on the 3D map'],
+  ['cinematic', 'cinematic', 'Slowly circle the house (touch anything to stop)'],
   ['net', 'net', 'Internet status'],
   ['speedtest', 'speedtest', 'Run an internet speed test'],
   ['standdown', 'standdown', 'Silence the alarm on every Agent'],
@@ -122,6 +124,10 @@ export function parseCommand(input, ctx = {}) {
   if (rpM) return /stop|off|exit/.test(rpM[1] || '') ? { cmd: 'replay', stop: true } : { cmd: 'replay', daysAgo: rpM[1] === 'yesterday' ? 1 : 0 };
   const hmM = t.match(/^(?:show (?:the )?)?heat ?map(?: (on|off|week|7 days|today))?$/) || t.match(/^(hide) (?:the )?heat ?map$/);
   if (hmM) return { cmd: 'heatmap', on: !/off|hide/.test(hmM[1] || ''), days: /week|7/.test(hmM[1] || '') ? 7 : 1 };
+
+  const nvM = t.match(/^(?:night ?vision|nv)(?: (on|off|auto))?$/) || t.match(/^(?:switch|turn) (on|off) night ?vision$/);
+  if (nvM) return { cmd: 'nightvision', mode: nvM[1] || 'on' };
+  if (/^(cinematic|cinematic mode|screensaver|patrol)$/.test(t) || /^(?:start|begin) (?:cinematic|patrol)/.test(t)) return { cmd: 'cinematic' };
 
   const findM = t.match(/^(?:find|locate|ping|where is|wheres) (.+)$/);
   if (findM) { const a = findAgent(findM[1], ctx); return a ? { cmd: 'find', agentId: a.id } : { cmd: 'error', error: `No Agent called “${findM[1]}”. Type agents to list them.` }; }

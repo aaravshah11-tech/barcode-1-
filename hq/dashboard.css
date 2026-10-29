@@ -363,3 +363,21 @@ body { background: transparent; }
 .p-map .panel-head > button[aria-pressed="true"] { border-color: var(--amber); color: var(--text); background: color-mix(in srgb, var(--amber) 14%, transparent); }
 @media (max-width: 700px) { .heat-legend { width: auto; left: 10px; } .replay-bar { left: 4px; right: 4px; bottom: 4px; } .rp-feed { display: none; } }
 @media (max-width: 700px) { .p-map .panel-head { flex-wrap: wrap; row-gap: 8px; } .p-map .panel-head h2 { flex: 1 0 100%; } }
+
+/* ---------- live world ---------- */
+.world-chip { align-self: center; font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 4px 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 85%, transparent); }
+.world-chip .nv-tag { color: #52ff8f; font-weight: 600; }
+/* night vision: phosphor tint, scan lines, vignette */
+.map3d.nv { background: radial-gradient(ellipse at center, rgba(40, 120, 60, .16), rgba(0, 10, 0, .55) 75%); }
+.map3d.nv::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .18) 0 1px, transparent 1px 3px), radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55)); }
+.map3d.lightning::before { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: rgba(220, 230, 255, .28); }
+@media (prefers-reduced-motion: reduce) { .map3d.lightning::before { display: none; } }
+/* cinematic idle mode */
+body.cinematic .cc .panel:not(.p-map), body.cinematic .stats { opacity: .3; transition: opacity 1.2s; }
+body.cinematic .cc .panel.cine-focus { opacity: 1; border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+body.cinematic .map3d-ui, body.cinematic .p-map .panel-head > :not(h2), body.cinematic .heat-legend { opacity: 0; transition: opacity .8s; }
+.cine-cap { position: absolute; left: 0; right: 0; bottom: 16px; z-index: 3; text-align: center; pointer-events: none; display: grid; gap: 6px; justify-items: center; }
+.cine-cap .cine-tag { font-size: .6rem; letter-spacing: .3em; text-transform: uppercase; color: var(--green); }
+.cine-cap .cine-line { font-size: clamp(.8rem, 1.6vw, 1.05rem); letter-spacing: .12em; color: var(--text); background: color-mix(in srgb, var(--bg) 70%, transparent); padding: 6px 14px; animation: cineIn .8s ease-out; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes cineIn { from { opacity: 0; transform: translateY(6px); } }

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { centroid, openingEnds, pointInPolygon, bbox, stepCount, OPENING_KINDS } from '../shared/house.js';
 import { heatLevel, heatOpacity } from '../shared/replay.js';
+import { planDir, shadowVector, shadowPolygon, particleCount } from '../shared/world.js';
 
 const QUALITY = {
   low: { pixelRatio: 1, antialias: false, fps: 24, labels: false, faces: false },
@@ -83,6 +84,8 @@ export class Map3D {
 
   colors() {
     this.c = { accent: cssColor('--green', '#45e0ff'), amber: cssColor('--amber', '#ffb627'), red: cssColor('--red', '#ff4d4d'), muted: cssColor('--muted', '#78a9c2'), window: new THREE.Color('#9fdcff') };
+    // NIGHT VISION: everything in phosphor green (alerts stay red)
+    if (this.nv) Object.assign(this.c, { accent: new THREE.Color('#52ff8f'), amber: new THREE.Color('#c9ff6b'), muted: new THREE.Color('#3a9c5c'), window: new THREE.Color('#8affb3') });
   }
   setTheme() { this.colors(); this.buildGround(); if (this.house) this.setHouse(this.house, true); this.setAgents(this.agents); }
   setQuality(name) {
@@ -124,6 +127,7 @@ export class Map3D {
     });
     this.layout(true);
     this.applyHeat();
+    if (this.world) this.buildWorld();
     if (!keepView) this.frame();
     this.wake(1000);
     if (this.model) this.root.add(this.model);
@@ -232,6 +236,142 @@ export class Map3D {
     this.onHover(g ? { roomId: g.userData.roomId, name: g.userData.name, x: e.clientX - r.left, y: e.clientY - r.top } : null);
   }
 
+  // ---------- LIVE WORLD: real sun + shadow, sky tint, compass, night vision, weather, cinematic ----------
+  /** w = { sun: { azimuth, altitude } | null, northDeg, phase, nv, weather: { kind, precip, cloud, wind } | null, effects } */
+  setWorld(w) {
+    const nvChanged = !!w.nv !== !!this.nv;
+    this.world = w;
+    this.nv = !!w.nv;
+    this.box.classList.toggle('nv', this.nv);
+    if (nvChanged) this.setTheme(); // recolours everything, and rebuilds the world
+    else this.buildWorld();
+    this.wake(800);
+  }
+  buildWorld() {
+    const w = this.world;
+    if (!w || !this.house) return;
+    this.worldGroup?.parent?.remove(this.worldGroup);
+    this.worldGroup = new THREE.Group();
+    this.scene.add(this.worldGroup);
+    const cx = this.center.x, cz = this.center.z, R = this.size * 0.85 + 4;
+    // sky tint on the ground: warm at golden hour, dark blue at night
+    const tint = { day: ['#9cc4e4', 0.035], golden: ['#ffb35c', 0.07], twilight: ['#6b74c8', 0.07], night: ['#071226', 0.3] }[w.phase] || null;
+    if (tint && !this.nv) {
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(R * 1.5, 64), new THREE.MeshBasicMaterial({ color: tint[0], transparent: true, opacity: tint[1], depthWrite: false }));
+      disc.rotation.x = -Math.PI / 2; disc.position.set(cx, -0.02, cz);
+      this.worldGroup.add(disc);
+    }
+    // compass: N on the ground
+    const [nx, nz] = planDir(0, w.northDeg || 0);
+    const n = textSprite('N', this.c.muted, 0.6);
+    n.position.set(cx + nx * R, 0.3, cz + nz * R);
+    const tick = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(cx + nx * (R - 1.2), 0.01, cz + nz * (R - 1.2)), new THREE.Vector3(cx + nx * (R - 0.4), 0.01, cz + nz * (R - 0.4))]), new THREE.LineBasicMaterial({ color: this.c.muted, transparent: true, opacity: 0.8 }));
+    this.worldGroup.add(n, tick);
+    this.compass = n;
+    // the sun where it really is, and the shadow the house casts
+    this.sunObj = null; this.shadowMesh = null;
+    if (w.sun && w.sun.altitude > -0.833) {
+      const [sx, sz] = planDir(w.sun.azimuth, w.northDeg || 0), alt = (Math.max(0, w.sun.altitude) * Math.PI) / 180;
+      const dist = R * 1.25 + 4, p = new THREE.Vector3(cx + sx * dist * Math.cos(alt), dist * Math.sin(alt) + 0.5, cz + sz * dist * Math.cos(alt));
+      const col = new THREE.Color(w.sun.altitude < 6 ? '#ffae5c' : '#ffe2a0');
+      const sun = new THREE.Mesh(new THREE.SphereGeometry(0.55, 20, 14), new THREE.MeshBasicMaterial({ color: col }));
+      sun.position.copy(p);
+      const halo = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.05, 40), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+      halo.position.copy(p); halo.lookAt(cx, 0, cz);
+      const label = textSprite(`SUN ${Math.round(w.sun.altitude)}°`, col, 0.32);
+      label.position.copy(p).add(new THREE.Vector3(0, 1, 0));
+      this.worldGroup.add(sun, halo, label);
+      this.sunObj = sun;
+      this.buildShadow(shadowVector(w.sun, w.northDeg || 0), w.weather?.cloud ?? 0);
+    }
+    this.buildWeather();
+    this.layout();
+  }
+  /** One shadow for the whole house, drawn into a picture so overlapping rooms don't double up. */
+  buildShadow(sv, cloud) {
+    if (!sv) return;
+    const polys = [];
+    this.house.floors.forEach((f, i) => { const base = this.floorBase(i); for (const r of f.rooms) { const p = shadowPolygon(r.points, base + (r.height ?? f.height), sv); if (p) polys.push(p); } });
+    if (!polys.length) return;
+    const all = polys.flat(), xs = all.map((p) => p[0]), ys = all.map((p) => p[1]);
+    const x0 = Math.min(...xs) - 1, y0 = Math.min(...ys) - 1, w = Math.max(...xs) + 1 - x0, h = Math.max(...ys) + 1 - y0;
+    const px = Math.min(1024, this.q.faces ? 1024 : 512), sc = px / Math.max(w, h);
+    const c = document.createElement('canvas'); c.width = Math.ceil(w * sc); c.height = Math.ceil(h * sc);
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; // white = shadow (used as the transparency mask)
+    for (const p of polys) { g.beginPath(); p.forEach(([x, y], k) => g[k ? 'lineTo' : 'moveTo']((x - x0) * sc, (y - y0) * sc)); g.closePath(); g.fill(); }
+    const strength = Math.max(0.14, (this.nv ? 0.35 : 0.42) * (1 - Math.min(90, cloud) / 110)); // clouds soften shadows
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: new THREE.CanvasTexture(c), transparent: true, opacity: strength, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x0 + w / 2, 0.012, y0 + h / 2);
+    this.shadowMesh = m;
+    this.worldGroup.add(m);
+  }
+  /** Rain or snow falling over the house, cloud shadows drifting across, lightning in a storm. */
+  buildWeather() {
+    const wx = this.world?.weather;
+    this.rain = null; this.clouds = [];
+    if (!wx || this.world.effects === false) return;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cx = this.center.x, cz = this.center.z, S = this.size * 0.7 + 3, top = this.floorBase(this.house.floors.length) + 5;
+    const count = reduced ? 0 : particleCount(this.qName, wx.kind, wx.precip);
+    if (count) {
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) { pos[i * 3] = cx + (Math.random() * 2 - 1) * S; pos[i * 3 + 1] = Math.random() * top; pos[i * 3 + 2] = cz + (Math.random() * 2 - 1) * S; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const snow = wx.kind === 'snow';
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: snow ? '#f2f6ff' : this.nv ? '#9dffbf' : '#9fc8ff', size: snow ? 0.12 : 0.07, transparent: true, opacity: snow ? 0.85 : 0.55, depthWrite: false }));
+      this.worldGroup.add(pts);
+      this.rain = { pts, snow, top, cx, cz, S, speed: snow ? 1.2 : 11, drift: (wx.wind || 0) * 0.03 };
+    }
+    const cloud = wx.cloud ?? 0;
+    if (cloud >= 40 && this.world.phase !== 'night' && !reduced) {
+      const tex = blobTexture();
+      const n = cloud >= 85 ? 5 : cloud >= 65 ? 4 : 3;
+      for (let i = 0; i < n; i++) {
+        const r = S * (0.35 + Math.random() * 0.35);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 1.4), new THREE.MeshBasicMaterial({ map: tex, color: 0x000000, transparent: true, opacity: 0.1 + (cloud / 100) * 0.12, depthWrite: false }));
+        m.rotation.x = -Math.PI / 2; m.position.set(cx + (Math.random() * 2 - 1) * S, 0.015, cz + (Math.random() * 2 - 1) * S);
+        this.worldGroup.add(m);
+        this.clouds.push({ m, v: 0.4 + Math.random() * 0.5 + (wx.wind || 0) * 0.02 });
+      }
+    }
+    this.storm = wx.kind === 'storm' && !reduced ? { next: performance.now() + 4000 } : null;
+  }
+  animateWorld(now, dt) {
+    if (this.rain) {
+      const r = this.rain, a = r.pts.geometry.attributes.position, arr = a.array;
+      for (let i = 0; i < arr.length; i += 3) {
+        arr[i + 1] -= r.speed * dt * (0.8 + ((i * 7) % 10) / 25);
+        if (r.snow) arr[i] += Math.sin(now / 900 + i) * dt * 0.3;
+        arr[i] += r.drift * dt;
+        if (arr[i + 1] < 0) { arr[i + 1] = r.top; arr[i] = r.cx + (Math.random() * 2 - 1) * r.S; arr[i + 2] = r.cz + (Math.random() * 2 - 1) * r.S; }
+      }
+      a.needsUpdate = true;
+    }
+    for (const c of this.clouds || []) { c.m.position.x += c.v * dt; if (c.m.position.x > this.center.x + this.size + 6) c.m.position.x = this.center.x - this.size - 6; }
+    if (this.storm && now > this.storm.next) {
+      this.storm.next = now + 6000 + Math.random() * 9000;
+      this.box.classList.add('lightning');
+      setTimeout(() => this.box.classList.remove('lightning'), 180);
+    }
+    if (this.cine) {
+      this.cine.a += dt * 0.12;
+      const r = this.size * 1.15 + 7, h = r * 0.5 + 2 + Math.sin(this.cine.a * 0.6) * 1.5;
+      this.camera.position.set(this.center.x + Math.cos(this.cine.a) * r, h, this.center.z + Math.sin(this.cine.a) * r);
+      this.controls.target.set(this.center.x, 1.2, this.center.z);
+    }
+  }
+  /** CINEMATIC: the camera slowly circles the house (until you touch something). */
+  cinematic(on) {
+    if (on && !this.cine) {
+      const d = this.camera.position.clone().sub(this.center);
+      this.flight = null;
+      this.cine = { a: Math.atan2(d.z, d.x) };
+      if (this.explodeTarget) this.setExplode(false);
+    } else if (!on && this.cine) { this.cine = null; this.frame(); }
+    this.wake(1000);
+  }
+
   /** Show all floors (-1) or just one; floors above the chosen one are hidden. */
   showFloor(i) { this.floorSel = i; this.layout(); this.frame(i); }
   setExplode(on) { this.explodeTarget = on ? 1 : 0; this.wake(2000); }
@@ -243,6 +383,7 @@ export class Map3D {
       g.traverse((o) => { if (o.material && o.userData.baseOpacity == null) o.userData.baseOpacity = o.material.opacity; if (o.material) o.material.opacity = o.userData.baseOpacity * (dim ? 0.25 : 1); });
       g.position.y = g.userData.base + i * this.explode * 3.2;
     });
+    if (this.shadowMesh) this.shadowMesh.visible = this.explode < 0.05 && (this.floorSel < 0 || this.floorSel === this.floorGroups.length - 1);
   }
 
   // ---------- Agents ----------
@@ -389,8 +530,9 @@ export class Map3D {
   loop(now) {
     this.raf = requestAnimationFrame(this.loop);
     if (document.hidden || !this.box.isConnected || !this.box.offsetParent) return;
-    const busy = now < (this.activeUntil || 0) || this.effects.length || this.flight || Math.abs(this.explode - this.explodeTarget) > 0.001;
-    if (now - this.last < 1000 / (busy ? this.q.fps : 4)) return;
+    const busy = now < (this.activeUntil || 0) || this.effects.length || this.flight || this.cine || Math.abs(this.explode - this.explodeTarget) > 0.001;
+    const ambient = !busy && (this.rain || this.clouds?.length); // rain, snow and clouds tick over more gently
+    if (now - this.last < 1000 / (busy ? this.q.fps : ambient ? Math.min(20, this.q.fps) : 4)) return;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     if (Math.abs(this.explode - this.explodeTarget) > 0.001) {
@@ -427,6 +569,7 @@ export class Map3D {
       if (fx.kind === 'marker') fx.obj.scale.setScalar(1 + 0.35 * Math.sin(k * Math.PI));
       return true;
     });
+    this.animateWorld(now, dt);
     this.idle?.(now);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
@@ -440,6 +583,18 @@ export class Map3D {
     this.renderer.domElement.remove();
     if (window.__map3d === this) window.__map3d = null;
   }
+}
+
+/** A soft round blob (cloud shadows). */
+let blob = null;
+function blobTexture() {
+  if (blob) return blob;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  blob = new THREE.CanvasTexture(c);
+  return blob;
 }
 
 /** A text label that always faces the camera. */

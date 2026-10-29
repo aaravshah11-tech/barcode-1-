@@ -5,6 +5,8 @@ import { THEMES } from '../shared/themes.js';
 import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 import { voicePrefs, setVoicePrefs, voiceSupported, PRIVACY } from './voice.js';
 import { geocodeUrl, roughly } from '../shared/weather.js';
+import { NORTH_OPTIONS } from '../shared/world.js';
+import { worldPrefs, setWorldPrefs } from './world.js';
 
 const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts']];
 const extraTabs = {}; // filled in by alerts.js
@@ -52,6 +54,14 @@ function general(body, S, onChange) {
     <ul class="loc-results" data-locresults></ul>
     <p class="help">Only the town’s rough position (to about 1 km) is sent to Open-Meteo, a free weather service, to get the forecast. Sunrise and sunset are worked out on this computer.</p>
     <label class="field row" style="margin-top:8px"><input type="checkbox" data-briefingauto ${st.briefingAuto !== false ? 'checked' : ''}><span style="margin:0">Show the Mission Briefing (yesterday’s summary) the first time HQ is opened each morning</span></label>
+    ${hr}<h2 style="margin-bottom:8px">Live world (3D map)</h2>
+    <div class="row" style="flex-wrap:wrap;gap:12px">
+      <label class="field" style="margin:0"><span>Top of my floor plan faces</span><select data-north>${NORTH_OPTIONS.map(([v, l]) => `<option value="${v}" ${Number(st.northDeg || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field" style="margin:0"><span>Night vision (this device)</span><select data-nv>${[['auto', 'Automatic after sunset'], ['on', 'Always'], ['off', 'Off']].map(([v, l]) => `<option value="${v}" ${worldPrefs(S.mode).nv === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field" style="margin:0"><span>Cinematic mode when idle (this device)</span><select data-cine>${[[0, 'Off'], [2, 'After 2 minutes'], [5, 'After 5 minutes'], [10, 'After 10 minutes']].map(([v, l]) => `<option value="${v}" ${worldPrefs(S.mode).cineMin === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div>
+    <label class="field row" style="margin-top:10px"><input type="checkbox" data-weatherfx ${worldPrefs(S.mode).weatherFx ? 'checked' : ''}><span style="margin:0">Show rain, snow and cloud shadows on the 3D map (this device; untick on a slow laptop)</span></label>
+    <p class="help">The sun and the house’s shadow follow the real sun for your location. Set which way the top of your floor plan faces so the shadows fall the right way (a compass shows N on the map).</p>
     ${hr}<h2 style="margin-bottom:8px">Voice commands (this device)</h2>
     ${voiceSupported() ? `<label class="field row"><input type="checkbox" data-voiceon ${voicePrefs().on ? 'checked' : ''}><span style="margin:0">Push-to-talk voice commands: hold the microphone button at the top (or the V key) and speak, e.g. “switch to night mode”.</span></label>
       <label class="field row"><input type="checkbox" data-voicereply ${voicePrefs().reply ? 'checked' : ''}><span style="margin:0">Answer out loud</span></label>
@@ -119,6 +129,10 @@ function general(body, S, onChange) {
       () => toast('Location not allowed. Search for your town instead.', { kind: 'err' }), { timeout: 15000, maximumAge: 3600000 });
   });
   $('[data-locclear]', body)?.addEventListener('click', () => setLoc(null));
+  $('[data-north]', body).addEventListener('change', async (e) => { try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { northDeg: Number(e.target.value) } })); toast('Saved'); } catch (x) { toast(x.message, { kind: 'err' }); } });
+  $('[data-nv]', body).addEventListener('change', (e) => setWorldPrefs({ nv: e.target.value }, S.mode));
+  $('[data-cine]', body).addEventListener('change', (e) => setWorldPrefs({ cineMin: Number(e.target.value) }, S.mode));
+  $('[data-weatherfx]', body).addEventListener('change', (e) => setWorldPrefs({ weatherFx: e.target.checked }, S.mode));
   $('[data-briefingauto]', body).addEventListener('change', async (e) => { try { onChange?.(await S.api('/settings', { method: 'PATCH', body: { briefingAuto: e.target.checked } })); } catch (x) { toast(x.message, { kind: 'err' }); } });
   $('[data-pin]', body).addEventListener('submit', async (e) => {
     e.preventDefault();

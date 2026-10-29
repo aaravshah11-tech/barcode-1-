@@ -1,6 +1,7 @@
 // WEATHER (runs on the HQ computer): asks Open-Meteo for the forecast every 15 minutes, once a
 // location is set in Settings. Only the town's rough position (about 1 km) is sent.
 import { forecastUrl, parseWeather } from '../../shared/weather.js';
+import { rainAlert, roundMinutes } from '../../shared/world.js';
 
 const EVERY = 15 * 60000;
 
@@ -23,6 +24,11 @@ export function startWeather({ hq, db }) {
         const w = { ...parseWeather(await r.json(), hq.now()), place: loc.name };
         hq.weather = w;
         db.setSetting('weather', w);
+        // "PRECIPITATION INBOUND – 20 MIN", once per wet spell
+        const prev = db.getSetting('rainAlert', null);
+        const ra = rainAlert(prev, w);
+        if (ra.state !== prev) db.setSetting('rainAlert', ra.state);
+        if (ra.alert != null) hq.logEvent({ kind: 'system', level: 'warn', message: `${w.kind === 'snow' || w.next.some((x) => [71, 73, 75, 77, 85, 86].includes(x.code)) ? 'SNOW' : 'PRECIPITATION'} INBOUND – ${roundMinutes(ra.alert)} MIN · ${loc.name}` });
         hq.broadcast({ t: 'weather', weather: w });
         return w;
       } catch (e) {

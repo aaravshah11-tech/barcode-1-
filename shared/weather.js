@@ -23,6 +23,7 @@ export function forecastUrl(lat, lon) {
     latitude: roughly(lat), longitude: roughly(lon),
     current: 'temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation,cloud_cover,is_day',
     hourly: 'precipitation_probability,precipitation,weather_code', forecast_hours: '6',
+    minutely_15: 'precipitation', forecast_minutely_15: '8', // the next 2 hours in 15-minute steps (for rain alerts)
     daily: 'temperature_2m_max,temperature_2m_min', forecast_days: '1',
     timezone: 'auto', wind_speed_unit: 'mph',
   });
@@ -40,7 +41,10 @@ export function parseWeather(j, now = Date.now()) {
   const next = (h.time || []).map((s, i) => ({ t: t(s), prob: h.precipitation_probability?.[i] ?? null, mm: h.precipitation?.[i] ?? 0, code: h.weather_code?.[i] ?? null }))
     .filter((x) => x.t + 3600000 > now).slice(0, 6);
   const wetNow = WET.has(weatherKind(c.weather_code)) || (c.precipitation || 0) > 0;
-  const firstWet = next.find((x) => x.mm >= 0.2 || (x.prob ?? 0) >= 60 || WET.has(weatherKind(x.code)));
+  // 15-minute steps are more precise for "rain in 20 minutes" (where the service has them)
+  const m15 = (j.minutely_15?.time || []).map((s, i) => ({ t: t(s), mm: j.minutely_15.precipitation?.[i] ?? 0 })).filter((x) => x.t + 900000 > now);
+  const wet15 = m15.find((x) => x.mm >= 0.1);
+  const firstWet = wet15 || next.find((x) => x.mm >= 0.2 || (x.prob ?? 0) >= 60 || WET.has(weatherKind(x.code)));
   return {
     at: now, temp: Math.round(c.temperature_2m), feels: Math.round(c.apparent_temperature ?? c.temperature_2m),
     code: c.weather_code, text: describe(c.weather_code), kind: weatherKind(c.weather_code),
