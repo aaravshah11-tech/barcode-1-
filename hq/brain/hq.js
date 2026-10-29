@@ -11,6 +11,7 @@ import { cleanShips } from '../../shared/feeds.js';
 import { Ops } from './ops.js';
 import { Analytics } from './analytics.js';
 import { Tamper } from './tamper.js';
+import { NetSecurity } from './network.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -47,6 +48,7 @@ export class HQ extends Emitter {
     this.ops = new Ops({ hq: this, db }); // triage queue + incidents
     this.analytics = new Analytics({ hq: this, db }); // correlation rules + pattern of life
     this.tamper = new Tamper({ hq: this, db }); // moved, covered, unplugged, fast drain, unexpected offline
+    this.net = new NetSecurity({ hq: this, db }); // asset register, network alerts, health check
     this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
@@ -265,7 +267,7 @@ export class HQ extends Emitter {
     if (typeof status.since === 'number' && status.since <= this.now() + 60000) clean.since = status.since; // when the Agent page started
     if (typeof status.net === 'string') clean.net = status.net.slice(0, 12); // e.g. "4g", "wifi"
     if (typeof status.downlink === 'number') clean.downlink = Math.max(0, Math.min(10000, Math.round(status.downlink * 10) / 10));
-    const prevCharging = o.status?.charging;
+    const prevCharging = o.status?.charging, prevNet = o.status?.net;
     o.status = { ...o.status, ...clean, at: this.now() };
     const patch = { lastSeen: this.now() };
     if ('battery' in clean) patch.battery = clean.battery;
@@ -284,7 +286,7 @@ export class HQ extends Emitter {
     }
     this.db.updateAgent(agentId, patch);
     this.pushAgent(agentId);
-    if ('charging' in clean || 'battery' in clean) this.emit('agentStatus', agentId, { prevCharging, status: o.status });
+    if ('charging' in clean || 'battery' in clean || 'net' in clean) this.emit('agentStatus', agentId, { prevCharging, prevNet, status: o.status });
   }
   diagAll() { return this.db.getSetting('diag', {}) || {}; }
   /** Everything the Agent window's Diagnostics section shows. */

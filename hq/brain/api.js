@@ -45,6 +45,18 @@ export function makeApi({ hq, db, auth }) {
       for (const id of ids) { try { done.push(ops.act(id, body.action, { by, reason: body.reason })); } catch { /* already handled */ } }
       return { done: done.length };
     }
+    // ----- network security -----
+    const ns = hq.net;
+    if (p === '/network/assets' && m === 'GET') return ns.assets();
+    if (p === '/network/assets' && m === 'POST') return ns.saveAsset({ ...body, id: null }, by);
+    am = p.match(/^\/network\/assets\/([\w-]{1,64})$/);
+    if (am && m === 'PUT') return ns.saveAsset({ ...body, id: am[1] }, by);
+    if (am && m === 'DELETE') return ns.deleteAsset(am[1], by);
+    if (p === '/network/import' && m === 'POST') return ns.importList(String(body.text || '').slice(0, 200000), by);
+    if (p === '/network/health' && m === 'GET') return ns.health();
+    if (p === '/network/checks' && m === 'PUT') return ns.setAnswers(body.answers);
+    if (p === '/network/history' && m === 'GET') return ns.history();
+
     // ----- analysis: correlation rules + pattern of life -----
     const an = hq.analytics;
     if (p === '/rules' && m === 'GET') return { rules: an.rules(), matches: an.matches() };

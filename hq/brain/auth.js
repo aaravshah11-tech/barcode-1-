@@ -15,6 +15,8 @@ async function hashPin(pin, salt, iter = ITER) {
 const same = (a, b) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
 const fail = (status, message, extra = {}) => Object.assign(new Error(message), { status, ...extra });
 export const cleanCodename = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9 _-]/g, '').slice(0, 24);
+/** 'weak' for anything shorter than 6 characters. */
+export const pinStrength = (p) => (String(p || '').length < 6 ? 'weak' : 'ok');
 const validPin = (p) => String(p || '').length >= 4 && String(p || '').length <= 64; // a PIN or a password
 
 export function makeAuth({ db, now = () => Date.now(), idleMin = () => 15 }) {
@@ -47,7 +49,7 @@ export function makeAuth({ db, now = () => Date.now(), idleMin = () => 15 }) {
       if (c.length < 2) throw fail(400, 'Choose a username (2–24 letters or numbers).');
       if (!validPin(pin)) throw fail(400, 'The PIN or password must be at least 4 characters.');
       const salt = crypto.getRandomValues(new Uint8Array(16));
-      db.setSetting('director', { codename: c, salt: b64url(salt), hash: await hashPin(pin, salt), iter: ITER, createdAt: now() });
+      db.setSetting('director', { codename: c, salt: b64url(salt), hash: await hashPin(pin, salt), iter: ITER, createdAt: now(), strength: pinStrength(pin) });
       return { ok: true, codename: c };
     },
     /** Returns a new session key if the codename and PIN are right. */
@@ -63,7 +65,7 @@ export function makeAuth({ db, now = () => Date.now(), idleMin = () => 15 }) {
       if (c.length < 2) throw fail(400, 'Choose a username (2–24 letters or numbers).');
       if (newPin != null && newPin !== '' && !validPin(newPin)) throw fail(400, 'The new PIN or password must be at least 4 characters.');
       const salt = crypto.getRandomValues(new Uint8Array(16));
-      db.setSetting('director', { ...r, codename: c, ...(newPin ? { salt: b64url(salt), hash: await hashPin(newPin, salt), iter: ITER } : {}) });
+      db.setSetting('director', { ...r, codename: c, ...(newPin ? { salt: b64url(salt), hash: await hashPin(newPin, salt), iter: ITER, strength: pinStrength(newPin) } : {}) });
       sessions.clear(); // everyone logs in again
       return { ok: true, codename: c };
     },
