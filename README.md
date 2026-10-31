@@ -1,279 +1,277 @@
-# SENTINEL // HQ
+# SENTINEL
 
-A spy-themed home command centre. Your computer is **HQ**. Old phones and tablets become **Agents** that HQ sends on missions: watching for motion, guarding a door, listening for loud noises, acting as a doorbell or a wall display.
+**A household security operations console that runs in your web browser.** Your computer is **HQ**. Old phones and tablets become **Agents** that watch for motion, guard a door, listen for loud noises, act as a door panel or a wall display. HQ brings it all together the way a professional security operations centre would: an alert triage queue, incidents with reference numbers, correlation rules, coverage maps, reports, access control and an audit trail.
 
-- **Everything stays at home.** HQ is one Node.js program with a SQLite database on your computer. There's no cloud account and no subscription.
-- **£0 hardware.** You use devices you already own. Add as many Agents as you like; each takes under a minute.
-- **Private by design.** Cameras and microphones are only used *on the Agent*. HQ only ever receives events like "Motion detected" or "Loud sound: 72 dB", never pictures, video or audio.
+Open it here: **<https://aaravshah11-tech.github.io/barcode-1-/hq/>**
 
-> Looking for HomeBase? It is archived on the [`homebase-archive`](../../tree/homebase-archive) branch. See [HomeBase](#homebase-the-old-app) at the end.
+- **Nothing to install.** HQ, Agents and your phone are all web pages.
+- **Everything stays at home.** HQ keeps its data in your computer's browser, **encrypted**. No cloud account, no subscription.
+- **Private by design.** Cameras and microphones are used *on the Agent only*. HQ receives events like "Motion detected" — never pictures, video or audio.
+- **Yours only.** Nobody can see anything without signing in, and every sign-in and change is written to a tamper-evident audit log.
+
+> SENTINEL takes its *style* from professional security operations software. It does not use the name, crest or branding of any real agency.
 
 ---
 
 ## Contents
 
-1. [Starting HQ](#1-starting-hq)
-2. [Recruiting a new Agent](#2-recruiting-a-new-agent)
-3. [Assigning missions](#3-assigning-missions)
-4. [Who's home (Wi-Fi recon)](#4-whos-home-wi-fi-recon)
-5. [Alerts on your phone](#5-alerts-on-your-phone)
-6. [Away from home (Tailscale)](#6-away-from-home-tailscale)
-7. [Threat level and the Mission Log](#7-threat-level-and-the-mission-log)
-8. [Privacy rules](#8-privacy-rules)
-9. [Troubleshooting](#9-troubleshooting)
-10. [For tinkerers](#10-for-tinkerers)
+1. [The screens at a glance](#1-the-screens-at-a-glance)
+2. [First start](#2-first-start)
+3. [Recruiting Agents](#3-recruiting-agents)
+4. [Operations: the main screen](#4-operations-the-main-screen)
+5. [Triage and incidents](#5-triage-and-incidents)
+6. [Analysis: correlation rules and pattern of life](#6-analysis-correlation-rules-and-pattern-of-life)
+7. [Coverage, tamper detection and the Agent register](#7-coverage-tamper-detection-and-the-agent-register)
+8. [Network security](#8-network-security)
+9. [Reports](#9-reports)
+10. [Access control, audit log and shift log](#10-access-control-audit-log-and-shift-log)
+11. [Data and resilience](#11-data-and-resilience)
+12. [Your phone](#12-your-phone)
+13. [Keyboard shortcuts](#13-keyboard-shortcuts)
+14. [Privacy rules](#14-privacy-rules)
+15. [What a browser can't do (honest limits)](#15-what-a-browser-cant-do-honest-limits)
+16. [Troubleshooting](#16-troubleshooting)
+17. [For tinkerers](#17-for-tinkerers)
+
+**What's new?** Open **Settings › What's new** in HQ for the changelog of every update.
 
 ---
 
-## 1. Starting HQ
+## 1. The screens at a glance
 
-**You need:** a computer that stays on at home (Mac, Windows, Linux or a Raspberry Pi 4/5) with **Node.js 22.13 or newer**. Get Node from <https://nodejs.org> (choose "LTS").
+Every screen has a classification banner at the top and bottom (**SENTINEL // RESTRICTED – HOUSEHOLD**) and a status bar along the bottom: who is signed in, their role, session time, the alert state, UTC and local time, HQ health and how many Agents are online.
 
-```bash
-# once: download SENTINEL and install its two small helpers
-git clone https://github.com/aaravshah11-tech/barcode-1-.git sentinel
-cd sentinel
-npm install
+The rail on the left switches between screens (or press **1–9**):
 
-# every time: start HQ
-npm start
-```
-
-You'll see:
-
-```
-  ███ SENTINEL // HQ ONLINE ███
-
-  Command Centre (on this computer):  https://localhost:8443
-  Command Centre (other devices):     https://192.168.1.10:8443
-  Phone setup page (certificate):     http://192.168.1.10:8080
-```
-
-1. **On the HQ computer**, open **https://localhost:8443**. The browser may warn about the certificate the first time. That's expected (see *Why the certificate?* below); choose *Advanced → Proceed*.
-2. **Choose a password.** This can only be done on the HQ computer itself, so nobody else on your Wi-Fi can claim HQ first.
-3. Enjoy the boot sequence. You're in the **Command Centre**: radar, Agents, Mission Log, who's home and the threat level.
-
-Keep the Terminal window open; **Ctrl + C** stops HQ.
-
-### Start automatically
-
-```bash
-npm run autostart          # start HQ when the computer starts, and restart it if it ever stops
-npm run autostart -- remove
-```
-
-This works on macOS and Linux (including a Raspberry Pi). On Windows it prints the one command to paste. On a Pi, also run `sudo loginctl enable-linger $USER` (the script reminds you) so HQ starts even before anyone logs in.
-
-### Why the certificate?
-
-Phones only allow camera, motion sensors, "keep screen on" and installable apps on **secure (HTTPS)** pages. HQ therefore makes its own little certificate authority, **"SENTINEL Local CA"**, the first time it starts. It's stored in `data/certs` and never leaves your computer. Each phone trusts it once (step 2 below), and from then on everything has a padlock.
-
-- To stop the warning on the HQ computer too: run `npm run cert` and follow what it prints. On a Mac that's: open the `.crt` → Keychain Access → double-click *SENTINEL Local CA* → *Trust* → *Always Trust*.
-- If you have [mkcert](https://github.com/FiloSottile/mkcert) installed, HQ uses it instead and trusts itself on the HQ computer automatically.
-- If your computer's address changes, HQ adds the new address to its certificate the next time it starts. Phones don't need to do anything again.
-
-### Forgot the password?
-
-```bash
-npm run reset-password
-```
-
-Then open https://localhost:8443 on the HQ computer and choose a new one. Your Agents and log are kept.
+| Screen | What it's for |
+|---|---|
+| **Operations** | The live picture: 3D site map, alert state, Agents, alert queue, event log, messages, network, situation. Panels can be moved, resized and saved as layouts. |
+| **Triage** | Every alert that needs a decision. Acknowledge, escalate, dismiss (with a reason) or turn it into an incident. |
+| **Incidents** | Cases with reference numbers (INC-2026-0042), status, assignee, notes, linked alerts, a timeline and playback on the map. |
+| **Analysis** | Correlation rules and the household's pattern of life. |
+| **Coverage** | What each Agent can see, blind spots, and outside doors/windows with no sensor. |
+| **Agents** | The Agent register: hardware, mission history, uptime, calibration, tamper history, notes. |
+| **Network** | Asset register of your home network, the health check, and internet history. |
+| **Reports** | Today's SITREP, the report archive (PDF) and the report builder. |
+| **Shift log** | Notes and handover notes for whoever takes over. |
+| **Access** *(Director)* | Users and roles, sessions, two-step sign-in, the audit log. |
+| **Data** *(Director)* | Encryption, backups, retention, evidence export, HQ downtime record. |
 
 ---
 
-## 2. Recruiting a new Agent
+## 2. First start
 
-Any old phone or tablet with a camera and a browser will do: iPhone/iPad (Safari) or Android (Chrome). Connect it to your **home Wi-Fi** first.
+1. On the computer that will be HQ (it should stay on at home), open **<https://aaravshah11-tech.github.io/barcode-1-/hq/>** in Chrome, Edge, Safari or Firefox.
+2. **Create the Director account**: a username and a PIN or password (at least 4 characters; 6 or more is better). Only a salted hash is stored.
+3. You're in. Keep this tab open — while it is open, HQ is guarding the house. Closing the screen lock (**Shift+L**) doesn't stop it.
 
-**On HQ:** press **＋ RECRUIT**. A QR code and a 6-character code appear, valid for 10 minutes and usable once.
+**Try it:** press **Ctrl+K** (⌘K on a Mac) and type "away". The command palette finds *Set AWAY*. Press **?** to see every shortcut.
 
-**On the old phone:**
-
-1. **Scan the QR code** with the camera app. This opens HQ's *setup page*.
-2. **First time only: trust HQ's certificate.** The setup page detects your phone and shows the exact steps. They look like this:
-   - **iPhone / iPad:** tap **Download HQ certificate** → *Allow*. Open **Settings** → **Profile Downloaded** → **Install** (enter passcode) → **Install** → **Done**. Then **Settings → General → About → Certificate Trust Settings** → switch on **SENTINEL Local CA** → **Continue**.
-   - **Android:** tap **Download HQ certificate**. Open **Settings**, search **"CA certificate"** (usually *Security → More security settings → Encryption & credentials → Install a certificate → CA certificate*) → **Install anyway** → pick **SENTINEL-HQ.crt** from Downloads.
-   - Go back to the browser and tap **Done — continue**.
-3. The page checks it can reach HQ securely and **pairs automatically**. A second or two later the Agent says **"SENTINEL AGENT ACTIVE – STANDBY"**, and a new blip appears on HQ's radar with a codename like **AGENT-03 "FALCON"**.
-4. **Install it as an app** (recommended): *iPhone:* Share → **Add to Home Screen**. *Android:* ⋮ → **Install app** / **Add to Home screen**. Open it from the Home Screen from now on.
-5. Put the phone **on charge** and leave the SENTINEL screen open. It keeps the screen awake and dims itself after a minute; tap to brighten.
-
-QR code won't scan (or no camera)? On the device open the `http://…:8080` address shown in the Recruit window and type the 6-character code.
-
-**Security:** an Agent gets its own secret key when it pairs. Every order from HQ is signed with that key, and the Agent ignores anything unsigned, old or replayed, so it only takes orders from *its* HQ. "Disconnect" on HQ cancels the key immediately.
+**Recommended next:** Settings › General › set your town (for weather and sunrise), then **Ctrl+K › Two-step sign-in** to protect your account with an authenticator app.
 
 ---
 
-## 3. Assigning missions
+## 3. Recruiting Agents
 
-On HQ, **click an Agent** (in the list or its blip on the radar). The drawer lets you:
+1. On HQ press **Recruit** (top right). A QR code appears.
+2. On the old phone, scan it with the camera. The Agent page opens and joins HQ in a couple of seconds.
+3. The Agent appears in **Operations › Agents**. Click it to give it a mission:
 
-- **Rename** it (codename and a place, e.g. "Hallway").
-- **Change mission** and its settings. The Agent switches within a second.
-- **Find**: makes it flash, beep and vibrate so you can spot it.
-- **Wake / Reload** its screen, or **Disconnect** it for good.
+| Mission | What it does |
+|---|---|
+| **Motion watch** | Spots movement with the camera. You can mark *ignore zones* (TVs, windows). |
+| **Door tripwire** | Stick the phone on a door: it reports opened/closed using its motion sensor. |
+| **Sound level** | Reports loud noises (as a number of decibels — no audio). |
+| **Light check** | Notices lights being switched on or off. |
+| **Door panel** | A big button visitors can press. |
+| **Intel screen** | A read-only wall display of the situation. |
 
-| Mission | What it does | Tips |
-|---|---|---|
-| **STANDBY** | Connected, waiting for orders. | |
-| **MOTION WATCH** | Spots movement with the camera. Settings: sensitivity (1–10), cooldown, back/front camera, **ignore zones**. | Prop the phone up facing the room. To ignore a TV, window or pet bed, tap **Ignore zones** *on the Agent*, tap the squares, then **Save zones**. Sudden lighting changes are ignored on purpose. |
-| **DOOR TRIPWIRE** | Feels a door swing using the gyroscope. No camera. Settings: opening angle, cooldown, report closing. | Stick the phone flat on the door (Blu Tack or tape), away from the hinge. iPhone: tap **Allow motion sensors** once. Test it by opening the door a little. |
-| **SOUND LEVEL** | Measures loudness in dB. Settings: alert above (dB), how long, cooldown, calibration. | Phone mics differ. Watch the live reading on HQ in a quiet room (~30–40 dB) and adjust *calibration* if it's far off. |
-| **LIGHT CHECK** | Notices lights switched on/off from overall brightness. | Point it at the room, not at a lamp. |
-| **DOOR PANEL** | One big button: a DIY doorbell. Pressing it alerts HQ. | Change the button text, e.g. "RING FOR PIZZA". |
-| **INTEL SCREEN** | Read-only wall display of the radar, threat level and Mission Log. Never dims. | Great for an old tablet on a shelf. |
+Drag an Agent from the list onto the **3D map** to place it in a room (draw your house first with **Floor plan**).
 
-Every Agent always shows a banner: **"SENTINEL AGENT ACTIVE – [mission]"**. There is no hidden mode. A red banner means the camera or microphone is in use *on that device*.
-
-Want to build your own mission? See [`public/agent/missions/README.md`](public/agent/missions/README.md).
+Every Agent always shows the banner **SENTINEL AGENT ACTIVE – [mission]** at the top of its screen. There is no hidden mode.
 
 ---
 
-## 4. Who's home (Wi-Fi recon)
+## 4. Operations: the main screen
 
-Every minute HQ quietly checks which devices are on your Wi-Fi (it reads the computer's ARP table, the list of "this network address belongs to this device"). Phones linked to a person mark that person **HOME**.
-
-**Set it up:** Command Centre → **Who's home → Manage** (or ⚙ → **People**):
-
-1. **Add a person**, e.g. "Mum".
-2. Find their phone in **Devices on your Wi-Fi**. Not sure which one? Turn that phone's Wi-Fi off and on, press **Scan now**, and see which line jumps to the top.
-3. Give the device a name and choose its **owner**. The person shows **HOME**, and the Mission Log says "Mum arrived home".
-4. Untick **Track** to stop tracking someone (e.g. a visitor), and tick **Ignore** for things like the router or the TV.
-
-**Grace period:** phones switch Wi-Fi off to save battery when the screen is off, so a person is only marked **AWAY** after not being seen for **15 minutes** (you can change this under *Timing*).
-
-### Private / random Wi-Fi addresses
-
-To stop shops tracking people, modern phones invent a **random Wi-Fi address (MAC address)** for each network. SENTINEL marks these **PRIVATE ADDRESS**. That's fine as long as the address **stays the same on your home Wi-Fi**:
-
-- **iPhone / iPad:** Settings → Wi-Fi → ⓘ next to your home network → **Private Wi-Fi Address** → set to **Fixed** (iOS 18+) or **Off** (older iOS). Avoid "Rotating".
-- **Android:** Settings → Wi-Fi → your network (⚙) → **Privacy** → **Use device MAC**, or leave *randomised MAC* on (it normally stays the same per network). Avoid "re-randomise each time".
-
-If someone suddenly shows **AWAY** while they're home, look for a new device in the list and give it to them.
-
-**HOME / AWAY switch:** the **AUTO · HOME · AWAY** buttons at the top of the Command Centre override Wi-Fi recon, e.g. set **AWAY** when you go on holiday.
-
-> On a Mac, devices can stay in the ARP list for up to ~20 minutes after leaving, so "left home" may be slower than on Linux/Raspberry Pi.
+- **Alert states** (top bar): **HOME** (activity is only logged), **AWAY** (any activity is an intrusion), **NIGHT** (Agents armed for night raise alerts) and **LOCKDOWN** (everything armed; Agents can sound an alarm). Every change is logged as *"Alert state: AWAY (by MUM) — reason"*.
+- **3D map:** flat-shaded architectural model; rooms change colour only to show status. **Iso** gives an isometric view; **Replay** plays the day back; **Heatmap** shows the busiest rooms.
+- **Edit layout:** drag a panel by its title bar, resize from its corner, **Save as…** to keep it (e.g. "Night watch"). Presets: *Standard*, *Map focus*, *Event review*. On a phone, panels stack in one column.
+- Sounds only play for real alerts. **Panic** is always one hold away.
 
 ---
 
-## 5. Alerts on your phone
+## 5. Triage and incidents
 
-SENTINEL can send notifications to **your own phone** (not the Agents).
+Alerts are raised when something needs a decision: activity while AWAY or at NIGHT, Panic, a failed sign-in, tamper, a new device on the network, an anomaly, a correlation rule. Each has a **severity** (LOW, MEDIUM, HIGH, CRITICAL), its source Agent, room, time, a plain-English reason, and how long it has been waiting. Repeats within a minute are merged (×2, ×3…).
 
-1. On your phone, open the Command Centre (`https://<HQ address>:8443`). This phone also needs the certificate from step 2 of *Recruiting*.
-   - **iPhone:** first **Share → Add to Home Screen**, then open SENTINEL **from the Home Screen** and log in. Apple only allows notifications for Home Screen web apps (iOS 16.4+).
-2. ⚙ → **Alerts** → name the device → **🔔 Turn on alerts here** → **Allow**. A welcome alert arrives.
-3. Choose what you want:
-   - **Motion, door or noise while nobody's home** (on): the important one. It's sent as **THREAT RED** with high priority.
-   - **Someone arrives home** (on) / **leaves home** (off).
-   - **A door is opened** even when someone's home (off).
-   - **Someone presses a DOOR PANEL** (on).
-   - **Loud sound** when someone's home (off).
-   - **An Agent goes offline** (on), e.g. battery died or the phone left the Wi-Fi. HQ waits 20 seconds first so Wi-Fi blips don't count.
-4. **Quiet hours** (e.g. 22:00–07:00): only "nobody's home" alerts get through. Everything is still logged.
+**Try it:** set AWAY, wave at a Motion-watch Agent, then open **Triage**:
 
-Use **Test** to check it works. Each type of alert is sent at most once every 30 seconds.
-
-**How it travels:** HQ encrypts the short text and hands it to your phone's push service (Apple or Google), which delivers it even when you're out. They can't read it. HQ needs an internet connection for this; nothing else needs one.
+- **↑ ↓** choose, **A** acknowledge, **E** escalate, **D** dismiss (pick a reason: false alarm, household member, test…), **I** convert to an incident.
+- In **Incidents**, move the case through **Open → Investigating → Resolved → Closed**, set the assignee, add notes, read the full timeline, and press **Play back on map** to watch just those minutes again.
 
 ---
 
-## 6. Away from home (Tailscale)
+## 6. Analysis: correlation rules and pattern of life
 
-Alerts reach you anywhere. To **open the Command Centre** when you're out, use **Tailscale**: a free, private, encrypted link between *your own* devices. Nothing is opened to the internet, and you don't need to change any router settings.
+**Correlation rules** turn several signals into one conclusion. Example (included): *front door opens → hall motion → a known phone appears, within 60 s = **ARRIVAL (likely: Mum)***. Build your own with **New rule**: choose signals, rooms or Agents, a time window, which alert states it runs in, and whether the result is just logged or sent to Triage. **Test on last 7 days** shows how often it would have fired.
 
-1. Install **Tailscale** on the HQ computer (<https://tailscale.com/download>) and sign in.
-2. Install the **Tailscale** app on your phone and sign in with the **same account**. Turn it on.
-3. On the HQ computer, run **once**:
-   ```bash
-   tailscale serve --bg https+insecure://localhost:8443
-   ```
-   It prints an address like `https://my-mac.tail1234.ts.net`.
-4. Open that address on your phone (with Tailscale on). It has a normal padlock, so no certificate steps are needed. Add it to your Home Screen.
-
-(Alternative: open `https://<HQ's 100.x.y.z Tailscale address>:8443`. This works on phones that already trust the SENTINEL certificate. ⚙ → General shows the address when Tailscale is running.)
-
-To stop it: `tailscale serve --https=443 off`.
+**Pattern of life** learns, over two weeks, when each room is normally active (weekdays and weekends separately). After a week it flags *unusual activity* (e.g. the kitchen at 03:00), *unusually busy* hours and *usual activity missing* — each with a reason and a **confidence %**, straight into Triage.
 
 ---
 
-## 7. Threat level and the Mission Log
+## 7. Coverage, tamper detection and the Agent register
 
-- **GREEN**: all quiet.
-- **AMBER**: activity in the last 5 minutes (motion, door, sound, light or a knock) while someone's home, or when HQ doesn't know.
-- **RED**: activity while **nobody's home**. The reason is shown, e.g. "Motion detected while nobody's home", and stays for 15 minutes.
-
-The **Mission Log** records everything: Agents joining and leaving, missions, motion, doors, arrivals, threat changes. Use the filters to narrow it down.
-
-- Entries older than **30 days are deleted automatically**. Change this in ⚙ → General.
-- **Export** as **CSV** (opens in Excel/Numbers/Sheets) or **JSON** from ⚙ → General.
-- **Scanlines, glitch and typewriter effects** can be switched off in ⚙ → General (this also applies to the Agents). They're also skipped automatically if your device asks for reduced motion.
+- **Coverage:** each camera's field of view is drawn on the floor plan, with the % of every room watched. Rooms under 15% are **blind spots**; outside doors and windows with no sensor are listed as **not watched**. Turn a camera with ⟲ ⟳ and watch the numbers change.
+- **Tamper detection:** an Agent reports if its phone is **moved** (picked up or turned) or its **camera is covered**; HQ notices if it's **unplugged**, its **battery drains fast**, or it goes **offline unexpectedly**. Each goes to Triage with an explanation (HIGH when the house is AWAY/NIGHT/LOCKDOWN).
+- **Agents** (register): hardware (e.g. *Pixel 7 · Android 14 · Chrome*), mission history, location, uptime over 7 and 30 days, last calibration, last tamper and maintenance notes. **Mark calibrated now** records a check.
 
 ---
 
-## 8. Privacy rules
+## 8. Network security
 
-These rules are built in and tested:
+**SENTINEL never scans anything outside your home network — or inside it.** A web page can't look at your Wi-Fi, so the **asset register** is built from:
 
-1. **Camera and microphone data is processed on the Agent only.** No images, video or audio are recorded, saved, streamed or sent, only events such as "motion detected" or "sound level 72 dB". HQ also throws away any long piece of data an Agent sends, so a picture couldn't get through even by mistake. The automated tests check every message.
-2. **Every active Agent shows a visible "SENTINEL AGENT ACTIVE – [mission]" banner.** There is no hidden mode.
-3. **All data stays on HQ** (`data/sentinel.db`). Log entries auto-delete after 30 days (configurable) and can be exported as CSV/JSON. The only things that leave your house are push alerts (encrypted, text only) and, if you set it up, your own Tailscale link.
+1. SENTINEL's own devices (HQ, Agents, linked phones) — listed automatically;
+2. devices you add by hand;
+3. **Import from router:** open your router's admin page (often `192.168.1.1`), copy its *attached devices* table and paste it. Names, IP and MAC addresses are read; the maker is looked up from the MAC; private (randomised) addresses are recognised.
+
+New devices start **untrusted** and raise *New device on your network* alerts. Mark the ones you know as trusted, give them an owner (your phone's owner feeds the ARRIVAL rule). HQ also flags an Agent dropping from Wi-Fi to mobile data, and a linked phone used at an unusual hour.
+
+The **health check** gives a score and plain-English advice (https, PIN length, two-step sign-in, auto-lock, unused phones, untrusted devices, smart-home gadgets) plus a short router checklist (WPA2/3, admin password, firmware, WPS, remote admin, UPnP, guest network). **Internet history** shows 30 days of uptime and response time, every outage and every speed test.
+
+---
+
+## 9. Reports
+
+- **SITREP** (situation report): the last 24 hours in numbered paragraphs — situation, activity, alerts and incidents, analysis, equipment and network, actions. **Download PDF** or **Save to reports**.
+- **Weekly report** (RPT-2026-W44): made automatically every Monday at 07:00 while HQ is open (and a SITREP every morning at 07:00), or press **Weekly report now**.
+- **Report builder:** choose the period, sections, minimum severity, rooms and Agents → **Create report and download PDF** (RPT-2026-0001…).
+
+Every PDF has the classification banner on every page, the reference and *Page X of Y*, key figures, charts (events per day, by room, alerts by severity) and tables. The PDF is made in your browser — nothing is uploaded.
+
+---
+
+## 10. Access control, audit log and shift log
+
+**Roles** — checked by HQ on every request, from the HQ computer and from phones (never just a hidden button):
+
+| Role | Can |
+|---|---|
+| **DIRECTOR** (you) | Everything: users, the audit log, backups, recruiting, data. |
+| **OPERATOR** | Handle alerts and incidents, change the alert state, send messages, run Agents, make reports. |
+| **OBSERVER** | Look at everything allowed, change nothing. |
+
+SENTINEL is for your household only — you decide whether anyone else gets an account (**Access › Add user**).
+
+- **Two-step sign-in:** **Ctrl+K › Two-step sign-in**, scan the QR code with any authenticator app, enter the 6-digit code. From then on sign-in asks for a code after the PIN. Each code works once.
+- **Sessions:** **Access › Sessions** shows who is signed in and from where (*HQ computer*, *Phone "Mum's iPhone"*). End one, or all others. Idle sessions end after the auto-lock time; a phone is signed out the moment its session ends.
+- **Audit log:** **Access › Audit log** lists every sign-in, change and *refused* attempt. Entries are chained by fingerprints (SHA-256), so if anyone edits or deletes one, the screen says **Audit log altered** and which entry. **Export with checksum** saves a CSV plus its SHA-256. PINs and codes are never written to it.
+- **Shift log:** notes, and **handover notes** with an automatic summary (alert state, unhandled alerts, open incidents, offline Agents). The next person to sign in sees it and acknowledges it.
+
+---
+
+## 11. Data and resilience
+
+*(Data screen, Director only)*
+
+- **Encrypted at rest:** everything HQ saves — settings, event log, audit log, floor plans, backups — is sealed with **AES-256-GCM** using a key the browser keeps and won't let anyone copy out. Older data is converted automatically. Links to Agents and phones are encrypted too (HTTPS page, encrypted peer-to-peer connections).
+- **Backups:** made automatically every night after 03:00 (the last 7 are kept) and **test-restored** straight away into a throw-away HQ to prove they work. **Back up now**, **Test again**, **Restore** (recorded in the audit log). **Download encrypted backup file…** seals a copy with a backup password you choose — keep it somewhere else; restore it on any computer with **Restore from a file…**.
+- **Retention:** how long each kind of record is kept. Open alerts and anything in an active incident are always kept; the audit log is kept at least a year.
+- **Evidence:** **Export evidence** (on an incident, or here) saves everything about it as one file with a SHA-256 fingerprint that is also written into the audit log. **Check an evidence file…** proves later that it hasn't been changed.
+- **Watchdog:** HQ records every gap — closed, the computer asleep, a crash or power cut, or a freeze — and restarts itself if it freezes, loses its link for 10 minutes, or hits a burst of errors. Nothing is lost: everything is saved first.
+
+---
+
+## 12. Your phone
+
+**Settings › Phones › Link a phone**, scan the QR code with your phone, then sign in with your username and PIN (and code, if two-step is on). Your phone sees the same console as HQ. If HQ can't be reached for about a minute, the phone shows **HQ UNREACHABLE since 21:14** with a sound and vibration (while the page is open).
+
+Away from home it works over the internet by itself. If your network blocks that, a free [Tailscale](https://tailscale.com) link between your phone and the HQ computer works too.
+
+---
+
+## 13. Keyboard shortcuts
+
+| Keys | Does |
+|---|---|
+| **Ctrl K** / **⌘K** | Command palette — jump anywhere, run anything |
+| **1 – 9** | Switch screen |
+| **?** | All shortcuts |
+| **G** | Global intel (ISS, aircraft, earthquakes, ships) |
+| **M** | Map: 3D / plan |
+| **Shift E** | Edit the workspace layout |
+| **Shift L** | Lock the console |
+| **`** | Terminal |
+| **V** (hold) | Push-to-talk voice command (if switched on) |
+| **↑ ↓ / J K, A, E, D, I** | Triage: choose, acknowledge, escalate, dismiss, incident |
+| **Esc** | Close a window |
+
+Buttons show their shortcut when you hover over them.
+
+---
+
+## 14. Privacy rules
+
+These are built in and covered by the automated tests:
+
+1. **Camera and microphone data is processed on the Agent only.** No images, video or audio are recorded, saved or sent — only events such as "motion detected" or "72 dB". HQ throws away any long piece of data an Agent sends.
+2. **Live view only on demand**, opened from HQ, logged, and the Agent shows a red **LIVE VIEW – HQ IS WATCHING THIS CAMERA** banner the whole time. Nothing is recorded.
+3. **Every active Agent shows "SENTINEL AGENT ACTIVE – [mission]".** There is no hidden mode.
+4. **Your data stays on your HQ computer**, encrypted. Network features never scan anything; they only use what SENTINEL sees, what you add, and what you copy from your own router.
 
 Please only point cameras at your own home, and tell the people who live with you that SENTINEL is running.
 
 ---
 
-## 9. Troubleshooting
+## 15. What a browser can't do (honest limits)
 
-| Problem | Fix |
-|---|---|
-| **"Port 8443 is already in use"** | HQ is already running (maybe started automatically). Close the other one, or use another port: `SENTINEL_HTTPS_PORT=9443 SENTINEL_HTTP_PORT=9080 npm start`. |
-| **Phone can't open the setup page** | Phone and HQ must be on the same Wi-Fi (not "guest" Wi-Fi). Check the address printed by `npm start`. If the guess is wrong (e.g. you have a VPN), set it: `SENTINEL_PUBLIC_IP=192.168.1.10 npm start`. Allow Node through the computer's firewall if asked. |
-| **Setup page keeps saying the certificate isn't trusted** | iPhone: you need **both** steps: install the profile **and** switch it on in *Certificate Trust Settings*. Android: install it as a **CA certificate** (not "VPN & app" or "Wi-Fi"). Then tap *continue* again. |
-| **"That code is wrong, used or expired"** | Codes last 10 minutes and work once. Press **RECRUIT** for a new one. |
-| **Agent shows "RECONNECTING TO HQ"** | Is HQ running? Is the phone on the home Wi-Fi? It retries by itself. If HQ's address changed, open the setup page again. |
-| **Agent shows "This device is not paired"** | It was disconnected on HQ (or HQ's data was deleted). Recruit it again. |
-| **Camera / microphone / motion "blocked"** | Allow it for this site: *iPhone:* Settings → Safari → Camera/Microphone (or the **aA** menu → Website Settings). *Android:* tap the padlock → Permissions. Then press **Reload** in HQ's drawer for that Agent. |
-| **Door tripwire never fires** | Stick the phone flat on the door, well away from the hinge. Lower the *opening angle*. iPhone: tap **Allow motion sensors** on the Agent. |
-| **Too many / too few motion alerts** | Lower or raise *sensitivity*, raise the *cooldown*, add **ignore zones** over TVs, windows and plants. |
-| **Agent screen went to sleep / camera stopped** | Keep SENTINEL open and in front, on charge. iPhone: Settings → Display → Auto-Lock → Never helps. Open it from the Home Screen icon. Don't use Low Power Mode. |
-| **Someone shows AWAY while home** | Their phone probably has a new private address. ⚙ → People → find the new device → give it to them. See *Private / random Wi-Fi addresses*. |
-| **No devices in "Devices on your Wi-Fi"** | HQ must be on the same network as the phones (Wi-Fi or Ethernet to the same router). The status line under *Scan now* explains any error. |
-| **Alerts don't arrive** | Press **Test** in ⚙ → Alerts. The line shows "delivered" or the error. HQ needs internet. *iPhone:* it must be opened from the Home Screen icon, with notifications allowed under Settings → Notifications → SENTINEL. Check Focus / Do Not Disturb. |
-| **Forgot the password** | `npm run reset-password`, then open https://localhost:8443 on the HQ computer. |
-| **Start completely fresh** | Stop HQ and delete the `data` folder. (Phones then need recruiting again, and they'll need the new certificate.) |
+- **No Wi-Fi or port scanning.** Web pages aren't allowed to, so the asset register uses SENTINEL's own devices, your entries and your router's device list.
+- **HQ guards only while its tab is open** on a computer that's awake. The watchdog records every gap and phones warn you, but it can't wake a sleeping computer — set the computer to stay awake.
+- **Encryption at rest** stops anyone reading HQ's stored data or backups, but the key lives in this browser on this computer. Use your computer's disk encryption (FileVault / BitLocker) and a computer password as well.
+- **The audit log is tamper-*evident*:** it shows that something was changed, and where. Keep exported copies (with their checksum) somewhere else for proof.
+- **Tamper "camera covered"** looks for a completely dark, flat picture — a fully dark room with no light at all can look the same.
 
 ---
 
-## 10. For tinkerers
+## 16. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| **"HQ is already open in another tab"** | Only one HQ per browser. Use the other tab, or close it and reload. |
+| **Agent says it can't reach HQ** | Is the HQ tab open and the computer awake? The Agent retries by itself. |
+| **Camera / microphone / motion "blocked"** | Allow it for this site in the phone's browser settings, then press **Reload** on the Agent's card in HQ. |
+| **"Turn on move alerts" button on an iPhone Agent** | Tap it once to allow the motion sensor (needed for tamper "moved"). |
+| **Two-step code refused** | Check the phone's clock is set automatically. Each code works once — wait for the next one. |
+| **Too many motion alerts** | Lower the sensitivity, raise the cooldown, add ignore zones; or write a correlation rule and dismiss single motions as "expected activity". |
+| **Forgot the PIN** | Without the PIN (and with no other Director) HQ can't be unlocked. Restore an encrypted backup file on a fresh browser with your backup password, or start fresh by clearing this site's data in the browser. |
+
+---
+
+## 17. For tinkerers
 
 ```
-server/            HQ (Node.js)
-  index.js         starts everything (npm start)
-  hq.js            the brain: Agents, Mission Log, threat level, pairing, signed orders
-  http.js          web server + API      hub.js     live WebSocket link
-  db.js            SQLite (node:sqlite)  certs.js   HTTPS certificates
-  recon.js         Wi-Fi recon           alerts.js  web push alerts
-public/
-  dashboard/       the Command Centre    agent/     the Agent app + missions/
-  setup/           the "trust this HQ" page (plain HTTP, port 8080)
-  shared/          theme, radar, logo, mission list, helpers
-scripts/           cert, autostart, reset-password, make-icons
-tests/unit/        node --test           tests/e2e/   real browser tests (Playwright)
-data/              your database and certificates (created on first start, never committed)
+hq/                the HQ console (index.html) and the linked-phone console (remote.html)
+  brain/           HQ's "server", running inside the HQ page:
+    hq.js          Agents, events, alert states, signed orders      api.js     every request + role checks + audit
+    auth.js        users, roles, sessions, two-step sign-in          store.js   encrypted storage
+    ops.js         triage + incidents        analytics.js  rules + pattern of life     tamper.js
+    network.js     asset register, health    reports.js    SITREP / weekly / custom    resilience.js
+    host.js        PeerJS link to Agents and phones                  netmon.js / weather.js
+  views/           Triage, Incidents, Analysis, Coverage, Agents, Network, Reports, Shift log, Access, Data
+  app.js           the console frame: rail, workspace, status bar, palette
+agent/             the Agent page and its missions/
+shared/            logic shared by HQ, phones and Agents (pure functions, unit tested):
+                   triage, correlate, baseline, coverage, assets, report + pdf, roles, totp, audit, vault…
+vendor/            Three.js, PeerJS, QR code, IBM Plex fonts (no build step, no CDN)
+tests/unit/        npm test           tests/e2e/   npm run test:e2e (real Chromium with fake camera, mic and sensors)
 ```
 
-- **Tests:** `npm test` (unit) and `npm run test:e2e` (starts throwaway HQs and drives real Chromium Agents with a fake camera, microphone, motion sensors, Wi-Fi table and push service). Needs `npx playwright install chromium` once.
-- **Settings by environment variable:** `SENTINEL_DATA` (data folder), `SENTINEL_HTTPS_PORT`, `SENTINEL_HTTP_PORT`, `SENTINEL_HOST`, `SENTINEL_PUBLIC_IP`, `SENTINEL_NO_MKCERT=1`, `SENTINEL_NO_RECON=1` (turn off Wi-Fi recon).
-- **Raspberry Pi:** use Raspberry Pi OS 64-bit, install Node 22 from nodejs.org (or `nvm`), then the same steps. Give the Pi a fixed address in your router so phones always find it.
+- `npm ci` once, then `npm test` (unit) and `npm run test:e2e` (browser tests; uses Playwright's Chromium).
+- Add a changelog entry in `shared/changelog.js` for every update — it appears in **Settings › What's new**.
 
 ---
 
 ## HomeBase (the old app)
 
-HomeBase was retired when SENTINEL arrived. Nothing was deleted:
-
-- The full HomeBase code is on the **`homebase-archive`** branch. To bring it back: `git checkout homebase-archive`.
-- The old GitHub Pages site now shows a "HomeBase has been retired" page, and its service worker removes itself from phones that had it installed (`index.html` and `sw.js` in this folder). Once you're happy, you can switch GitHub Pages off completely: repo **Settings → Pages → Source: None**.
+HomeBase was retired when SENTINEL arrived. Its full code is on the **`homebase-archive`** branch (`git checkout homebase-archive`).
