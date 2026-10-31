@@ -1,7 +1,10 @@
 // HQ's memory, kept in THIS browser on THIS computer (nothing is uploaded anywhere):
-//   - small things (settings, Agents, codes) in localStorage
-//   - the Mission Log in IndexedDB (it can grow to thousands of entries)
+//   - small things (settings, Agents, codes, alerts…) in localStorage
+//   - the Mission Log, the audit trail, floor-plan files and local backups in IndexedDB
+// ENCRYPTED AT REST: everything is sealed with AES-256-GCM before it is written, using a device key
+// the browser keeps and won't let anyone copy out. HQ works on the decrypted copy in memory.
 // Nothing here ever stores images, video or audio — only events like "motion detected".
+import { newDeviceKey, seal, sealJSON, openJSON, openBytes } from '../../shared/vault.js';
 
 const META = 'sentinel.hq.v1';
 const DB = 'sentinel-hq';
@@ -9,12 +12,14 @@ const DB = 'sentinel-hq';
 function idb() {
   return new Promise((resolve) => {
     try {
-      const req = indexedDB.open(DB, 3);
+      const req = indexedDB.open(DB, 4);
       req.onupgradeneeded = () => {
         const d = req.result;
         if (!d.objectStoreNames.contains('events')) d.createObjectStore('events', { keyPath: 'id' });
         if (!d.objectStoreNames.contains('files')) d.createObjectStore('files'); // floor-plan pictures, 3D scans
         if (!d.objectStoreNames.contains('audit')) d.createObjectStore('audit', { keyPath: 'seq' }); // the audit trail (append-only)
+        if (!d.objectStoreNames.contains('keys')) d.createObjectStore('keys'); // the device key (can't be exported)
+        if (!d.objectStoreNames.contains('backups')) d.createObjectStore('backups', { keyPath: 'id' }); // nightly encrypted backups
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -26,6 +31,29 @@ const all = (db, store = 'events') => new Promise((resolve) => {
   r.onsuccess = () => resolve(r.result || []);
   r.onerror = () => resolve([]);
 });
+const req = (r) => new Promise((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+/** The device key: made once, kept in IndexedDB as a non-exportable CryptoKey. */
+async function deviceKey(db) {
+  if (!db || !globalThis.crypto?.subtle) return null;
+  try {
+    let key = await req(db.transaction('keys').objectStore('keys').get('device'));
+    if (!key) { key = await newDeviceKey(); await req(db.transaction('keys', 'readwrite').objectStore('keys').put(key, 'device')); }
+    return key;
+  } catch { return null; }
+}
+/** Decrypt stored records (older plain ones are passed through and re-sealed). */
+async function openAll(key, rows, idField) {
+  const out = [], plain = [];
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = await Promise.all(rows.slice(i, i + 500).map(async (r) => {
+      if (r && r.ct && key) { try { return { ...(await openJSON(key, r)), [idField]: r[idField] }; } catch { return null; } }
+      if (r) plain.push(r);
+      return r;
+    }));
+    out.push(...chunk.filter(Boolean));
+  }
+  return { rows: out, plain };
+}
 
 /**
  * Opens the store. `memory: true` keeps everything in memory only (used by the tests).
@@ -34,15 +62,51 @@ const all = (db, store = 'events') => new Promise((resolve) => {
 export async function openStore({ memory = false, storage = globalThis.localStorage } = {}) {
   const blank = { settings: {}, agents: [], pairCodes: [], viewers: [], nextEventId: 1, docs: {}, counters: {} };
   let meta = blank;
-  if (!memory) { try { meta = { ...blank, ...JSON.parse(storage.getItem(META) || '{}') }; } catch { meta = blank; } }
   const db = memory ? null : await idb();
-  let events = db ? (await all(db)).sort((a, b) => a.id - b.id) : [];
-  let audit = db ? (await all(db, 'audit')).sort((a, b) => a.seq - b.seq) : [];
+  const key = memory ? null : await deviceKey(db);
+  const status = { atRest: !!key, cipher: key ? 'AES-256-GCM' : null, migrated: 0, unreadable: 0 };
+  if (!memory) {
+    try {
+      const raw = JSON.parse(storage.getItem(META) || '{}');
+      if (raw.ct && key) meta = { ...blank, ...(await openJSON(key, raw)) };
+      else if (raw.ct) { status.unreadable++; meta = blank; } // sealed, but the key is gone
+      else { meta = { ...blank, ...raw }; if (Object.keys(raw).length) status.migrated++; }
+    } catch { status.unreadable++; meta = blank; }
+  }
+  const ev0 = db ? await openAll(key, await all(db), 'id') : { rows: [], plain: [] };
+  const au0 = db ? await openAll(key, await all(db, 'audit'), 'seq') : { rows: [], plain: [] };
+  let events = ev0.rows.sort((a, b) => a.id - b.id);
+  let audit = au0.rows.sort((a, b) => a.seq - b.seq);
   const persistent = !!db || memory;
   const memFiles = new Map();
+  const pending = new Set();
+  const track = (p) => { pending.add(p); p.catch(() => {}).finally(() => pending.delete(p)); return p; };
 
-  const saveMeta = () => { if (!memory) try { storage.setItem(META, JSON.stringify(meta)); } catch { /* storage full or blocked */ } };
-  const put = (ev) => { if (db) try { db.transaction('events', 'readwrite').objectStore('events').put(ev); } catch { /* ignore */ } };
+  /** Settings are written as one sealed blob; quick successive changes are written once, in order. */
+  let metaDirty = false, metaWriting = null;
+  const saveMeta = () => {
+    if (memory) return;
+    metaDirty = true;
+    if (metaWriting) return;
+    metaWriting = track((async () => {
+      while (metaDirty) {
+        metaDirty = false;
+        const text = JSON.stringify(meta);
+        try { storage.setItem(META, key ? JSON.stringify({ v: 2, ...(await seal(key, text)) }) : text); } catch { /* storage full or blocked */ }
+      }
+      metaWriting = null;
+    })());
+  };
+  const putSealed = (store, rec, idField) => {
+    if (!db) return;
+    track((async () => {
+      const row = key ? { [idField]: rec[idField], ...(await sealJSON(key, rec)) } : rec;
+      try { db.transaction(store, 'readwrite').objectStore(store).put(row); } catch { /* ignore */ }
+    })());
+  };
+  const put = (ev) => putSealed('events', ev, 'id');
+  // seal anything that was written before encryption existed
+  if (key && (ev0.plain.length || au0.plain.length || status.migrated)) { ev0.plain.forEach(put); au0.plain.forEach((a) => putSealed('audit', a, 'seq')); saveMeta(); status.migrated += ev0.plain.length + au0.plain.length; }
   const del = (ids) => {
     if (!db || !ids.length) return;
     try { const st = db.transaction('events', 'readwrite').objectStore('events'); ids.forEach((id) => st.delete(id)); } catch { /* ignore */ }
@@ -52,6 +116,9 @@ export async function openStore({ memory = false, storage = globalThis.localStor
 
   const api = {
     persistent,
+    encryption: status,
+    /** Wait until everything has been written (sealed) to storage. */
+    flush: async () => { while (pending.size) await Promise.all([...pending]); },
     close() { try { db?.close(); } catch { /* ignore */ } },
 
     // ---------- settings ----------
@@ -138,7 +205,7 @@ export async function openStore({ memory = false, storage = globalThis.localStor
     // ---------- audit trail (append-only; there is deliberately no edit or delete) ----------
     addAudit(e) {
       audit.push(copy(e));
-      if (db) try { db.transaction('audit', 'readwrite').objectStore('audit').add(e); } catch { /* ignore */ }
+      putSealed('audit', e, 'seq');
       if (audit.length > 50000) { // keep the newest 45,000; remember where the chain continues from
         const gone = audit.splice(0, audit.length - 45000);
         meta.auditAnchor = { seq: gone.at(-1).seq, hash: gone.at(-1).hash };
@@ -146,6 +213,17 @@ export async function openStore({ memory = false, storage = globalThis.localStor
         if (db) try { const st = db.transaction('audit', 'readwrite').objectStore('audit'); gone.forEach((g) => st.delete(g.seq)); } catch { /* ignore */ }
       }
       return copy(e);
+    },
+    /** Retention: drop audit entries older than `cut`, keeping the chain anchor so the rest still verifies. */
+    trimAudit(cut) {
+      const n = audit.findIndex((a) => a.ts >= cut);
+      const k = n < 0 ? audit.length : n;
+      if (!k) return 0;
+      const gone = audit.splice(0, k);
+      meta.auditAnchor = { seq: gone.at(-1).seq, hash: gone.at(-1).hash };
+      saveMeta();
+      if (db) try { const st = db.transaction('audit', 'readwrite').objectStore('audit'); gone.forEach((g) => st.delete(g.seq)); } catch { /* ignore */ }
+      return gone.length;
     },
     lastAudit: () => copy(audit.at(-1) || null),
     auditAnchor: () => copy(meta.auditAnchor || null),
@@ -155,13 +233,37 @@ export async function openStore({ memory = false, storage = globalThis.localStor
     _auditRaw: () => audit,
 
     // ---------- big files (floor-plan pictures, 3D scans) ----------
-    putFile(key, blob) {
-      if (!db) { memFiles.set(key, blob); return Promise.resolve(); }
-      return new Promise((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(blob, key); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error || new Error('Couldn’t save the file (storage full?)')); });
+    async putFile(name, blob) {
+      if (!db) { memFiles.set(name, blob); return; }
+      const row = key ? { type: blob.type || '', ...(await seal(key, await blob.arrayBuffer())) } : blob;
+      await new Promise((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(row, name); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error || new Error('Couldn’t save the file (storage full?)')); });
     },
-    getFile(key) {
-      if (!db) return Promise.resolve(memFiles.get(key) || null);
-      return new Promise((resolve) => { const r = db.transaction('files').objectStore('files').get(key); r.onsuccess = () => resolve(r.result || null); r.onerror = () => resolve(null); });
+    async getFile(name) {
+      if (!db) return memFiles.get(name) || null;
+      const row = await new Promise((resolve) => { const r = db.transaction('files').objectStore('files').get(name); r.onsuccess = () => resolve(r.result || null); r.onerror = () => resolve(null); });
+      if (row && row.ct && key) { try { return new Blob([await openBytes(key, row)], { type: row.type }); } catch { return null; } }
+      if (row instanceof Blob && key) api.putFile(name, row); // seal an older plain file
+      return row;
+    },
+    /** Local (on this computer) encrypted backups — sealed with the device key. */
+    async putLocalBackup(info, backup) {
+      if (!db) { memFiles.set(`backup:${info.id}`, { ...info, backup: copy(backup) }); return; }
+      const row = { ...info, ...(key ? await sealJSON(key, backup) : { plain: JSON.stringify(backup) }) };
+      await req(db.transaction('backups', 'readwrite').objectStore('backups').put(row));
+    },
+    async localBackups() {
+      if (!db) return [...memFiles.entries()].filter(([k]) => k.startsWith('backup:')).map(([, v]) => { const { backup, ...info } = v; return info; }).sort((a, b) => b.at - a.at);
+      return (await all(db, 'backups')).map(({ iv, ct, plain, ...info }) => info).sort((a, b) => b.at - a.at);
+    },
+    async localBackup(id) {
+      if (!db) return copy(memFiles.get(`backup:${id}`)?.backup || null);
+      const row = await req(db.transaction('backups').objectStore('backups').get(id));
+      if (!row) return null;
+      return row.ct ? openJSON(key, row) : JSON.parse(row.plain);
+    },
+    async deleteLocalBackup(id) {
+      if (!db) { memFiles.delete(`backup:${id}`); return; }
+      await req(db.transaction('backups', 'readwrite').objectStore('backups').delete(id));
     },
     deleteFile(key) {
       if (!db) { memFiles.delete(key); return Promise.resolve(); }
@@ -173,12 +275,11 @@ export async function openStore({ memory = false, storage = globalThis.localStor
     restore(b) {
       if (b?.sentinel !== 'hq-backup' || !b.meta || !Array.isArray(b.events)) throw new Error('That isn’t a SENTINEL HQ backup file.');
       del(events.map((e) => e.id));
+      if (db) try { db.transaction('audit', 'readwrite').objectStore('audit').clear(); } catch { /* ignore */ }
       meta = { ...blank, ...copy(b.meta) };
       events = b.events.map(copy).sort((x, y) => x.id - y.id);
-      if (Array.isArray(b.audit)) {
-        if (db) try { const st = db.transaction('audit', 'readwrite').objectStore('audit'); st.clear(); b.audit.forEach((x) => st.put(x)); } catch { /* ignore */ }
-        audit = b.audit.map(copy).sort((x, y) => x.seq - y.seq);
-      }
+      audit = (Array.isArray(b.audit) ? b.audit : []).map(copy).sort((x, y) => x.seq - y.seq);
+      audit.forEach((x) => putSealed('audit', x, 'seq'));
       meta.nextEventId = Math.max(meta.nextEventId || 1, ...events.map((e) => e.id + 1));
       saveMeta();
       events.forEach(put);

@@ -718,3 +718,17 @@ input.otp { letter-spacing: .4em; font-size: 1.2rem; }
 .shift-list li.handover { border-left: 3px solid var(--green); }
 .handover-sum { display: flex; gap: 16px; flex-wrap: wrap; padding: 6px 8px; background: var(--bg-2); border: 1px solid var(--line); margin: 6px 0; }
 @media (max-width: 900px) { .role-cards { grid-template-columns: 1fr; } }
+
+/* ===== What's new + Data ===== */
+.changelog { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.changelog > li { border-left: 2px solid var(--line-2); padding-left: 12px; }
+.changelog > li:first-child { border-left-color: var(--green); }
+.changelog .row { gap: 10px; }
+.changelog ul { margin: 6px 0 0; padding-left: 18px; font-size: .86rem; line-height: 1.55; }
+.data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.data-grid > section:nth-child(2) { grid-row: span 2; }
+.ret-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.ret-form > p, .ret-form > .row { grid-column: 1 / -1; }
+.ret-form input { width: 90px; }
+.hq-down { position: fixed; left: 0; right: 0; top: var(--cb); z-index: 3900; background: var(--red); color: #fff; text-align: center; padding: 8px 12px; font: 600 .8rem var(--sans); letter-spacing: .04em; }
+@media (max-width: 900px) { .data-grid, .ret-form { grid-template-columns: 1fr; } .data-grid > section:nth-child(2) { grid-row: auto; } }

@@ -14,6 +14,7 @@ import { Tamper } from './tamper.js';
 import { NetSecurity } from './network.js';
 import { Reports } from './reports.js';
 import { makeAudit } from './auditlog.js';
+import { Resilience } from './resilience.js';
 
 const DAY = 86400000;
 export const DEFAULT_SETTINGS = {
@@ -53,6 +54,7 @@ export class HQ extends Emitter {
     this.tamper = new Tamper({ hq: this, db }); // moved, covered, unplugged, fast drain, unexpected offline
     this.net = new NetSecurity({ hq: this, db }); // asset register, network alerts, health check
     this.reports = new Reports({ hq: this, db }); // SITREP, weekly and custom reports
+    this.resilience = new Resilience({ hq: this, db }); // retention, backups, evidence, downtime
     this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
@@ -63,9 +65,10 @@ export class HQ extends Emitter {
     this.prune();
     this.analytics.start();
     this.reports.start();
+    this.resilience.start();
     return this;
   }
-  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); }
+  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); this.resilience.stop(); }
 
   /** A known phone or device appeared (a linked phone connected, or the network register saw it). */
   deviceSeen({ id, label, type = 'phone', owner = '' }) {
@@ -191,9 +194,9 @@ export class HQ extends Emitter {
     return t;
   }
   prune() {
-    const n = this.db.pruneEvents(this.settings().retentionDays * DAY, this.now());
     this.db.prunePairCodes(this.now());
-    return n;
+    if (this.resilience) return this.resilience.prune().events;
+    return this.db.pruneEvents(this.settings().retentionDays * DAY, this.now());
   }
 
   // ---------- recruiting Agents, linking phones ----------

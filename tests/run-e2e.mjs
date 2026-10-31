@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'e2e');
 const only = process.argv.slice(2);
-const ORDER = ['dashboard', 'pairing', 'live', 'missions', 'phones', 'builder', 'map3d', 'security', 'comms', 'voice', 'intel', 'replay', 'world', 'global', 'triage', 'analysis', 'coverage', 'network', 'reports', 'access'];
+const ORDER = ['dashboard', 'pairing', 'live', 'missions', 'phones', 'builder', 'map3d', 'security', 'comms', 'voice', 'intel', 'replay', 'world', 'global', 'triage', 'analysis', 'coverage', 'network', 'reports', 'access', 'data'];
 const rank = (n) => (ORDER.includes(n) ? ORDER.indexOf(n) : ORDER.length);
 const files = readdirSync(dir).filter((f) => f.endsWith('.cjs') && !['helpers.cjs', 'video.cjs'].includes(f)).map((f) => f.replace('.cjs', ''))
   .filter((n) => !only.length || only.includes(n)).sort((a, b) => rank(a) - rank(b));

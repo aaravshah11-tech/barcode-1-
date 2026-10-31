@@ -57,6 +57,8 @@ export function makeApi({ hq, db, auth }) {
       if (!who.remote) { hq.localRole = null; hq.localSession = null; }
       return { ok: true };
     }
+    // the HQ page's own watchdog reports in even while the screen is locked
+    if (p === '/watchdog' && m === 'POST' && !who.remote) return hq.resilience.watchdog(body) || { ok: true };
     if (who.remote && !auth.valid(who.session)) throw fail(401, 'Locked — log in with your codename and PIN.');
     if (!who.remote && hq.localSession && !auth.valid(hq.localSession)) { hq.localRole = null; hq.localSession = null; }
 
@@ -131,6 +133,27 @@ export function makeApi({ hq, db, auth }) {
       for (const id of ids) { try { done.push(ops.act(id, body.action, { by, reason: body.reason })); } catch { /* already handled */ } }
       return { done: done.length };
     }
+    // ----- data + resilience (Director only) -----
+    const rz = hq.resilience;
+    const hqOnly = () => { if (who.remote) throw fail(403, 'Do this on the HQ computer itself.'); };
+    if (p === '/data/status' && m === 'GET') {
+      let storage = null;
+      try { storage = (await globalThis.navigator?.storage?.estimate?.()) || null; } catch { /* unknown */ }
+      return { encryption: db.encryption || { atRest: false }, storage: storage && { usage: storage.usage, quota: storage.quota }, counts: rz.counts(), retention: rz.retention(), backups: await rz.backups(), lastBackup: db.getSetting('lastBackup', null), downtime: rz.downtime(), https: globalThis.location ? globalThis.location.protocol === 'https:' : true };
+    }
+    if (p === '/data/retention' && m === 'PUT') return rz.setRetention(body);
+    if (p === '/data/prune' && m === 'POST') return rz.prune();
+    if (p === '/data/backup' && m === 'POST') { hqOnly(); return rz.makeBackup('manual', by); }
+    let dm = p.match(/^\/data\/backups\/([\w-]{1,40})\/(verify|restore)$/);
+    if (dm && m === 'POST') { hqOnly(); return dm[2] === 'verify' ? rz.verifyBackup(dm[1]) : rz.restoreLocal(dm[1], by); }
+    dm = p.match(/^\/data\/backups\/([\w-]{1,40})$/);
+    if (dm && m === 'DELETE') { hqOnly(); await db.deleteLocalBackup(dm[1]); return { ok: true }; }
+    if (p === '/data/backup/download' && m === 'POST') { hqOnly(); return rz.downloadEncrypted(body.password); }
+    if (p === '/data/restore-file' && m === 'POST') { hqOnly(); return rz.restoreFile(String(body.text || ''), body.password, by); }
+    dm = p.match(/^\/data\/evidence\/([\w-]{1,64})$/);
+    if (dm && m === 'GET') return rz.evidence(dm[1], by);
+    if (p === '/data/evidence/verify' && m === 'POST') return rz.verifyEvidence(String(body.text || ''));
+
     // ----- reports -----
     if (p === '/sitrep' && m === 'GET') return hq.reports.liveSitrep();
     if (p === '/reports' && m === 'GET') return hq.reports.list();

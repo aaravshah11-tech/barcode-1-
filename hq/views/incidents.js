@@ -1,6 +1,7 @@
 // INCIDENTS view: a case list on the left, the selected case on the right — status, assignee,
 // linked alerts, notes, a full timeline, and "Play back on map" (replays just that window).
 import { esc, $, toast, dayClock } from '../../shared/ui.js';
+import { exportEvidence } from './data.js';
 import { INCIDENT_STATUS, INCIDENT_LABEL, SEVERITIES, canMove, ALERT_STATUS } from '../../shared/triage.js';
 
 const NEXT = { open: [['investigating', 'Start investigating'], ['closed', 'Close (no action needed)']], investigating: [['resolved', 'Mark resolved']], resolved: [['closed', 'Close'], ['investigating', 'Reopen']], closed: [] };
@@ -62,7 +63,7 @@ export function createIncidents(ctx) {
         <form class="case-title-form" data-irename><input name="ititle" value="${esc(i.title)}" maxlength="100" aria-label="Incident title"></form>
         <ol class="stepper" aria-label="Status">${INCIDENT_STATUS.map((s, k) => `<li class="${k < stepIdx ? 'done' : k === stepIdx ? 'now' : ''}">${INCIDENT_LABEL[s]}</li>`).join('')}</ol>
         <div class="row case-actions">${NEXT[i.status].filter(([to]) => canMove(i.status, to)).map(([to, l]) => `<button class="small ${to === 'resolved' || to === 'investigating' ? 'btn-primary' : ''}" data-imove="${to}">${l}</button>`).join('')}
-          <span class="grow"></span><button class="small" data-iplay title="Replay the events around this incident on the map">Play back on map</button></div>
+          <span class="grow"></span>${ctx.S.role === 'DIRECTOR' ? '<button class="small" data-ievidence title="One file with everything about this incident, plus a SHA-256 fingerprint">Export evidence</button>' : ''}<button class="small" data-iplay title="Replay the events around this incident on the map">Play back on map</button></div>
         <dl class="kv case-kv">
           <dt>Assignee</dt><dd><input data-iassign value="${esc(i.assignee || '')}" maxlength="30" aria-label="Assignee"></dd>
           <dt>Severity</dt><dd><select data-isev aria-label="Severity">${SEVERITIES.map((s) => `<option ${s === i.severity ? 'selected' : ''}>${s}</option>`).join('')}</select></dd>
@@ -88,6 +89,7 @@ export function createIncidents(ctx) {
     if (b.dataset.ifilter) { st.filter = b.dataset.ifilter; drawList(); }
     else if (b.dataset.iopen) { st.sel = b.dataset.iopen; drawList(); load(); }
     else if (b.dataset.imove) patch({ status: b.dataset.imove });
+    else if ('ievidence' in b.dataset && st.sel) { try { await exportEvidence(ctx, st.sel); } catch (x) { toast(x.message, { kind: 'err' }); } }
     else if ('iplay' in b.dataset && st.detail) ctx.playback({ ...st.detail.window, label: st.detail.incident.ref });
     else if ('inew' in b.dataset) {
       try { const inc = await ctx.api('/incidents', { method: 'POST', body: { title: 'New incident' } }); open(inc.id); root.querySelector('[name=ititle]')?.select(); } catch (x) { toast(x.message, { kind: 'err' }); }

@@ -6,12 +6,21 @@ import { sfx, sfxPrefs, setSfx } from '../shared/sfx.js';
 import { voicePrefs, setVoicePrefs, voiceSupported, PRIVACY } from './voice.js';
 import { geocodeUrl, roughly } from '../shared/weather.js';
 import { NORTH_OPTIONS } from '../shared/world.js';
+import { CHANGELOG, VERSION } from '../shared/changelog.js';
 
-const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts']];
+const TABS = [['general', 'General'], ['security', 'Security'], ['phones', 'Phones'], ['alerts', 'Alerts'], ['changes', 'What’s new']];
 const extraTabs = {}; // filled in by alerts.js
 export const registerTab = (id, render) => { extraTabs[id] = render; };
 const q3d = () => { try { return localStorage.getItem('sentinel.q3d') || 'medium'; } catch { return 'medium'; } };
 const hr = '<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">';
+
+/** WHAT'S NEW: every update, newest first. */
+function changes(body) {
+  try { localStorage.setItem('sentinel.seenVersion', VERSION); } catch { /* ignore */ }
+  body.innerHTML = `<p class="small muted">SENTINEL version <b class="mono">${VERSION}</b>. Everything that changed in each update:</p>
+    <ol class="changelog">${CHANGELOG.map((c) => `<li><div class="row"><b class="mono">${esc(c.version)}</b><b>${esc(c.title)}</b><span class="grow"></span><span class="small muted mono">${esc(c.date)}</span></div>
+      <ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></li>`).join('')}</ol>`;
+}
 
 /** Save text as a file on this device (Mission Log export, backups). */
 export function download({ filename, type, text }) {
@@ -31,6 +40,7 @@ export function openSettings(S, { tab = 'general', onChange } = {}) {
     if (t === 'general') general(body, S, onChange);
     else if (t === 'phones') phones(body, S);
     else if (t === 'security') security(body, S, onChange);
+    else if (t === 'changes') changes(body);
     else { await import('./alerts.js'); await extraTabs[t]?.(body, S); }
   };
   s.body.addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); });

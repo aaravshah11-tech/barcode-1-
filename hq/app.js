@@ -31,6 +31,9 @@ import { createNetwork } from './views/network.js';
 import { createReports } from './views/reports.js';
 import { createAccess, twoStepSheet } from './views/access.js';
 import { createShift, showHandover } from './views/shift.js';
+import { createData } from './views/data.js';
+import { startWatchdog } from './watchdog.js';
+import { VERSION } from '../shared/changelog.js';
 import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
@@ -127,9 +130,33 @@ function linkScreen(hqId, code) {
 }
 const guessDevice = () => { const ua = navigator.userAgent; return /iPhone/.test(ua) ? 'My iPhone' : /iPad/.test(ua) ? 'My iPad' : /Android/.test(ua) ? 'My phone' : 'My laptop'; };
 
+/** Linked phone: if HQ can't be reached (about a minute of silence), say so loudly (while this page is open). */
+let downTimer = null, downSince = null;
+function hqDownWatch(s) {
+  if (MODE !== 'remote') return;
+  const banner = document.querySelector('.hq-down');
+  if (s.state === 'online') {
+    clearTimeout(downTimer); downTimer = null;
+    if (banner) { banner.remove(); toast('HQ is reachable again'); }
+    downSince = null;
+    return;
+  }
+  downSince ??= Date.now();
+  if (downTimer || banner) return;
+  downTimer = setTimeout(() => {
+    downTimer = null;
+    const b = document.createElement('div');
+    b.className = 'hq-down'; b.setAttribute('role', 'alert');
+    b.textContent = `HQ UNREACHABLE since ${clock(downSince)} — Agents can’t report. Check the HQ computer and its internet.`;
+    document.body.appendChild(b);
+    sfx('alert'); navigator.vibrate?.([300, 150, 300]);
+    try { if (Notification.permission === 'granted') new Notification('SENTINEL: HQ unreachable', { body: `No contact since ${clock(downSince)}.` }); } catch { /* not supported */ }
+  }, 20000);
+}
 function setNet(s) {
   const was = net.state;
   net = s;
+  hqDownWatch(s);
   const el = $('[data-net]');
   if (was !== s.state && unlocked && s.state === 'offline') sfx('warn');
   renderNetwork(); renderStatus();
@@ -153,6 +180,9 @@ function launch() {
   if (MODE === 'hq') keepAwake();
   setTimeout(() => maybeAutoBriefing(S), 1200);
   setTimeout(() => showHandover({ S, api: (...a) => T.api(...a) }), 1500);
+  let seen = null; try { seen = localStorage.getItem('sentinel.seenVersion'); } catch { /* ignore */ }
+  if (seen !== VERSION) { setTimeout(() => toast(`SENTINEL ${VERSION} — see what’s new in Settings › What’s new`), 2500); try { localStorage.setItem('sentinel.seenVersion', VERSION); } catch { /* ignore */ } }
+  if (MODE === 'hq' && !watchdogOn) { watchdogOn = true; startWatchdog({ api: (...a) => T.api(...a), net: () => net, flush: () => window.__hq?.db.flush?.() }); }
   document.body.dataset.role = S.role || '';
   if (MODE === 'hq' && /^#(iss|ship=|flight=|quake=)/.test(location.hash)) openGlobal(); // a link straight to an item
 }
@@ -310,6 +340,8 @@ const shiftView = createShift({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'shift', label: 'Shift log', icon: 'doc', render: (root) => shiftView.render(root) });
 const accessView = createAccess({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'access', label: 'Access', icon: 'key', roles: ['DIRECTOR'], render: (root) => accessView.render(root) });
+const dataView = createData({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'data', label: 'Data', icon: 'database', roles: ['DIRECTOR'], render: (root) => dataView.render(root) });
 let viewRefresh = null;
 /** Coverage and the Agent register follow Agent changes (debounced). */
 function refreshAgentViews() { clearTimeout(viewRefresh); viewRefresh = setTimeout(() => { if (S.view === 'coverage') coverageView.refresh(); else if (S.view === 'register') registerViewer.refresh(); }, 400); }
@@ -369,6 +401,7 @@ function paletteActions() {
   A.push({ group: 'Go to', label: 'Settings', keywords: ['preferences', 'location', 'theme'], run: () => openSettings(S, { onChange: (x) => { S.settings = x; settingsChanged(); } }) });
   A.push({ group: 'Go to', label: 'Terminal', keys: '`', run: () => term.open() });
   A.push({ group: 'Account', label: 'Two-step sign-in (authenticator app)', keywords: ['2fa', 'totp', 'security', 'mfa'], run: async () => { const me = await T.api('/me').catch(() => ({})); twoStepSheet({ S, api: (...a) => T.api(...a) }, { enabled: !!me.twoFactor }); } });
+  A.push({ group: 'Go to', label: 'What’s new (changelog)', keywords: ['changelog', 'updates', 'version', 'release notes'], run: () => openSettings(S, { tab: 'changes', onChange: (x) => { S.settings = x; settingsChanged(); } }) });
   A.push({ group: 'Account', label: 'Write a handover note', keywords: ['shift', 'handover', 'notes'], run: () => showView('shift') });
   for (const m of MODES) A.push({ group: 'Alert state', label: `Set ${MODE_INFO[m].label.toUpperCase()}`, hint: MODE_INFO[m].summary, keywords: [m, 'mode', 'state'], run: () => setMode(m) });
   A.push({ group: 'Alert state', label: 'Raise PANIC', keywords: ['emergency'], run: () => panic() });
@@ -420,6 +453,7 @@ document.addEventListener('keydown', (e) => {
   else if (/^[1-9]$/.test(e.key)) { const v = VIEWS.filter(allowed)[Number(e.key) - 1]; if (v) showView(v.id); }
 });
 let shellWired = false;
+let watchdogOn = false;
 
 function renderMute() { const b = $('[data-mute]'); if (b) { const p = sfxPrefs(); b.innerHTML = icon(p.muted || !p.volume ? 'mute' : 'sound'); b.setAttribute('aria-pressed', String(!p.muted)); } }
 onSfx(renderMute);
@@ -583,6 +617,7 @@ function onMsg(msg) {
   else if (msg.t === 'assets') networkView.refresh();
   else if (msg.t === 'reports') reportsView.refresh();
   else if (msg.t === 'shift') shiftView.refresh();
+  else if (msg.t === 'reload') { toast(msg.reason || 'HQ changed — reloading'); setTimeout(() => location.reload(), 1200); }
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
   else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); }
   else if (msg.t === 'house') { S.house = msg.house; refreshAgentViews(); renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
