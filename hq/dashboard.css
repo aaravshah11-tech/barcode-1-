@@ -808,3 +808,18 @@ input.otp { letter-spacing: .4em; font-size: 1.2rem; }
   .ws-grid .wp.wp-picture { order: 1; } .ws-grid .wp.wp-queue { order: 2; } .ws-grid .wp.wp-agents { order: 3; } .ws-grid .wp.wp-perimeter { order: 4; }
   .ws-grid .wp.wp-timeline { order: 5; } .ws-grid .wp.wp-ask { order: 6; } .ws-grid .wp.wp-map { order: 7; }
 }
+
+/* ===== Situation Room ===== */
+.viewroot[data-view="situation"] { padding: 10px; }
+.sitroom { height: calc(100dvh - 2 * var(--cb) - 64px); display: flex; flex-direction: column; }
+.sitroom .radar-wrap { flex: 1; min-height: 0; aspect-ratio: auto; max-height: none; }
+.map3d-ui .filters button[data-preset] { min-height: 26px; padding: 2px 9px; font-size: .72rem; }
+/* builder: outside zones */
+.builder .zone polygon { stroke-dasharray: none; }
+.builder .z-driveway polygon, .builder .z-path polygon, .builder .z-patio polygon { fill: rgba(120, 140, 165, .14); }
+.builder .z-front polygon, .builder .z-garden polygon, .builder .z-lawn polygon { fill: rgba(79, 163, 122, .12); }
+.builder .z-garage polygon, .builder .z-shed polygon { fill: rgba(111, 168, 220, .12); stroke-width: 2px; }
+.builder .z-plot polygon { fill: transparent; stroke-dasharray: 6 4; }
+.builder .b-outside { margin-left: 10px; border-color: rgba(79, 163, 122, .45) !important; }
+.hist-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.hist-list li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }

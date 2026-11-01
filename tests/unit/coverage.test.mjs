@@ -25,7 +25,7 @@ test('coverage: outside doors/windows are found; inner doors are not', () => {
 test('coverage: no Agents → every room is a blind spot and every entry is unmonitored', () => {
   const c = coverage(house, []);
   assert.equal(c.pct, 0);
-  assert.equal(c.blind.length, house.floors.reduce((n, f) => n + f.rooms.length, 0));
+  assert.equal(c.blind.length, house.floors.reduce((n, f) => n + f.rooms.length, 0) + house.site.rooms.filter((r) => !['plot', 'garage', 'shed'].includes(r.type)).length, 'every room and every outside zone');
   assert.ok(c.unmonitored.length >= 4);
 });
 

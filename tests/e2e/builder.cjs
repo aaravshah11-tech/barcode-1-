@@ -116,7 +116,7 @@ const SHOTS = process.argv[2] || '';
 
   // Second floor
   await page.click('[data-addfloor]');
-  await page.waitForFunction(() => document.querySelectorAll('[data-floor]').length === 2);
+  await page.waitForFunction(() => document.querySelectorAll('[data-floor]:not([data-floor="-1"])').length === 2);
   check(await page.$$eval('.ghost:not(.stairs-below)', (g) => g.length) === 2, 'new floor: the floor below shows faintly to line rooms up');
   check(await page.$$eval('.stairs-below', (g) => g.length) === 1, 'new floor: the stairs coming up from below show, to line up the landing');
   await page.fill('[data-fname]', 'Upstairs'); await page.press('[data-fname]', 'Tab');

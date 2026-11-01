@@ -4,7 +4,8 @@
 // "explode" the floors apart, Agents as plain markers. Built with Three.js (vendor/three).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { centroid, openingEnds, pointInPolygon, bbox, stepCount, OPENING_KINDS } from '../shared/house.js';
+import { centroid, openingEnds, pointInPolygon, bbox, stepCount, OPENING_KINDS, ZONE_TYPES, allPoints } from '../shared/house.js';
+import { sensorsOn } from '../shared/coverage.js';
 import { heatLevel, heatOpacity } from '../shared/replay.js';
 import { planDir, shadowVector, shadowPolygon } from '../shared/world.js';
 
@@ -43,7 +44,7 @@ export class Map3D {
     this.camera.position.set(14, 14, 18);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: 0.1, maxPolarAngle: Math.PI * 0.49, minDistance: 3, maxDistance: 120, minZoom: 0.4, maxZoom: 6 });
-    this.controls.addEventListener('start', () => { this.flight = null; this.wake(4000); });
+    this.controls.addEventListener('start', () => { this.flight = null; this.lastTouch = performance.now(); this.wake(4000); });
     this.controls.addEventListener('change', () => this.wake(800));
     this.renderer.domElement.addEventListener('pointermove', (e) => { this.wake(1500); this.hover(e); });
     this.renderer.domElement.addEventListener('pointerleave', () => this.onHover?.(null));
@@ -128,7 +129,7 @@ export class Map3D {
     this.house = house;
     this.root.clear();
     this.roomMeshes.clear(); this.floorGroups = []; this.openingLines = [];
-    const pts = house.floors.flatMap((f) => f.rooms.flatMap((r) => r.points));
+    const pts = allPoints(house);
     const b = pts.length ? bbox(pts) : { minX: 0, minY: 0, w: 10, h: 10 };
     this.center = new THREE.Vector3(b.minX + b.w / 2, 0, b.minY + b.h / 2);
     this.size = Math.max(b.w, b.h, 6);
@@ -142,8 +143,12 @@ export class Map3D {
       this.root.add(g);
       this.floorGroups.push(g);
     });
+    this.siteGroup = house.site ? this.siteObject(house.site) : null;
+    if (this.siteGroup) this.root.add(this.siteGroup);
+    this.buildRoof();
     this.layout(true);
     this.applyHeat();
+    this.setXray(this.xray);
     if (this.world) this.buildWorld();
     if (!keepView) this.frame();
     this.wake(1000);
@@ -158,8 +163,10 @@ export class Map3D {
     const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
     geo.rotateX(Math.PI / 2);
     geo.translate(0, h, 0);
-    grp.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: this.c.edge, transparent: true, opacity: 0.55 })));
-    if (this.q.faces) grp.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.c.wall, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: this.c.edge, transparent: true, opacity: 0.55 }));
+    edges.userData.wall = true;
+    grp.add(edges);
+    if (this.q.faces) { const w = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.c.wall, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })); w.userData.wall = true; grp.add(w); }
     // the floor: solid, flat-shaded. It changes colour only to show status (activity / alerts / heatmap).
     const fgeo = new THREE.ShapeGeometry(shape);
     fgeo.rotateX(Math.PI / 2);
@@ -223,6 +230,153 @@ export class Map3D {
     return g;
   }
 
+  // ---------- the grounds: zones, garage/shed, fences, gates, trees ----------
+  siteObject(site) {
+    const g = new THREE.Group();
+    g.userData = { site: true };
+    const ZC = { driveway: '#2B3542', path: '#2E3846', front: '#1B2A22', garden: '#1A2B21', lawn: '#1D2F23', patio: '#2A303A', garage: '#262E3A', shed: '#262E3A', plot: '#0E151F', other: '#222A35' };
+    for (const z of [...site.rooms].sort((a, b) => (a.type === 'plot' ? -1 : 0) - (b.type === 'plot' ? -1 : 0))) {
+      const shape = new THREE.Shape(z.points.map(P));
+      const geo = new THREE.ShapeGeometry(shape); geo.rotateX(Math.PI / 2);
+      const slab = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: new THREE.Color(ZC[z.type] || ZC.other), transparent: true, opacity: z.type === 'plot' ? 0.5 : 0.85, side: THREE.DoubleSide, depthWrite: false }));
+      slab.position.y = z.type === 'plot' ? 0.003 : 0.008;
+      slab.userData = { zoneId: z.id, base: slab.material.color.clone() };
+      g.add(slab);
+      const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(z.points.map(([x, y]) => new THREE.Vector3(x, 0.012, y))), new THREE.LineBasicMaterial({ color: this.c.edge, transparent: true, opacity: z.type === 'plot' ? 0.35 : 0.22 }));
+      g.add(outline);
+      const height = ZONE_TYPES[z.type]?.building;
+      if (height) { // a small building: translucent walls and a flat roof line
+        const eg = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false }); eg.rotateX(Math.PI / 2); eg.translate(0, height, 0);
+        g.add(new THREE.LineSegments(new THREE.EdgesGeometry(eg, 30), new THREE.LineBasicMaterial({ color: this.c.edge, transparent: true, opacity: 0.45 })));
+        if (this.q.faces) g.add(new THREE.Mesh(eg, new THREE.MeshLambertMaterial({ color: this.c.wall, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false })));
+      }
+      if (this.q.labels && z.type !== 'plot') { const c = centroid(z.points); const l = textSprite(z.name.toUpperCase(), this.c.dim, 0.26); l.position.set(c[0], (height || 0) + 0.25, c[1]); g.add(l); }
+      this.zoneMeshes ||= new Map(); this.zoneMeshes.set(z.id, slab);
+    }
+    for (const o of site.openings || []) { const m = this.openingObject(site, o); if (m) g.add(m); }
+    const treeMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#2C4034'), transparent: true, opacity: 0.85 }), trunkMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#3A3A3A') });
+    for (const x of site.fixtures || []) {
+      if (x.kind === 'tree') {
+        const r = Math.max(0.3, Math.min(x.w, x.d) / 2), crown = new THREE.Mesh(new THREE.ConeGeometry(r, r * 2.2, 7), treeMat);
+        crown.position.set(x.x, 0.6 + r * 1.1, x.y);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.6, 6), trunkMat); trunk.position.set(x.x, 0.3, x.y);
+        g.add(crown, trunk);
+      } else if (x.kind === 'fence') {
+        const geo = new THREE.BoxGeometry(x.w, 1.2, Math.max(0.03, x.d)); geo.translate(0, 0.6, 0);
+        const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.c.fixture, transparent: true, opacity: 0.35, depthWrite: false }));
+        m.rotation.y = -(x.rot * Math.PI) / 180; m.position.set(x.x, 0, x.y);
+        g.add(m);
+      }
+    }
+    return g;
+  }
+  /** A flat roof over the top of each floor's rooms (toggle). */
+  buildRoof() {
+    this.roofGroup = new THREE.Group();
+    if (!this.house) return;
+    const top = this.house.floors.length - 1, f = this.house.floors[top];
+    for (const r of f.rooms) {
+      const geo = new THREE.ShapeGeometry(new THREE.Shape(r.points.map(P))); geo.rotateX(Math.PI / 2);
+      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.c.wall, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+      m.position.y = (r.height ?? f.height) + 0.01;
+      this.roofGroup.add(m);
+    }
+    this.floorGroups[top]?.add(this.roofGroup);
+    this.roofGroup.visible = !!this.roof;
+  }
+  setRoof(on) { this.roof = !!on; if (this.roofGroup) this.roofGroup.visible = this.roof; this.wake(600); }
+  /** X-ray: walls almost disappear so you can see inside every room. */
+  setXray(on) {
+    this.xray = !!on;
+    for (const g of this.floorGroups) g.traverse((o) => { if (o.userData.wall && o.material) { o.userData.xrayBase ??= o.material.opacity; o.material.opacity = o.userData.xrayBase * (this.xray ? 0.25 : 1); } });
+    this.wake(600);
+  }
+  /** Each Agent's view: a soft translucent cone (camera) or circle (microphone/door) on the floor. */
+  buildCones() {
+    for (const c of this.cones3d || []) { c.parent?.remove(c); c.geometry.dispose(); }
+    this.cones3d = [];
+    if (!this.house || this.cones === false) return;
+    this.house.floors.forEach((f, i) => {
+      for (const s of sensorsOn(f, this.agents)) {
+        const outside = !s.roomId;
+        const mat = new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: s.online ? (outside ? 0.1 : 0.13) : 0.05, side: THREE.DoubleSide, depthWrite: false });
+        const range = s.range * (outside ? 1.6 : 1);
+        const geo = s.type === 'camera' ? new THREE.CircleGeometry(range, 28, ((90 - s.dir - s.fov / 2) * Math.PI) / 180, (s.fov * Math.PI) / 180) : new THREE.CircleGeometry(s.type === 'tripwire' ? 1 : range, 32);
+        geo.rotateX(-Math.PI / 2);
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(s.x, 0.04, s.y);
+        m.userData = { agentId: s.id };
+        this.floorGroups[i].add(m);
+        this.cones3d.push(m);
+      }
+    });
+  }
+  /** Coverage overlay: watched floor area shaded, outside doors/windows/gates with no sensor in amber, and a suggested spot. */
+  setCoverage(cov) {
+    this.clearCoverage();
+    if (!cov || !this.house) return;
+    const cell = new THREE.PlaneGeometry(1, 1); cell.rotateX(-Math.PI / 2);
+    for (const f of cov.floors) {
+      const fg = f.id === 'site' ? this.floorGroups[0] : this.floorGroups.find((g) => g.userData.floorId === f.id);
+      if (!fg) continue;
+      if (f.cells.length) {
+        const inst = new THREE.InstancedMesh(cell, new THREE.MeshBasicMaterial({ color: this.c.accent, transparent: true, opacity: 0.28, depthWrite: false }), f.cells.length);
+        const m = new THREE.Matrix4();
+        f.cells.forEach(([x, y], k) => { m.makeScale(f.cell * 0.94, 1, f.cell * 0.94); m.setPosition(x, 0.05, y); inst.setMatrixAt(k, m); });
+        const holder = new THREE.Group(); holder.add(inst); fg.add(holder); this.covParts = [...(this.covParts || []), holder];
+      }
+      for (const e of f.entries.filter((x) => x.unmonitored)) {
+        const pts = [[e.a, 0.05], [e.b, 0.05], [e.b, 2.1], [e.a, 2.1], [e.a, 0.05]].map(([[x, z], y]) => new THREE.Vector3(x, y, z));
+        const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: this.c.amber }));
+        const holder = new THREE.Group(); holder.add(l); fg.add(holder); this.covParts = [...(this.covParts || []), holder];
+      }
+    }
+    if (cov.suggestion) {
+      const fg = this.floorGroups.find((g) => g.userData.floorId === cov.suggestion.floorId) || this.floorGroups[0];
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.42, 32), new THREE.MeshBasicMaterial({ color: this.c.accent, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(cov.suggestion.x, 0.06, cov.suggestion.y);
+      const l = textSprite('SUGGESTED AGENT', this.c.accent, 0.24); l.position.set(cov.suggestion.x, 0.5, cov.suggestion.y);
+      const holder = new THREE.Group(); holder.add(ring, l); fg.add(holder); this.covParts = [...(this.covParts || []), holder];
+    }
+    this.covOn = true;
+    this.wake(600);
+  }
+  clearCoverage() { for (const h of this.covParts || []) h.parent?.remove(h); this.covParts = []; this.covOn = false; this.wake(400); }
+  /** Camera presets: overview, top-down plan, front, garden, garage/shed (from the outside zones). */
+  preset(name) {
+    if (!this.center) return false;
+    const zonePt = (types) => { const z = (this.house?.site?.rooms || []).filter((r) => types.includes(r.type)); if (!z.length) return null; const c = centroid(z.flatMap((r) => r.points).length >= 3 ? z.sort((a, b) => types.indexOf(a.type) - types.indexOf(b.type))[0].points : z[0].points); return new THREE.Vector3(c[0], 0, c[1]); };
+    let target = this.center.clone(), from;
+    if (name === 'overview') { this.showFloor(-1); return true; }
+    if (name === 'top') { target.y = 0; from = target.clone().add(new THREE.Vector3(0.01, this.size * 1.9 + 6, 0.01)); }
+    else {
+      const p = zonePt({ front: ['driveway', 'front', 'path'], garden: ['garden', 'lawn', 'patio'], garage: ['garage', 'shed'] }[name] || []);
+      if (!p) return false;
+      const out = p.clone().sub(this.center); out.y = 0; if (out.length() < 0.1) out.set(0, 0, 1); out.normalize();
+      target = p; from = p.clone().add(out.multiplyScalar(this.size * 0.9 + 4)).add(new THREE.Vector3(0, this.size * 0.55 + 3, 0));
+    }
+    this.flight = { from: this.camera.position.clone(), fromT: this.controls.target.clone(), to: from, toT: target, t0: performance.now(), dur: 1100 };
+    this.wake(1300);
+    return true;
+  }
+  /** Idle: turn slowly; when something happens, fly to it. */
+  setSpin(on) { this.spin = !!on; this.lastTouch = performance.now(); }
+  /** Weather on the model: a light mist when foggy/raining, fine rain streaks when it's raining. */
+  setWeather(kind) {
+    const wet = ['rain', 'drizzle', 'showers', 'storm', 'snow'].includes(kind), fog = kind === 'fog' || wet;
+    this.scene.fog = fog ? new THREE.Fog(new THREE.Color('#0B111A'), (this.size || 10) * 1.2, (this.size || 10) * 4 + 30) : null;
+    this.rain?.parent?.remove(this.rain); this.rain = null;
+    if (wet && this.q.faces && this.center) {
+      const n = 260, R = (this.size || 10) * 0.9, pos = new Float32Array(n * 6);
+      for (let i = 0; i < n; i++) { const x = this.center.x + (Math.random() - 0.5) * R * 2, z = this.center.z + (Math.random() - 0.5) * R * 2, y = Math.random() * 12; pos.set([x, y, z, x - 0.04, y - 0.45, z], i * 6); }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: this.c.muted, transparent: true, opacity: kind === 'snow' ? 0.35 : 0.22 }));
+      this.scene.add(this.rain);
+    }
+    this.weatherKind = kind;
+    this.wake(600);
+  }
+
   // ---------- heatmap: tint each room's floor by how busy it was ----------
   setHeat(counts) { this.heat = counts ? { counts, max: Math.max(0, ...Object.values(counts)) } : null; this.applyHeat(); this.wake(600); }
   applyHeat() { for (const g of this.roomMeshes.values()) { const m = g.userData.floorMesh; if (m) this.restoreFloor(m); } }
@@ -267,12 +421,12 @@ export class Map3D {
       this.sunLight.position.set(cx + sx * 30 * Math.cos(alt), 30 * Math.sin(alt), cz + sz * 30 * Math.cos(alt));
       this.sunLight.target.position.set(cx, 0, cz);
       this.sunLight.intensity = 0.5 + 0.8 * Math.min(1, w.sun.altitude / 30) * (1 - Math.min(90, w.cloud || 0) / 160);
-      this.hemi.intensity = 1.15;
+      this.hemi.intensity = 1.15; this.hemi.color.set(0xe9eef4);
       this.sunObj = this.sunLight;
       this.buildShadow(shadowVector(w.sun, w.northDeg || 0), w.cloud || 0);
     } else if (w.sun) {
       // after sunset: dimmer, cooler light (no gimmicks — just night)
-      this.sunLight.intensity = 0.25; this.hemi.intensity = 0.8;
+      this.sunLight.intensity = 0.2; this.hemi.intensity = 0.7; this.hemi.color.set(0xb8c8e0);
     }
     this.layout();
   }
@@ -337,6 +491,7 @@ export class Map3D {
       fg.add(m);
       this.markers.set(a.id, m);
     }
+    this.buildCones();
   }
   placeMode(agentId) { this.placing = agentId; this.box.classList.toggle('placing', !!agentId); }
 
@@ -357,6 +512,17 @@ export class Map3D {
       this.effects.push({ kind: 'ripple', obj: ring, t0: performance.now(), dur: 1600 });
     }
     this.effects.push({ kind: 'marker', obj: m, color, t0: performance.now(), dur: 2500 });
+    const cls = ev.data?.class;
+    if (cls) { // an outside detection: a small labelled marker where it was seen
+      const a = this.agents.find((x) => x.id === ev.agentId), dir = Number.isFinite(a?.place?.dir) ? a.place.dir : 0, d = 3;
+      const px = m.userData.x + Math.sin((dir * Math.PI) / 180) * d, pz = m.userData.y - Math.cos((dir * Math.PI) / 180) * d;
+      const lbl = textSprite(`${String(cls).toUpperCase()} · ${new Date(ev.ts || Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, color, 0.26);
+      lbl.position.set(px, 0.9, pz);
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.18, 20), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })); dot.rotation.x = -Math.PI / 2; dot.position.set(px, 0.06, pz);
+      const grp = new THREE.Group(); grp.add(lbl, dot); m.parent.add(grp);
+      this.effects.push({ kind: 'detect', obj: grp, t0: performance.now(), dur: 30000 });
+    }
+    if (this.spin && performance.now() - (this.lastTouch || 0) > 20000) this.flyTo(ev.agentId);
   }
   flyTo(agentId) {
     const m = this.markers.get(agentId);
@@ -449,7 +615,9 @@ export class Map3D {
   loop(now) {
     this.raf = requestAnimationFrame(this.loop);
     if (document.hidden || !this.box.isConnected || !this.box.offsetParent) return;
-    const busy = now < (this.activeUntil || 0) || this.effects.length || this.flight || Math.abs(this.explode - this.explodeTarget) > 0.001;
+    const spinning = this.spin && !this.flight && now - (this.lastTouch || 0) > 45000;
+    this.controls.autoRotate = spinning; this.controls.autoRotateSpeed = 0.35;
+    const busy = spinning || this.rain || now < (this.activeUntil || 0) || this.effects.length || this.flight || Math.abs(this.explode - this.explodeTarget) > 0.001;
     if (now - this.last < 1000 / (busy ? this.q.fps : 4)) return;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
@@ -473,6 +641,7 @@ export class Map3D {
         if (fx.kind === 'room' && fx.mesh) this.restoreFloor(fx.mesh);
         if (fx.kind === 'flash') fx.obj.material.color.copy(fx.obj.userData.base);
         if (fx.kind === 'ripple') { fx.obj.parent?.remove(fx.obj); fx.obj.geometry.dispose(); }
+        if (fx.kind === 'detect') fx.obj.parent?.remove(fx.obj);
         if (fx.kind === 'marker') fx.obj.children[0].material.color.copy(this.agents.find((a) => a.id === fx.obj.userData.agentId)?.online === false ? this.c.dim : this.c.text);
         return false;
       }
@@ -481,8 +650,10 @@ export class Map3D {
       if (fx.kind === 'flash') fx.obj.material.color.copy(fx.color);
       if (fx.kind === 'ripple') { fx.obj.scale.setScalar(0.2 + k * 3); fx.obj.material.opacity = 0.7 * (1 - k); }
       if (fx.kind === 'marker') fx.obj.children[0].material.color.copy(fx.color);
+      if (fx.kind === 'detect' && k > 0.8) fx.obj.children.forEach((c) => { c.material.transparent = true; c.material.opacity = (1 - k) * 5; });
       return true;
     });
+    if (this.rain) { const a = this.rain.geometry.attributes.position; for (let i = 0; i < a.count; i += 2) { let y = a.getY(i) - dt * 9; if (y < 0) y += 12; a.setY(i, y); a.setY(i + 1, y - 0.45); } a.needsUpdate = true; }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.frames = (this.frames || 0) + 1;

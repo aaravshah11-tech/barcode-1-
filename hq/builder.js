@@ -3,7 +3,7 @@
 import { esc, $, $$, toast, confirmBox } from '../shared/ui.js';
 import { sfx } from '../shared/sfx.js';
 import { icon } from '../shared/icons.js';
-import { sanitizeHouse, emptyHouse, newId, snap, area, bbox, centroid, pointInPolygon, nearestWall, openingEnds, fixtureLines, fixtureAt, OPENING_KINDS, FIXTURE_KINDS, TEMPLATES, SCAN_APPS } from '../shared/house.js';
+import { sanitizeHouse, emptyHouse, newId, snap, area, bbox, centroid, pointInPolygon, nearestWall, openingEnds, fixtureLines, fixtureAt, OPENING_KINDS, FIXTURE_KINDS, TEMPLATES, SCAN_APPS, ZONE_TYPES, SITE_ID } from '../shared/house.js';
 
 const TOOLS = [
   ['select', 'select', 'Select / move', 'Click a room, stairs or wall to select it. Drag to move it, or drag a room’s corner dots to reshape it. Drag empty space to pan.'],
@@ -30,7 +30,11 @@ export function openBuilder(S, { files, onClose } = {}) {
   let draft = null; // shape being drawn
   let drag = null;
   let traceUrl = null, scaleClicks = null;
-  const floor = () => house.floors[fi];
+  const outside = () => fi < 0; // the grounds: driveway, gardens, garage/shed, fences, gates, trees
+  const floor = () => (fi < 0 ? (house.site ||= { id: SITE_ID, name: 'Outside', height: 2.5, rooms: [], openings: [], fixtures: [] }) : house.floors[fi]);
+  /** On the Outside tab some tools mean something else. */
+  const OUT_TOOL = { rect: 'Draw zone', poly: 'Zone shape', door: 'Add gate', wall: 'Fence', column: 'Tree / hedge' };
+  const OUT_HINT = { rect: 'Drag to draw a zone: driveway, path, garden, lawn, patio, or a garage/shed building.', poly: 'Click each corner of the zone. Click the first corner again to finish.', door: 'Click on the edge of a zone (e.g. the garden boundary) to put a gate there.', wall: 'Drag from one end of the fence to the other.', column: 'Click to place a tree or hedge.' };
 
   const el = document.createElement('div');
   el.className = 'builder';
@@ -41,6 +45,7 @@ export function openBuilder(S, { files, onClose } = {}) {
       <b class="mono">HOUSE BUILDER</b>
       <div class="b-floors" data-floors role="tablist" aria-label="Floors"></div>
       <span class="spacer"></span>
+      <button class="small" data-history title="Earlier versions of the plan">History</button>
       <span class="small muted mono" data-saved>SAVED</span>
       <button class="icon-btn" data-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button class="icon-btn" data-redo title="Redo" aria-label="Redo">↷</button>
       <button class="btn-primary" data-done>Done</button>
@@ -70,7 +75,7 @@ export function openBuilder(S, { files, onClose } = {}) {
     }, 500);
   };
   const change = (fn) => { undo.push(JSON.stringify(house)); if (undo.length > 80) undo.shift(); redo.length = 0; fn(); save(); draw(); setTimeout(panel, 0); }; // panel after focus has moved (Tab)
-  const restore = (from, to) => { if (!from.length) return; to.push(JSON.stringify(house)); house = JSON.parse(from.pop()); fi = Math.min(fi, house.floors.length - 1); sel = null; save(); draw(); panel(); };
+  const restore = (from, to) => { if (!from.length) return; to.push(JSON.stringify(house)); house = JSON.parse(from.pop()); fi = fi < 0 ? fi : Math.min(fi, house.floors.length - 1); sel = null; save(); draw(); panel(); };
 
   // ---------- coordinates ----------
   const toWorld = (e) => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left - view.x) / view.z, (e.clientY - r.top - view.y) / view.z]; };
@@ -89,7 +94,7 @@ export function openBuilder(S, { files, onClose } = {}) {
       for (let y = y0; y <= y1; y++) grid.push(`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" class="g ${y % 5 ? '' : 'g5'}"/>`);
     }
     const t = house.trace[f.id];
-    const below = fi > 0 ? house.floors[fi - 1] : null;
+    const below = fi > 0 ? house.floors[fi - 1] : fi < 0 ? house.floors[0] : null;
     const lower = below ? below.rooms.map((rm) => `<polygon points="${rm.points.join(' ')}" class="ghost"/>`).join('')
       + (below.fixtures || []).filter((x) => x.kind === 'stairs' || x.kind === 'spiral').map((x) => `<polygon points="${fixtureLines(x).outline.join(' ')}" class="ghost stairs-below"><title>Stairs coming up from ${esc(below.name)}</title></polygon>`).join('') : '';
     const fixtures = (f.fixtures || []).map((x) => {
@@ -99,9 +104,9 @@ export function openBuilder(S, { files, onClose } = {}) {
     }).join('');
     const rooms = f.rooms.map((rm) => {
       const c = centroid(rm.points), b = bbox(rm.points), on = sel?.type === 'room' && sel.id === rm.id;
-      return `<g data-room="${rm.id}" class="room ${on ? 'sel' : ''}"><polygon points="${rm.points.join(' ')}"/>
-        <text x="${c[0]}" y="${c[1]}" style="font-size:${13 / z}px">${esc(rm.name)}</text>
-        <text x="${c[0]}" y="${c[1] + 16 / z}" class="dim" style="font-size:${10 / z}px">${b.w.toFixed(1)} × ${b.h.toFixed(1)} m · ${area(rm.points).toFixed(1)} m²</text>
+      return `<g data-room="${rm.id}" class="room ${on ? 'sel' : ''} ${rm.type ? `zone z-${rm.type}` : ''}"><polygon points="${rm.points.join(' ')}"/>
+        ${rm.type && Math.min(b.w, b.h) < 2 && !on ? '' : `<text x="${c[0]}" y="${c[1]}" style="font-size:${13 / z}px">${esc(rm.name)}</text>
+        <text x="${c[0]}" y="${c[1] + 16 / z}" class="dim" style="font-size:${10 / z}px">${b.w.toFixed(1)} × ${b.h.toFixed(1)} m · ${area(rm.points).toFixed(1)} m²</text>`}<title>${esc(rm.name)}</title>
         ${on ? rm.points.map((p, i) => `<circle data-vertex="${i}" cx="${p[0]}" cy="${p[1]}" r="${7 / z}" class="vx"/>`).join('') : ''}</g>`;
     }).join('');
     const openings = f.openings.map((o) => {
@@ -116,9 +121,15 @@ export function openBuilder(S, { files, onClose } = {}) {
       ${t && traceUrl ? `<image href="${traceUrl}" x="${t.x}" y="${t.y}" width="${t.w * t.scale}" height="${t.h * t.scale}" opacity="${t.opacity}" preserveAspectRatio="none" data-trace/>` : ''}
       <g class="grid">${grid.join('')}</g>${lower}${rooms}${fixtures}${openings}${d}${sc}
       <g class="origin"><line x1="-0.3" y1="0" x2="1" y2="0"/><line x1="0" y1="-0.3" x2="0" y2="1"/><text x="1.05" y="0.1" style="font-size:${10 / z}px">1 m</text></g></g>`;
-    $$('[data-tool]', el).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === tool)));
-    $('[data-hint]', el).textContent = scaleClicks ? (scaleClicks.length ? 'Now click the other end of something you know the length of.' : 'SET SCALE: click one end of a wall you know the length of.') : TOOLS.find(([k]) => k === tool)[3];
-    $('[data-floors]', el).innerHTML = house.floors.map((x, i) => `<button role="tab" data-floor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('') + '<button data-addfloor title="Add a floor" aria-label="Add a floor">＋</button>';
+    $$('[data-tool]', el).forEach((b) => {
+      const k = b.dataset.tool, def = TOOLS.find(([x]) => x === k);
+      b.setAttribute('aria-pressed', String(k === tool));
+      b.hidden = outside() && ['window', 'stairs', 'model'].includes(k);
+      const label = outside() && OUT_TOOL[k] ? OUT_TOOL[k] : def[2];
+      b.querySelector('small').textContent = label; b.title = label; b.setAttribute('aria-label', label);
+    });
+    $('[data-hint]', el).textContent = scaleClicks ? (scaleClicks.length ? 'Now click the other end of something you know the length of.' : 'SET SCALE: click one end of a wall you know the length of.') : (outside() && OUT_HINT[tool]) || TOOLS.find(([k]) => k === tool)[3];
+    $('[data-floors]', el).innerHTML = house.floors.map((x, i) => `<button role="tab" data-floor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('') + '<button data-addfloor title="Add a floor" aria-label="Add a floor">＋</button>' + `<button role="tab" data-floor="-1" class="b-outside" aria-pressed="${fi < 0}" title="Driveway, gardens, garage, fences, gates and trees">Outside</button>`;
   }
   const rectPts = (a, b) => [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
 
@@ -133,7 +144,13 @@ export function openBuilder(S, { files, onClose } = {}) {
     else if (tool === 'model') html = modelPanel();
     else if (room) {
       const b = bbox(room.points);
-      html = `<h2>Room</h2>
+      html = outside() ? `<h2>Outside zone</h2>
+        <label class="field"><span>Name</span><input data-rname value="${esc(room.name)}" maxlength="30"></label>
+        <label class="field"><span>Type</span><select data-rtype>${Object.entries(ZONE_TYPES).map(([k, v]) => `<option value="${k}" ${room.type === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+        <p class="mono small">${b.w.toFixed(2)} × ${b.h.toFixed(2)} m · ${area(room.points).toFixed(1)} m²</p>
+        ${room.points.length === 4 ? `<div class="row"><label class="field grow"><span>Width (m)</span><input type="number" step="0.05" min="0.5" data-rw value="${b.w.toFixed(2)}"></label><label class="field grow"><span>Depth (m)</span><input type="number" step="0.05" min="0.5" data-rh value="${b.h.toFixed(2)}"></label></div>` : ''}
+        <p class="small muted">Zones appear on the 3D map and the Perimeter screen. Garage and shed are drawn as small buildings.</p>
+        <button class="btn-danger" data-delsel>Delete zone</button>` : `<h2>Room</h2>
         <label class="field"><span>Name</span><input data-rname value="${esc(room.name)}" maxlength="30"></label>
         <p class="mono small">${b.w.toFixed(2)} × ${b.h.toFixed(2)} m · ${area(room.points).toFixed(1)} m²</p>
         ${room.points.length === 4 ? `<div class="row"><label class="field grow"><span>Width (m)</span><input type="number" step="0.05" min="0.5" data-rw value="${b.w.toFixed(2)}"></label><label class="field grow"><span>Depth (m)</span><input type="number" step="0.05" min="0.5" data-rh value="${b.h.toFixed(2)}"></label></div>` : ''}
@@ -141,7 +158,7 @@ export function openBuilder(S, { files, onClose } = {}) {
         <button class="btn-danger" data-delsel>Delete room</button>`;
     } else if (op) {
       html = `<h2>${esc(OPENING_KINDS[op.kind].label)}</h2>
-        ${op.kind === 'window' ? '' : `<label class="field"><span>Type</span><select data-okind>${Object.entries(OPENING_KINDS).filter(([k]) => k !== 'window').map(([k, v]) => `<option value="${k}" ${k === op.kind ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>`}
+        ${op.kind === 'window' || op.kind === 'gate' ? '' : `<label class="field"><span>Type</span><select data-okind>${Object.entries(OPENING_KINDS).filter(([k]) => k !== 'window' && k !== 'gate').map(([k, v]) => `<option value="${k}" ${k === op.kind ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>`}
         <label class="field"><span>Width (m)</span><input type="number" step="0.05" min="0.3" max="6" data-owidth value="${op.width}"></label>
         <p class="small muted">Drag it along the wall to move it.</p>
         <button class="btn-danger" data-delsel>Delete</button>`;
@@ -156,6 +173,11 @@ export function openBuilder(S, { files, onClose } = {}) {
         <div class="row"><label class="field grow"><span>Turn (°)</span><input type="number" step="15" data-fxrot value="${fx.rot}"></label><button class="small" data-fxturn title="Turn 90°">${icon('rotate')}Turn 90°</button></div>
         ${isStairs ? `<p class="small muted">${fx.kind === 'stairs' ? 'The arrow points the way UP. ' : ''}${up ? `They lead up to <b>${esc(up.name)}</b>, where they show faintly so you can line up the landing.` : 'This is the top floor: add a floor (＋ at the top) for the stairs to lead to.'}</p>` : ''}
         <button class="btn-danger" data-delsel>Delete</button>`;
+    } else if (outside()) {
+      html = `<h2>Outside</h2>
+        <p class="mono small">${f.rooms.length} zone${f.rooms.length === 1 ? '' : 's'} · ${f.openings.length} gate${f.openings.length === 1 ? '' : 's'} · ${(f.fixtures || []).filter((x) => x.kind === 'tree').length} trees · ${(f.fixtures || []).filter((x) => x.kind === 'fence').length} fences</p>
+        <h2>How to draw the outside</h2>
+        <ol class="small b-steps"><li>The house shows faintly as a guide.</li><li><b>Draw zone</b>: drag out the plot boundary, driveway, front path, front garden, back garden, lawn or patio. Then pick its <b>Type</b> on the right.</li><li>Draw the <b>garage</b> or <b>shed</b> as a zone too and set its type — it becomes a small building.</li><li><b>Fence</b> along the boundary, <b>Add gate</b> on a zone edge, and dot in <b>trees and hedges</b>.</li><li>Agents dropped onto a zone on the 3D map watch that zone (Front, Garden or Garage on the Perimeter screen).</li></ol>`;
     } else {
       const total = f.rooms.reduce((n, r) => n + area(r.points), 0);
       html = `<h2>${esc(f.name)}</h2>
@@ -236,9 +258,10 @@ export function openBuilder(S, { files, onClose } = {}) {
     }
     if (tool === 'wall') { draft = { kind: 'wall', a: p, b: p }; svg.setPointerCapture(e.pointerId); return draw(); }
     if (tool === 'stairs' || tool === 'column') {
-      const k = FIXTURE_KINDS[tool];
+      const kind = outside() && tool === 'column' ? 'tree' : tool;
+      const k = FIXTURE_KINDS[kind];
       // Stairs: the click is the bottom step, so the flight runs up (north) from there.
-      const x = { id: newId(), kind: tool, x: p[0], y: tool === 'stairs' ? round(p[1] - k.d / 2) : p[1], w: k.w, d: k.d, rot: 0 };
+      const x = { id: newId(), kind, x: p[0], y: tool === 'stairs' ? round(p[1] - k.d / 2) : p[1], w: k.w, d: k.d, rot: 0 };
       change(() => { (floor().fixtures ||= []).push(x); sel = { type: 'fixture', id: x.id }; tool = 'select'; });
       sfx('blip');
       return;
@@ -246,7 +269,8 @@ export function openBuilder(S, { files, onClose } = {}) {
     if (tool === 'door' || tool === 'window') {
       const wall = nearestWall(floor(), w);
       if (!wall || wall.dist > 0.6) { toast('Click on (or very near) a wall.'); return; }
-      const o = { id: newId(), kind: tool, roomId: wall.roomId, edge: wall.edge, t: wall.t, width: OPENING_KINDS[tool].width };
+      const kind = outside() ? 'gate' : tool;
+      const o = { id: newId(), kind, roomId: wall.roomId, edge: wall.edge, t: wall.t, width: OPENING_KINDS[kind].width };
       change(() => { floor().openings.push(o); sel = { type: 'opening', id: o.id }; });
       sfx('blip');
       return;
@@ -294,7 +318,7 @@ export function openBuilder(S, { files, onClose } = {}) {
       draft = null;
       if (len < 0.3) { draw(); return; }
       // A wall is stored like the other parts: centre, length (w), thickness (d) and a turn.
-      const x = { id: newId(), kind: 'wall', x: round((a[0] + b[0]) / 2), y: round((a[1] + b[1]) / 2), w: round(len), d: 0.1, rot: round((((Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI) + 360) % 360) };
+      const x = { id: newId(), kind: outside() ? 'fence' : 'wall', x: round((a[0] + b[0]) / 2), y: round((a[1] + b[1]) / 2), w: round(len), d: outside() ? 0.05 : 0.1, rot: round((((Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI) + 360) % 360) };
       change(() => { (floor().fixtures ||= []).push(x); sel = { type: 'fixture', id: x.id }; });
       sfx('blip');
       return;
@@ -322,8 +346,19 @@ export function openBuilder(S, { files, onClose } = {}) {
     view.z = z;
     draw();
   }
+  async function showHistory() {
+    let list = [];
+    try { list = await S.api('/house/versions'); } catch (x) { return toast(x.message, { kind: 'err' }); }
+    const { sheet } = await import('../shared/ui.js');
+    const sh = sheet(`<p class="small muted">A copy is kept each time you press Done (the last 30).</p><ol class="hist-list">${list.map((v) => `<li><span class="mono small">${new Date(v.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span class="grow small">${v.rooms} rooms · ${v.zones} outside zones · ${esc(v.by)}</span><button class="small" data-hrestore="${v.id}">Restore</button></li>`).join('') || '<li class="small muted">No saved versions yet.</li>'}</ol>`, { title: 'Plan history' });
+    sh.el.addEventListener('click', async (e) => {
+      const id = e.target.closest('[data-hrestore]')?.dataset.hrestore;
+      if (!id || !(await confirmBox('Restore this version?', 'The current plan is replaced (it is kept in the history too).', { ok: 'Restore' }))) return;
+      try { const h = await S.api(`/house/versions/${id}/restore`, { method: 'POST' }); undo.push(JSON.stringify(house)); house = sanitizeHouse(h); S.house = h; fi = 0; sel = null; sh.close(); draw(); panel(); fit(); toast('Plan restored'); } catch (x) { toast(x.message, { kind: 'err' }); }
+    });
+  }
   function fit() {
-    const pts = floor().rooms.flatMap((r) => r.points);
+    const pts = fi < 0 ? [...floor().rooms.flatMap((r) => r.points), ...house.floors[0].rooms.flatMap((r) => r.points)] : floor().rooms.flatMap((r) => r.points);
     const t = house.trace[floor().id];
     if (t) pts.push([t.x, t.y], [t.x + t.w * t.scale, t.y + t.h * t.scale]);
     const r = svg.getBoundingClientRect();
@@ -336,7 +371,7 @@ export function openBuilder(S, { files, onClose } = {}) {
   }
 
   function addRoom(points) {
-    const r = { id: newId(), name: `Room ${floor().rooms.length + 1}`, points };
+    const r = outside() ? { id: newId(), name: `Zone ${floor().rooms.length + 1}`, points, type: 'garden' } : { id: newId(), name: `Room ${floor().rooms.length + 1}`, points };
     change(() => { floor().rooms.push(r); sel = { type: 'room', id: r.id }; tool = 'select'; });
     sfx('blip');
     setTimeout(() => $('[data-rname]', side)?.select(), 30);
@@ -385,7 +420,8 @@ export function openBuilder(S, { files, onClose } = {}) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.tool) { tool = b.dataset.tool; draft = null; scaleClicks = null; if (tool !== 'select') sel = null; sfx('click'); draw(); panel(); if (tool === 'trace') loadTrace(); }
-    else if (b.dataset.floor) { fi = Number(b.dataset.floor); sel = null; draft = null; loadTrace(); panel(); fit(); }
+    else if (b.dataset.floor) { fi = Number(b.dataset.floor); sel = null; draft = null; if (fi < 0 && ['window', 'stairs', 'model'].includes(tool)) tool = 'select'; loadTrace(); panel(); fit(); }
+    else if ('history' in b.dataset) showHistory();
     else if ('addfloor' in b.dataset) {
       if (house.floors.length >= 8) return toast('That’s the maximum of 8 floors.');
       change(() => { const below = floor(); house.floors.push({ id: newId(), name: `Floor ${house.floors.length}`, height: below.height, rooms: [], openings: [], fixtures: [] }); fi = house.floors.length - 1; sel = null; });
@@ -421,6 +457,7 @@ export function openBuilder(S, { files, onClose } = {}) {
     if (t.matches('[data-rname]') && room) change(() => { room.name = t.value.trim() || room.name; });
     else if (t.matches('[data-rw], [data-rh]') && room && n >= 0.3) change(() => { const b = bbox(room.points), w = t.matches('[data-rw]') ? n : b.w, h = t.matches('[data-rh]') ? n : b.h; room.points = rectPts([b.minX, b.minY], [b.minX + w, b.minY + h]); });
     else if (t.matches('[data-rheight]') && room) change(() => { room.height = n; });
+    else if (t.matches('[data-rtype]') && room && ZONE_TYPES[t.value]) change(() => { room.type = t.value; if (/^Zone \d+$/.test(room.name)) room.name = ZONE_TYPES[t.value].label.replace(/ \(building\)$/, ''); });
     else if (t.matches('[data-owidth]') && op) change(() => { op.width = n; });
     else if (t.matches('[data-okind]') && op && OPENING_KINDS[t.value]) change(() => { op.kind = t.value; op.width = OPENING_KINDS[t.value].width; });
     else if (t.matches('[data-fxkind]') && selFixture() && FIXTURE_KINDS[t.value]) change(() => { const x = selFixture(), k = FIXTURE_KINDS[t.value]; x.kind = t.value; x.w = k.w; x.d = k.d; });

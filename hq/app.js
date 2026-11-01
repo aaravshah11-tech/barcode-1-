@@ -271,18 +271,22 @@ function showView(id, force = false) {
 }
 
 // ---------------- OPERATIONS: the configurable workspace ----------------
-const OPS_PANELS = () => [
-  { id: 'map', title: 'Site map', defaultW: 6, defaultH: 15, minW: 3, minH: 7, html: `<div class="panel-head"><h2>Site map</h2>
+/** The site map (compact on the Operations Floor, full screen in the Situation Room). */
+function mapHtml(full) {
+  return `<div class="panel-head"><h2>Site map</h2>
       <div class="filters" role="group" aria-label="Map view">${HAS_GL ? '<button data-mapview="3d">3D</button>' : ''}<button data-mapview="plan">Plan</button><button data-mapview="radar">Overview</button></div>
       <button class="small" data-replay aria-pressed="false" title="Play back the day’s events on the map">${icon('play')}Replay</button>
       <button class="small" data-heat aria-pressed="${!!S.heat?.on}" title="Show which rooms were busiest">${icon('heat')}Heatmap</button>
       ${MODE === 'hq' ? `<button class="small" data-build title="Edit floor plan">${icon('house')}<span class="hide-narrow">Floor plan</span></button>` : ''}</div>
     <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
       <div class="map3d" data-map3d hidden></div>
-      <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="world-chip mono" data-worldchip hidden></span><span class="grow"></span><button class="small" data-iso aria-pressed="${!!S.iso}" title="Isometric view">Iso</button><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
+      <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="world-chip mono" data-worldchip hidden></span><span class="grow"></span>${full ? `<div class="filters" role="group" aria-label="Camera">${[['overview', 'Overview'], ['top', 'Plan'], ['front', 'Front'], ['garden', 'Garden'], ['garage', 'Garage']].map(([k, l]) => `<button data-preset="${k}">${l}</button>`).join('')}</div><button class="small" data-roof aria-pressed="false" title="Show the roof">Roof</button><button class="small" data-xray aria-pressed="false" title="See through the walls">X-ray</button><button class="small" data-coverage aria-pressed="false" title="What the Agents can see">Coverage</button>` : ''}<button class="small" data-iso aria-pressed="${!!S.iso}" title="Isometric view">Iso</button><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
       <div class="map-hint" data-maphint hidden></div>
       <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
-      <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>` },
+      <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>`;
+}
+const OPS_PANELS = () => [
+  { id: 'map', title: 'Site map', defaultW: 6, defaultH: 15, minW: 3, minH: 7, html: mapHtml(false) },
   { id: 'picture', title: 'Current picture', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Current picture</h2></div><div class="wp-body"><div data-picture></div><div data-peoplelist class="pic-controls"></div></div>' },
   { id: 'queue', title: 'Triage', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Triage <span data-qcount></span></h2><button class="small" data-view="triage" title="Open the Triage queue (2)">Open</button></div><div class="wp-body"><div class="sevsum2" data-sevsum2></div><ol class="mini-queue" data-minique></ol></div>' },
   { id: 'perimeter', title: 'Perimeter', defaultW: 3, defaultH: 7, html: '<div class="panel-head"><h2>Perimeter</h2><span class="lbl">Met · Open-Meteo</span></div><div class="wp-body" data-perimini></div>' },
@@ -336,6 +340,20 @@ registerView({
   leave() { map3d?.destroy(); map3d = null; radar?.destroy?.(); radar = null; ws = null; },
 });
 window.__ws = () => ws; // for the automated tests
+// ---------------- SITUATION ROOM: the house and grounds, full screen ----------------
+registerView({
+  id: 'situation', label: 'Situation Room', icon: 'cube', order: 2,
+  render(root) {
+    root.innerHTML = `<section class="panel sitroom wp wp-map" data-panel="map">${mapHtml(true)}</section>`;
+    radar?.destroy?.(); radar = null;
+    const c = $('[data-radar]');
+    if (c) radar = new Radar(c, { onPick: openAgent, fx: false });
+    map3d?.destroy(); map3d = null;
+    S.mapView = HAS_GL && houseHasRooms() ? '3d' : houseHasRooms() ? 'plan' : 'radar';
+    launchMapView();
+  },
+  leave() { map3d?.destroy(); map3d = null; radar?.destroy?.(); radar = null; },
+});
 window.__go = (id) => showView(id); // (tests) open any screen, including tabs inside Administration / Records
 
 // ---------------- TRIAGE + INCIDENTS (see views/) ----------------
@@ -520,6 +538,15 @@ async function onClick(e) {
   if ('palette' in b.dataset) { commandPalette(); return; }
   if (b.dataset.view) { if (b.dataset.qalert) triage.select(b.dataset.qalert); showView(b.dataset.view); return; }
   if ('iso' in b.dataset) { toggleIso(); return; }
+  if (b.dataset.preset) { if (!map3d?.preset(b.dataset.preset)) toast('Draw the outside first: Floor plan › Outside, then add a driveway, garden or garage zone.'); return; }
+  if ('roof' in b.dataset) { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); map3d?.setRoof(on); return; }
+  if ('xray' in b.dataset) { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); map3d?.setXray(on); return; }
+  if ('coverage' in b.dataset) {
+    const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on));
+    if (!on) { map3d?.clearCoverage(); mapHint(''); return; }
+    T.api('/coverage').then((cov) => { map3d?.setCoverage(cov); mapHint(`Coverage ${cov.pct}% · ${cov.unmonitored.length} unwatched entr${cov.unmonitored.length === 1 ? 'y' : 'ies'}${cov.suggestion ? ` · Suggestion: ${cov.suggestion.text}` : ''}`); }, (x) => toast(x.message, { kind: 'err' }));
+    return;
+  }
   if ('terminal' in b.dataset) { term.toggle(); return; }
   if ('global' in b.dataset) { openGlobal(); return; }
   if ('briefing' in b.dataset) { openBriefing(S); return; }
@@ -675,7 +702,7 @@ function onMsg(msg) {
   else if (msg.t === 'shift') shiftView.refresh();
   else if (msg.t === 'reload') { toast(msg.reason || 'HQ changed — reloading'); setTimeout(() => location.reload(), 1200); }
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
-  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); }
+  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); map3d?.setWeather(S.weather?.kind || null); renderPerimeterMini(S); }
   else if (msg.t === 'house') { S.house = msg.house; refreshAgentViews(); renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
 }
 let agents3dTimer = null;
@@ -745,6 +772,8 @@ async function start3d() {
       });
       map3d.setHouse(S.house);
       map3d.setAgents(S.agents);
+      map3d.setSpin(S.view === 'ops');
+      map3d.setWeather(S.weather?.kind || null);
       timeline.refresh();
       world.update(true);
       renderFloorButtons();
@@ -754,6 +783,7 @@ async function start3d() {
   })();
   return map3dLoading;
 }
+function mapHint(text) { const h = $('[data-maphint]'); if (h) { h.hidden = !text; h.textContent = text; } }
 function renderFloorButtons() {
   const box = $('[data-floorbtns]');
   if (!box || !S.house) return;

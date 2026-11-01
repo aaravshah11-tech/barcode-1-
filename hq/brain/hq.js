@@ -4,7 +4,7 @@ import { computeThreat, ACTIVITY_KINDS, MODES, MODE_INFO, validMode, isArmed } f
 import { inQuietHours } from '../../shared/alert-rules.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
 import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
-import { sanitizeHouse, emptyHouse, pointInPolygon } from '../../shared/house.js';
+import { sanitizeHouse, emptyHouse, pointInPolygon, siteZoneAt } from '../../shared/house.js';
 import { addDiagSample, batteryAlert } from '../../shared/diag.js';
 import { buildBriefing, dayStart } from '../../shared/briefing.js';
 import { cleanShips } from '../../shared/feeds.js';
@@ -130,9 +130,10 @@ export class HQ extends Emitter {
 
   // ---------- the house (rooms, floors, doors, windows) ----------
   house() { return this.db.getSetting('house', null) || emptyHouse(); }
-  saveHouse(h) {
+  saveHouse(h, { version = false, by = 'HQ' } = {}) {
     const clean = sanitizeHouse(h);
     this.db.setSetting('house', clean);
+    if (version) this.db.putDoc('houseVersions', { id: `hv-${this.now().toString(36)}`, at: this.now(), by, rooms: clean.floors.reduce((n, f) => n + f.rooms.length, 0), zones: clean.site?.rooms.length || 0, house: clean }, 30);
     this.broadcast({ t: 'house', house: clean });
     return clean;
   }
@@ -468,8 +469,10 @@ export class HQ extends Emitter {
       const dir = place.dir ?? a.place?.dir;
       if (Number.isFinite(Number(dir)) && dir !== null) clean.dir = ((Math.round(Number(dir)) % 360) + 360) % 360;
       const room = f.rooms.find((r) => pointInPolygon([clean.x, clean.y], r.points));
+      const outside = !room && siteZoneAt(this.house(), [clean.x, clean.y]);
       if (room) clean.roomId = room.id;
-      this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(a)} ${a.codename} placed in ${room ? room.name : f.name}` });
+      else if (outside?.zone) { clean.zone = outside.zone; clean.siteZoneId = outside.id; }
+      this.logEvent({ kind: 'agent', agentId: id, message: `${agentLabel(a)} ${a.codename} placed in ${room ? room.name : outside ? `${outside.name} (outside)` : f.name}` });
     }
     this.db.updateAgent(id, { place: clean });
     this.pushAgent(id);

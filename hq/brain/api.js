@@ -203,8 +203,11 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/panic' && m === 'POST') return hq.panic(who.remote ? (who.label || 'a linked phone') : 'HQ');
     if (p === '/alarm/stop' && m === 'POST') { hq.standDown(); return { ok: true }; }
     if (p === '/alarm/test' && m === 'POST') return { agents: hq.alarm({ reason: 'ALARM TEST', seconds: 4, force: true }) };
+    if (p === '/house/versions' && m === 'GET') return db.docs('houseVersions').map(({ house, ...v }) => v).sort((a, b) => b.at - a.at);
+    let hv = p.match(/^\/house\/versions\/([\w-]{1,40})\/restore$/);
+    if (hv && m === 'POST') { const v = db.doc('houseVersions', hv[1]); if (!v) throw fail(404, 'No such version.'); const after = hq.saveHouse(v.house, { version: true, by }); hq.logEvent({ kind: 'system', message: `House plan restored to the version of ${new Date(v.at).toLocaleString('en-GB')} (by ${by})` }); return after; }
     if (p === '/house' && m === 'PUT') {
-      const after = hq.saveHouse(body);
+      const after = hq.saveHouse(body, { version: !!url.searchParams.get('final'), by });
       const count = (h) => h.floors.reduce((n, f) => n + f.rooms.length, 0);
       // Logged once, when the builder is closed — not on every little edit.
       if (url.searchParams.get('final')) hq.logEvent({ kind: 'system', message: `House plan updated: ${after.floors.length} floor${after.floors.length === 1 ? '' : 's'}, ${count(after)} room${count(after) === 1 ? '' : 's'}` });

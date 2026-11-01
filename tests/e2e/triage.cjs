@@ -43,7 +43,7 @@ const SHOTS = process.argv[2] || '';
   check(true, 'a repeat within a minute merges into the same alert (×2)');
 
   // Triage view
-  await page.keyboard.press('2');
+  await page.click('.rail [data-view="triage"]');
   await page.waitForSelector('.triage-table [data-aid]');
   const row = await page.textContent('.triage-table tbody');
   check(/ALT-\d{6}/.test(row) && row.includes('HIGH') && row.includes('Kitchen') && row.includes('AGENT-01'), 'queue row: severity, reference, alert, source Agent, room, time');

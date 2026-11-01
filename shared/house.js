@@ -18,6 +18,7 @@ export const OPENING_KINDS = {
   arch: { label: 'Archway (no door)', width: 1.0, top: 2.1 },
   sliding: { label: 'Sliding / patio door', width: 1.8, top: 2.1, opens: true },
   garage: { label: 'Garage door', width: 2.4, top: 2.1, opens: true },
+  gate: { label: 'Gate', width: 1.0, top: 1.2, opens: true, outside: true },
 };
 /** Parts of the building you can add (structure only — no furniture). */
 export const FIXTURE_KINDS = {
@@ -25,7 +26,22 @@ export const FIXTURE_KINDS = {
   spiral: { label: 'Spiral stairs', w: 1.6, d: 1.6, min: 1 },
   wall: { label: 'Inner wall', w: 3, d: 0.1, min: 0.05 },
   column: { label: 'Pillar', w: 0.3, d: 0.3, min: 0.1 },
+  tree: { label: 'Tree / hedge', w: 2.5, d: 2.5, min: 0.3, outside: true },
+  fence: { label: 'Fence', w: 3, d: 0.05, min: 0.03, outside: true },
 };
+/** Outside zones (house.site.rooms[].type) and which Perimeter zone each belongs to. */
+export const ZONE_TYPES = {
+  driveway: { label: 'Driveway', zone: 'front' }, path: { label: 'Front path', zone: 'front' }, front: { label: 'Front garden', zone: 'front' },
+  garden: { label: 'Back garden', zone: 'garden' }, lawn: { label: 'Lawn', zone: 'garden' }, patio: { label: 'Patio', zone: 'garden' },
+  garage: { label: 'Garage (building)', zone: 'garage', building: 2.4 }, shed: { label: 'Shed (building)', zone: 'garage', building: 2.1 },
+  plot: { label: 'Plot boundary', zone: null }, other: { label: 'Other', zone: null },
+};
+export const SITE_ID = 'site';
+/** Perimeter zone ('front' | 'garden' | 'garage') for a point outside, or null. */
+export function siteZoneAt(house, p) {
+  const z = (house?.site?.rooms || []).filter((r) => r.type !== 'plot' && pointInPolygon(p, r.points)).sort((a, b) => area(a.points) - area(b.points))[0];
+  return z ? { id: z.id, name: z.name, type: z.type, zone: ZONE_TYPES[z.type]?.zone || null } : null;
+}
 const num = (v, d, lo = -MAX.coord, hi = MAX.coord) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 const txt = (v, d, n = 30) => String(v ?? d).replace(/[<>]/g, '').trim().slice(0, n) || d;
 const id = (v) => (typeof v === 'string' && /^[\w-]{1,40}$/.test(v) ? v : Math.random().toString(36).slice(2, 10));
@@ -37,11 +53,20 @@ export const emptyHouse = () => ({ version: 1, floors: [{ id: 'f0', name: 'Groun
 export function sanitizeHouse(h) {
   const out = emptyHouse();
   const floors = Array.isArray(h?.floors) ? h.floors.slice(0, MAX.floors) : [];
-  if (floors.length) out.floors = floors.map((f, i) => {
+  if (floors.length) out.floors = floors.map((f, i) => cleanFloor(f, i));
+  if (h?.site && typeof h.site === 'object') {
+    const site = cleanFloor({ ...h.site, id: SITE_ID, name: 'Outside', height: 2.5 }, 0, true);
+    if (site.rooms.length || site.fixtures.length) out.site = site;
+  }
+  return finish(out, h);
+}
+function cleanFloor(f, i, outside = false) {
+  {
     const rooms = (Array.isArray(f.rooms) ? f.rooms : []).slice(0, MAX.rooms).map((r, j) => ({
       id: id(r.id), name: txt(r.name, `Room ${j + 1}`),
       points: (Array.isArray(r.points) ? r.points : []).slice(0, MAX.points).map((p) => [round(num(p?.[0], 0)), round(num(p?.[1], 0))]),
       ...(r.height != null && Number.isFinite(Number(r.height)) ? { height: num(r.height, 2.5, 1, 10) } : {}),
+      ...(outside ? { type: ZONE_TYPES[r.type] ? r.type : 'other' } : {}),
     })).filter((r) => r.points.length >= 3);
     const roomIds = new Set(rooms.map((r) => r.id));
     const openings = (Array.isArray(f.openings) ? f.openings : []).slice(0, MAX.openings).map((o) => ({
@@ -52,9 +77,11 @@ export function sanitizeHouse(h) {
       const k = FIXTURE_KINDS[x.kind];
       return { id: id(x.id), kind: x.kind, x: round(num(x.x, 0)), y: round(num(x.y, 0)), w: round(num(x.w, k.w, k.min, 30)), d: round(num(x.d, k.d, x.kind === 'wall' ? 0.05 : k.min, 30)), rot: round(((num(x.rot, 0, -3600, 3600) % 360) + 360) % 360) };
     });
-    return { id: id(f.id || `f${i}`), name: txt(f.name, i ? `Floor ${i}` : 'Ground floor'), height: num(f.height, 2.5, 1.8, 10), rooms, openings, fixtures };
-  });
-  const floorIds = new Set(out.floors.map((f) => f.id));
+    return { id: outside ? SITE_ID : id(f.id || `f${i}`), name: outside ? 'Outside' : txt(f.name, i ? `Floor ${i}` : 'Ground floor'), height: num(f.height, 2.5, 1.8, 10), rooms, openings, fixtures };
+  }
+}
+function finish(out, h) {
+  const floorIds = new Set([...out.floors.map((f) => f.id), ...(out.site ? [SITE_ID] : [])]);
   for (const [fid, t] of Object.entries(h?.trace || {})) {
     if (!floorIds.has(fid) || !t) continue;
     out.trace[fid] = { scale: num(t.scale, 0.02, 0.0001, 10), x: num(t.x, 0), y: num(t.y, 0), opacity: num(t.opacity, 0.5, 0.05, 1), w: num(t.w, 0, 0, 20000), h: num(t.h, 0, 0, 20000) };
@@ -66,6 +93,8 @@ export function sanitizeHouse(h) {
   return out;
 }
 const round = (n) => Math.round(n * 1000) / 1000;
+/** Every outline that should be in view (floors and the grounds). */
+export const allPoints = (house) => [...(house?.floors || []).flatMap((f) => f.rooms.flatMap((r) => r.points)), ...(house?.site?.rooms || []).flatMap((r) => r.points)];
 
 // ---------- geometry ----------
 export const snap = (v, step) => (step ? Math.round(Math.round(v / step) * step * 1000) / 1000 : v);
@@ -175,9 +204,17 @@ export const TEMPLATES = {
       { id: 'f0', name: 'Ground floor', height: 2.5, rooms: [lounge, kitchen, hall, dining], openings: [door(hall, 2, 0.5), door(lounge, 2, 0.3), door(dining, 3, 0.5), door(kitchen, 3, 0.5), win(lounge, 0, 0.5), win(kitchen, 0, 0.5), win(dining, 2, 0.5)],
         fixtures: [{ id: newId(), kind: 'stairs', x: 2.45, y: 6, w: 0.9, d: 2.8, rot: 0 }] },
       { id: 'f1', name: 'First floor', height: 2.4, rooms: [b1, b2, land, b3, bath], openings: [door(b1, 2, 0.3), door(land, 1, 0.5), door(b3, 3, 0.5), door(bath, 3, 0.5), door(b2, 3, 0.5), win(b1, 0, 0.5), win(b2, 0, 0.5), win(bath, 2, 0.5)], fixtures: [] },
-    ] };
+    ], site: siteFor() };
   } },
 };
+/** The grounds for the 3-bed template: plot, back garden + patio, front garden + path, driveway, garage. */
+function siteFor() {
+  const z = (name, type, x, y, w, h) => ({ ...rect(name, x, y, w, h), type });
+  const plot = z('Plot', 'plot', -3, -12, 17, 26), garden = z('Back garden', 'garden', -3, -12, 17, 12), patio = z('Patio', 'patio', 0, -3, 9, 3);
+  const front = z('Front garden', 'front', -3, 7.5, 12.5, 6.5), path = z('Front path', 'path', 1, 7.5, 1.2, 6.5), drive = z('Driveway', 'driveway', 9.5, 7.5, 4, 6.5), garage = z('Garage', 'garage', 9.5, 0, 4, 7);
+  return { rooms: [plot, garden, patio, front, path, drive, garage], openings: [{ id: newId(), kind: 'gate', roomId: garden.id, edge: 1, t: 0.85, width: 1 }],
+    fixtures: [{ id: newId(), kind: 'fence', x: 5.5, y: -12, w: 17, d: 0.05, rot: 0 }, ...[[-1.5, -9], [12, -10], [-1.5, 12.5], [6, -9.5]].map(([x, y]) => ({ id: newId(), kind: 'tree', x, y, w: 2.4, d: 2.4, rot: 0 }))] };
+}
 function door(room, edge, t) { return { id: newId(), kind: 'door', roomId: room.id, edge, t, width: 0.9 }; }
 function win(room, edge, t) { return { id: newId(), kind: 'window', roomId: room.id, edge, t, width: 1.2 }; }
 
