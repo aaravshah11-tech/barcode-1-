@@ -99,7 +99,7 @@ test('tamper (at HQ): unplugged, fast drain and unexpected offline → explained
   hq.agentOffline(agentId, undefined);
   al = await call('GET', '/alerts');
   const off = al.find((a) => /^Agent offline unexpectedly/.test(a.title));
-  assert.ok(off && off.severity === 'HIGH' && /didn’t run flat/.test(off.explanation) && /AWAY/.test(off.explanation), 'offline while AWAY → HIGH, explained');
+  assert.ok(off && off.severity === 'ALERT' && /didn’t run flat/.test(off.explanation) && /AWAY/.test(off.explanation), 'offline while AWAY → ALERT, explained');
   // the Agent's own report
   hq.agentOnline(db.agent(agentId), conn);
   hq.agentEvent(agentId, { kind: 'tamper', message: 'Agent moved (picked up or turned)', data: { type: 'moved' } });

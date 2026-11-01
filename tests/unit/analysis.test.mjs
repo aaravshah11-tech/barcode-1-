@@ -48,8 +48,12 @@ test('cleanRule clamps whatever the editor sends', () => {
   assert.equal(r.name, 'bx/b');
   assert.equal(r.windowSec, 3600);
   assert.equal(r.steps[0].signal, 'motion');
-  assert.equal(r.level, 'INFO');
+  assert.equal(r.level, 'LOG');
   assert.deepEqual(r.modes, ['away']);
+  // rules saved before v3: INFO meant "just log it", LOW/MEDIUM/HIGH are the old scale
+  assert.equal(cleanRule({ level: 'INFO' }).level, 'LOG');
+  assert.equal(cleanRule({ level: 'MEDIUM' }).level, 'ADVISORY');
+  assert.equal(cleanRule({ level: 'INFO', v: 2 }).level, 'INFO');
 });
 
 // Two weeks where the kitchen is busy 07:00–08:00 and 18:00–19:00 every day and silent at night.
@@ -109,21 +113,21 @@ test('HQ: a correlation rule raises a triage alert; anomalies reach triage with 
   assert.ok(an, 'anomaly alert');
   assert.match(an.title, /Unusual activity — Kitchen/);
   assert.match(an.explanation, /Confidence \d+%/);
-  assert.equal(an.severity, 'MEDIUM');
+  assert.equal(an.severity, 'ADVISORY');
   const pat = await call('GET', '/patterns');
   assert.equal(pat.daysObserved, 14);
   assert.equal(pat.places[0].name, 'Kitchen');
   assert.equal(pat.anomalies.length, 1);
-  // a custom rule: two motions within 10 s → HIGH "RUNNING" alert
+  // a custom rule: two motions within 10 s → ALERT "RUNNING" alert
   const rules = (await call('GET', '/rules')).rules;
   assert.equal(rules.length, 2, 'starts with the example rules');
-  await call('PUT', '/rules/rule-run', { name: 'Fast movement', windowSec: 10, steps: [{ signal: 'motion' }, { signal: 'motion' }], label: 'running', level: 'HIGH' });
+  await call('PUT', '/rules/rule-run', { name: 'Fast movement', windowSec: 10, steps: [{ signal: 'motion' }, { signal: 'motion' }], label: 'running', level: 'ALERT' });
   clock.t += MIN;
   hq.agentEvent(agentId, { kind: 'motion', message: 'Motion detected' });
   clock.t += 4 * S;
   hq.agentEvent(agentId, { kind: 'motion', message: 'Motion detected' });
   const run = (await call('GET', '/alerts')).find((a) => a.source === 'correlation');
-  assert.ok(run && run.severity === 'HIGH' && /^RUNNING/.test(run.title), 'rule → HIGH alert');
+  assert.ok(run && run.severity === 'ALERT' && /^RUNNING/.test(run.title), 'rule → ALERT alert');
   assert.ok(db.events({ kind: 'correlation' })[0].message.startsWith('RUNNING'));
   const tested = await call('POST', '/rules/test', { windowSec: 10, steps: [{ signal: 'motion' }, { signal: 'motion' }] });
   assert.ok(tested.count >= 1, 'dry run counts past matches');

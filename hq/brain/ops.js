@@ -3,9 +3,14 @@
 // an assignee, notes and a timeline. Everything is kept on the HQ computer only.
 import { severityFor, alertTitle, alertExplanation, escalated, validSeverity, OPEN_ALERT, DISMISS_REASONS, canMove, incidentRef, INCIDENT_LABEL, SEV_RANK } from '../../shared/triage.js';
 import { agentLabel } from '../../shared/crypto.js';
+import { grade, cleanGradeRule } from '../../shared/grading.js';
+import { hourStats } from '../../shared/baseline.js';
+import { fatigueStats, digest } from '../../shared/fatigue.js';
+import { missionById } from '../../shared/missions.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const MERGE_MS = 60000; // the same thing again within a minute adds to the open alert instead of a new row
+const MERGE_LOW_MS = 5 * 60000; // Info/Advisory from the same Agent and kind: 5 minutes
 const clean = (s, n) => String(s ?? '').replace(/[<>]/g, '').trim().slice(0, n);
 
 export class Ops {
@@ -25,39 +30,128 @@ export class Ops {
 
   // ---------- alerts ----------
   alerts({ status = null, limit = 300 } = {}) {
-    let list = this.db.docs('alerts');
+    let list = this.db.docs('alerts').map((a) => (SEV_RANK[a.severity] ? a : { ...a, severity: validSeverity(a.severity) })); // pre-v3 alerts
     if (status === 'open') list = list.filter((a) => OPEN_ALERT.has(a.status));
     else if (status) list = list.filter((a) => a.status === status);
     return list.sort((a, b) => b.ts - a.ts).slice(0, limit);
   }
-  unhandled() { return this.db.docs('alerts').filter((a) => a.status === 'new').length; }
+  /** Unhandled alerts (Info is for the record and never counts as waiting). */
+  unhandled() { return this.db.docs('alerts').filter((a) => a.status === 'new' && validSeverity(a.severity) !== 'INFO').length; }
 
   /** A Mission Log event arrived: does it need triage? */
   ingest(ev) {
     const severity = severityFor(ev);
     if (!severity) return null;
     const { roomId, room } = this.roomOf(ev.agentId);
-    return this.raise({ severity, title: alertTitle(ev, room), explanation: alertExplanation(ev), source: ev.agentId ? 'agent' : 'system', agentId: ev.agentId, roomId, room, eventIds: [ev.id], kind: ev.kind, ts: ev.ts });
+    const a = ev.agentId && this.db.agent(ev.agentId);
+    const zone = a?.place?.zone || (missionById(a?.mission)?.outside ? a.settings?.watch : null) || (ev.agentId ? 'inside' : null);
+    const cls = typeof ev.data?.class === 'string' ? ev.data.class : null;
+    const where = ev.kind === 'perimeter' ? '' : room;
+    return this.raise({ severity, title: alertTitle(ev, where), explanation: alertExplanation(ev), source: ev.agentId ? 'agent' : 'system', agentId: ev.agentId, roomId, room, eventIds: [ev.id], kind: ev.kind, ts: ev.ts, cls, zone });
   }
 
   /** Other parts of HQ (correlation rules, anomaly detection, tamper checks, network) raise alerts here. */
-  raise({ severity, title, explanation = '', source = 'system', agentId = null, roomId = null, room = '', eventIds = [], kind = null, ts = this.now(), data = null }) {
-    const sev = validSeverity(severity);
+  raise({ severity, title, explanation = '', source = 'system', agentId = null, roomId = null, room = '', eventIds = [], kind = null, ts = this.now(), data = null, cls = null, zone = null }) {
+    // grade it in context first (Alert State, what was seen, weather, pattern of life, your rules, snoozes)
+    const g = grade({ severity: validSeverity(severity), kind, cls, zone, room, agentId, title, source }, this.gradeContext(agentId, kind, roomId, ts));
+    if (g.suppressed) {
+      if (g.snoozedBy) { const sz = this.db.doc('snoozes', g.snoozedBy.id); if (sz) { sz.held = (sz.held || 0) + 1; this.db.putDoc('snoozes', sz, 200); } }
+      this.held = (this.held || 0) + 1;
+      this.hq.logEvent({ kind: 'triage', message: `Held back${g.snoozedBy ? ' (snoozed)' : ''}: ${clean(title, 90)}${g.reasons.length ? ` — ${g.reasons.join('; ')}` : ''}` });
+      return null;
+    }
+    const sev = g.severity;
+    if (g.reasons.length) explanation = [explanation, `Graded: ${g.reasons.join('; ')}.`].filter(Boolean).join(' ');
     // Merge repeats: same Agent + same kind, still unhandled, within a minute
-    const recent = this.db.docs('alerts').reverse().find((a) => a.status === 'new' && a.kind === kind && a.agentId === agentId && a.title === title && ts - a.lastTs < MERGE_MS);
+    const low = SEV_RANK[sev] <= SEV_RANK.ADVISORY;
+    const recent = this.db.docs('alerts').reverse().find((a) => (a.status === 'new' || (low && a.status === 'acknowledged')) && a.kind === kind && a.agentId === agentId
+      && (a.title === title ? ts - a.lastTs < MERGE_MS : low && agentId && SEV_RANK[a.severity] <= SEV_RANK.ADVISORY && ts - a.lastTs < MERGE_LOW_MS));
     if (recent) {
       recent.count = (recent.count || 1) + 1; recent.lastTs = ts;
       recent.eventIds = [...recent.eventIds, ...eventIds].slice(-50);
+      recent.severity = validSeverity(recent.severity);
       if (SEV_RANK[sev] > SEV_RANK[recent.severity]) recent.severity = sev;
       return this.save(recent);
     }
     const a = this.agentName(agentId);
     const alert = {
       id: `ALT-${String(this.db.nextNumber('alert')).padStart(6, '0')}`, ts, lastTs: ts, severity: sev, title: clean(title, 90), explanation: clean(explanation, 240),
-      source, agentId, agent: a, roomId, room, eventIds, kind, count: 1, status: 'new', data,
-      history: [{ ts, by: 'SENTINEL', action: 'raised', note: '' }],
+      source, agentId, agent: a, roomId, room, eventIds, kind, count: 1, status: 'new', data, cls, zone, graded: g.reasons,
+      history: [{ ts, by: 'SENTINEL', action: 'raised', note: g.reasons.join('; ') }],
     };
+    // correlation first: a rule that explains several open alerts folds them into this one
+    if (source === 'correlation' && eventIds.length) {
+      const ids = new Set(eventIds);
+      for (const o of this.db.docs('alerts').filter((x) => x.status === 'new' && x.eventIds.some((e) => ids.has(e)))) {
+        o.status = 'merged'; o.mergedInto = alert.id;
+        o.history.push({ ts, by: 'SENTINEL', action: 'merged', note: `Explained by ${alert.id}: ${alert.title}` });
+        this.save(o);
+        alert.count += o.count || 1;
+        alert.history.push({ ts, by: 'SENTINEL', action: 'merged', note: `Includes ${o.id} (${o.title})` });
+      }
+    }
     return this.save(alert, true);
+  }
+  /** What grading needs to know right now. */
+  gradeContext(agentId, kind, roomId, ts) {
+    const s = this.hq.settings();
+    let expected = false;
+    try {
+      const b = this.hq.analytics?.ensureBaseline();
+      const key = roomId || (agentId ? `agent:${agentId}` : null);
+      if (b && !b.learning && key) expected = hourStats(b, key, ts).share >= 0.5;
+    } catch { /* no history yet */ }
+    const failed = kind === 'system' ? this.db.events({ since: ts - 10 * 60000, limit: 200 }).filter((e) => /^Failed login attempt/.test(e.message || '')).length : 0;
+    return { mode: s.mode, now: ts, windMph: this.hq.weather?.wind ?? 0, expected, rules: this.gradeRules(), snoozes: this.snoozes(), recentFailedLogins: failed };
+  }
+
+  // ---------- grading rules, snoozes, fatigue, digest ----------
+  gradeRules() { return this.db.docs('graderules').sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((r) => ({ ...cleanGradeRule(r), order: r.order ?? 0 })); }
+  saveGradeRule(r) {
+    const rule = { ...cleanGradeRule(r), order: Number.isFinite(r.order) ? r.order : this.db.docs('graderules').length };
+    const existed = !!this.db.doc('graderules', rule.id);
+    this.db.putDoc('graderules', rule, 200);
+    this.hq.logEvent({ kind: 'system', message: `Grading rule “${rule.name}” ${existed ? 'updated' : 'created'}${rule.enabled ? '' : ' (off)'}` });
+    return rule;
+  }
+  deleteGradeRule(id) { const r = this.db.doc('graderules', id); if (!r) throw fail(404, 'No such rule.'); this.db.removeDocs('graderules', (x) => x.id === id); this.hq.logEvent({ kind: 'system', message: `Grading rule “${r.name}” deleted` }); return { ok: true }; }
+  snoozes() { const now = this.now(); return this.db.docs('snoozes').filter((x) => x.until > now); }
+  snooze({ scope, value, minutes, label = '', by = 'HQ' }) {
+    if (!['agent', 'title', 'kind'].includes(scope) || !value) throw fail(400, 'Snooze what?');
+    const m = Math.min(24 * 60, Math.max(5, Math.round(Number(minutes) || 60)));
+    const sz = { id: `sz-${this.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, scope, value: clean(value, 90), label: clean(label || value, 90), until: this.now() + m * 60000, by, held: 0, ts: this.now() };
+    this.db.putDoc('snoozes', sz, 200);
+    this.hq.logEvent({ kind: 'triage', message: `Snoozed for ${m >= 60 ? `${Math.round(m / 6) / 10} h` : `${m} min`} by ${by}: ${sz.label}` });
+    this.hq.broadcast({ t: 'snoozes', snoozes: this.snoozes() });
+    return sz;
+  }
+  unsnooze(id, by = 'HQ') {
+    const sz = this.db.doc('snoozes', id);
+    if (!sz) throw fail(404, 'No such snooze.');
+    this.db.removeDocs('snoozes', (x) => x.id === id);
+    this.hq.logEvent({ kind: 'triage', message: `Snooze ended early by ${by}: ${sz.label}` });
+    this.hq.broadcast({ t: 'snoozes', snoozes: this.snoozes() });
+    return { ok: true };
+  }
+  fatigue() { return fatigueStats(this.db.docs('alerts'), this.now()); }
+  digestNow() {
+    const now = this.now();
+    const d = digest({ alerts: this.db.docs('alerts'), events: this.db.events({ since: now - 86400000, limit: 20000 }), now, snoozed: this.held || 0 });
+    const doc = { id: `dg-${now.toString(36)}`, ts: now, ...d };
+    this.db.putDoc('digests', doc, 60);
+    this.held = 0;
+    this.hq.logEvent({ kind: 'digest', message: `${d.title}: ${d.lines.join(' ')}`.slice(0, 600) });
+    this.hq.broadcast({ t: 'digest', digest: doc });
+    return doc;
+  }
+  /** The daily digest, once a day at the time set in Administration (default 08:00). */
+  tickDigest() {
+    const s = this.hq.settings(), now = this.now(), d = new Date(now);
+    const [h, m] = String(s.digestTime || '08:00').split(':').map(Number);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (s.digestOn === false || d.getHours() * 60 + d.getMinutes() < h * 60 + m || this.db.getSetting('digestDay', null) === key) return null;
+    this.db.setSetting('digestDay', key);
+    return this.digestNow();
   }
   agentName(agentId) { const a = agentId && this.db.agent(agentId); return a ? `${agentLabel(a)} ${a.codename}` : ''; }
   save(alert, isNew = false) {
@@ -101,7 +195,7 @@ export class Ops {
   createIncident({ title = '', severity = null, alertIds = [], assignee = '', by = 'HQ', note = '' } = {}) {
     const alerts = alertIds.map((id) => this.alert(id));
     const t = this.now(), year = new Date(t).getFullYear();
-    const sev = severity ? validSeverity(severity) : alerts.reduce((s, a) => (SEV_RANK[a.severity] > SEV_RANK[s] ? a.severity : s), 'LOW');
+    const sev = severity ? validSeverity(severity) : alerts.reduce((s, a) => (SEV_RANK[a.severity] > SEV_RANK[s] ? a.severity : s), 'INFO');
     const name = clean(title, 100) || alerts[0]?.title || 'Untitled incident';
     const inc = {
       id: `inc-${t.toString(36)}-${Math.random().toString(36).slice(2, 6)}`, ref: incidentRef(year, this.db.nextNumber(`inc-${year}`)),

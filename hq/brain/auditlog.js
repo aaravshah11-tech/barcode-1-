@@ -34,6 +34,11 @@ export function describe(m, p, body = {}, result = null) {
   if (/^\/users\//.test(p)) return R(m === 'DELETE' ? 'User removed' : 'User changed', decodeURIComponent(id(/\/users\/([^/]+)/)), keys(body));
   if (/^\/agents\/[^/]+\/command$/.test(p)) return R('Agent command', id(/\/agents\/([^/]+)/), body.action || '');
   if (/^\/agents\/[^/]+\/(place|facing)$/.test(p)) return R('Agent position changed', id(/\/agents\/([^/]+)/));
+  if (p === '/graderules/test') return R('Grading rule tested', body.kind || '');
+  if (/^\/graderules\//.test(p)) return R(m === 'DELETE' ? 'Grading rule deleted' : 'Grading rule saved', body.name || id(/\/graderules\/([^/]+)/));
+  if (p === '/snoozes') return R('Alerts snoozed', body.label || body.value || '', `${body.minutes || 60} min`);
+  if (/^\/snoozes\//.test(p)) return R('Snooze ended', id(/\/snoozes\/([^/]+)/));
+  if (p === '/digest') return R('Daily digest sent now');
   if (p === '/agents/bulk') return R('Agents bulk action', '', `${body.action || ''} ${(body.ids || []).length} Agent(s)`);
   if (/^\/agents\//.test(p)) return R(m === 'DELETE' ? 'Agent removed' : 'Agent changed', id(/\/agents\/([^/]+)/), keys(body));
   if (p === '/pair') return R(body.role === 'viewer' ? 'Phone link code created' : 'Recruit code created');

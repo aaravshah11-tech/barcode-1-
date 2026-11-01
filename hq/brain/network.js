@@ -69,12 +69,12 @@ export class NetSecurity {
     this.hq.logEvent({ kind: 'network', message: `Router device list imported by ${by}: ${rows.length} device${rows.length === 1 ? '' : 's'}, ${added.length} new` });
     for (const a of added) {
       const ev = this.hq.logEvent({ kind: 'device', level: 'warn', message: `New device on your network: ${a.name}${a.vendor ? ` (${a.vendor})` : ''}`, data: { device: a.name, owner: '', type: 'net', new: true } });
-      this.hq.ops.raise({ severity: 'MEDIUM', title: `New device on your network — ${a.name}`, explanation: `${a.vendor ? `Made by ${a.vendor}. ` : ''}MAC ${a.mac}${a.ip ? `, IP ${a.ip}` : ''}. Not yet trusted. If you don’t recognise it, change your Wi-Fi password and check the router.`, source: 'network', kind: 'net:new', eventIds: [ev.id] });
+      this.hq.ops.raise({ severity: 'ADVISORY', title: `New device on your network — ${a.name}`, explanation: `${a.vendor ? `Made by ${a.vendor}. ` : ''}MAC ${a.mac}${a.ip ? `, IP ${a.ip}` : ''}. Not yet trusted. If you don’t recognise it, change your Wi-Fi password and check the router.`, source: 'network', kind: 'net:new', eventIds: [ev.id] });
     }
     for (const a of seen) {
       if (a.trusted) { this.hq.deviceSeen({ id: `asset:${a.id}`, label: a.name, type: 'net', owner: a.owner }); continue; }
       const ev = this.hq.logEvent({ kind: 'network', level: 'warn', message: `Untrusted device still on your network: ${a.name}` });
-      this.hq.ops.raise({ severity: 'LOW', title: `Untrusted device on your network — ${a.name}`, explanation: `Seen again in the router list. Mark it trusted in the asset register if you know it, or remove it from your Wi-Fi.`, source: 'network', kind: `net:untrusted:${a.id}`, eventIds: [ev.id] });
+      this.hq.ops.raise({ severity: 'INFO', title: `Untrusted device on your network — ${a.name}`, explanation: `Seen again in the router list. Mark it trusted in the asset register if you know it, or remove it from your Wi-Fi.`, source: 'network', kind: `net:untrusted:${a.id}`, eventIds: [ev.id] });
     }
     this.publish();
     return { found: rows.length, added: added.length, seen: seen.length };
@@ -89,7 +89,7 @@ export class NetSecurity {
     const a = this.db.agent(id);
     if (!a) return;
     const ev = this.hq.logEvent({ kind: 'network', agentId: id, level: 'warn', message: `${agentLabel(a)} ${a.codename} switched from Wi-Fi to ${status.net}` });
-    this.hq.ops.raise({ severity: 'MEDIUM', title: `Agent left the Wi-Fi — ${a.codename}`, explanation: `It is now on ${status.net}. The Wi-Fi may be down, switched off or being interfered with.`, source: 'network', kind: 'net:wifi', agentId: id, eventIds: [ev.id] });
+    this.hq.ops.raise({ severity: 'ADVISORY', title: `Agent left the Wi-Fi — ${a.codename}`, explanation: `It is now on ${status.net}. The Wi-Fi may be down, switched off or being interfered with.`, source: 'network', kind: 'net:wifi', agentId: id, eventIds: [ev.id] });
   }
   /** A linked phone opening HQ at an hour it has never been used before (after 2 weeks of history). */
   phoneSeen(ev) {
@@ -97,7 +97,7 @@ export class NetSecurity {
     const h = new Date(ev.ts).getHours();
     const hist = this.db.getSetting(key, null) || { n: 0, hours: Array(24).fill(0), first: ev.ts };
     if (hist.n >= 10 && this.now() - hist.first > 14 * 86400000 && hist.hours[h] === 0 && hist.hours[(h + 23) % 24] === 0 && hist.hours[(h + 1) % 24] === 0) {
-      this.hq.ops.raise({ severity: 'LOW', title: `Linked phone used at an unusual time — ${ev.data.device}`, explanation: `“${ev.data.device}” opened HQ at ${String(h).padStart(2, '0')}:00, which it has not done in ${hist.n} previous visits. If that wasn’t you, unlink the phone (Settings › Phones).`, source: 'network', kind: 'net:phonehour', eventIds: [ev.id] });
+      this.hq.ops.raise({ severity: 'INFO', title: `Linked phone used at an unusual time — ${ev.data.device}`, explanation: `“${ev.data.device}” opened HQ at ${String(h).padStart(2, '0')}:00, which it has not done in ${hist.n} previous visits. If that wasn’t you, unlink the phone (Settings › Phones).`, source: 'network', kind: 'net:phonehour', eventIds: [ev.id] });
     }
     hist.n++; hist.hours[h]++;
     this.db.setSetting(key, hist);

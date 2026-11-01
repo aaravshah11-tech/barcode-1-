@@ -5,7 +5,7 @@ import { Radar } from '../shared/radar.js';
 import { missionById, hqEditable } from '../shared/missions.js';
 import { openSettings } from './settings.js';
 import { startLocal, startRemote, linkPhone, viewerCreds } from './transport.js';
-import { notifyEvent } from './alerts.js';
+import { notifyAlert, criticalRepeat, notifyDigest, onWatch, setOnWatch } from './alerts.js';
 import { lockScreen } from './lock.js';
 import { applyTheme } from '../shared/themes.js';
 import { sfx, sfxPrefs, setSfx, onSfx } from '../shared/sfx.js';
@@ -40,7 +40,8 @@ import { ageText, SEV_RANK } from '../shared/triage.js';
 
 const app = $('#app');
 const MODE = document.documentElement.dataset.mode === 'remote' ? 'remote' : 'hq';
-const S = { agents: [], events: [], threat: null, settings: { mode: 'home' }, missions: [], info: {}, filter: 'all', open: null, mode: MODE, api: (...a) => T.api(...a) };
+const S = { agents: [], events: [], threat: null, settings: { mode: 'home' }, missions: [], info: {}, filter: 'all', open: null, mode: MODE, api: (...a) => T.api(...a), onWatch: onWatch() };
+S.onWatchChanged = () => { renderStatus(); const b = document.querySelector('[data-onwatch]'); if (b) b.setAttribute('aria-pressed', String(S.onWatch)); };
 let radar = null;
 const HAS_GL = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
 
@@ -96,7 +97,9 @@ async function unlock(reason = '') {
   S.sessionStart = Date.now();
   if (MODE === 'remote') apply(await waitForState());
   unlocked = true;
+  critTimer ||= criticalRepeat(S);
 }
+let critTimer = null;
 const waitForState = () => new Promise((resolve) => { const f = (m) => { if (m.t === 'state') { T.onMessage.off?.(f); resolve(m); } }; T.onMessage(f); setTimeout(() => resolve(S.snapshot || { ...S }), 4000); });
 
 /** Lock the Command Centre (after inactivity, or by hand). HQ keeps guarding the house meanwhile. */
@@ -229,6 +232,7 @@ function shell() {
       <button class="icon-btn ptt" data-ptt hidden aria-label="Hold to give a voice command" title="Hold to talk (or hold V)">${icon('mic')}</button>
       <button class="ab-search" data-palette title="Search or run anything (Ctrl+K / ⌘K)" aria-label="Command palette">${icon('search')}<span class="ab-keys hide-phone"><kbd>⌘</kbd><kbd>K</kbd></span></button>
       <button class="icon-btn" data-terminal aria-label="Terminal" title="Terminal (\`)">${icon('terminal')}</button>
+      <button class="small onwatch-btn hide-phone" data-onwatch aria-pressed="${S.onWatch}" title="On Watch: keep this screen awake and notify from Advisory up">On Watch</button>
       <button class="icon-btn" data-mute aria-label="Alert sounds on/off" title="Alert sounds on/off"></button>
       <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">${icon('fullscreen')}</button>
       ${MODE === 'hq' ? `<button class="small" data-recruit title="Recruit an Agent">${icon('plus')}<span class="hide-phone">Recruit</span></button>` : ''}
@@ -360,10 +364,10 @@ window.__go = (id) => showView(id); // (tests) open any screen, including tabs i
 const triage = createTriage({ S, api: (...a) => T.api(...a), openIncident: (id) => openIncident(id) });
 const incidents = createIncidents({ S, api: (...a) => T.api(...a), playback: (w) => { showView('ops'); setTimeout(() => timeline.startWindow(w), 300); } });
 function openIncident(id) { incidents.preselect(id); if (S.view === 'incidents') incidents.open(id); else showView('incidents'); }
-const unhandled = () => (S.alerts || []).filter((a) => a.status === 'new');
+const unhandled = () => (S.alerts || []).filter((a) => a.status === 'new' && a.severity !== 'INFO'); // Info is for the record
 registerView({
   id: 'triage', label: 'Triage', icon: 'inbox', order: 3, render: (root) => triage.render(root),
-  badge() { const b = $('[data-badge="triage"]'); if (!b) return; const u = unhandled(); b.hidden = !u.length; b.textContent = u.length > 99 ? '99+' : u.length; b.classList.toggle('crit', u.some((a) => SEV_RANK[a.severity] >= 3)); b.classList.toggle('warn', !u.some((a) => SEV_RANK[a.severity] >= 3) && u.some((a) => a.severity === 'MEDIUM')); },
+  badge() { const b = $('[data-badge="triage"]'); if (!b) return; const u = unhandled(); b.hidden = !u.length; b.textContent = u.length > 99 ? '99+' : u.length; b.classList.toggle('crit', u.some((a) => SEV_RANK[a.severity] >= 3)); b.classList.toggle('warn', !u.some((a) => SEV_RANK[a.severity] >= 3) && u.some((a) => a.severity === 'ADVISORY')); },
 });
 registerView({
   id: 'incidents', label: 'Casework', icon: 'case', order: 4, render: (root) => incidents.render(root),
@@ -553,6 +557,7 @@ async function onClick(e) {
   if ('replay' in b.dataset) { if (timeline.replaying) timeline.stopReplay(); else timeline.startReplay(0); return; }
   if ('heat' in b.dataset) { timeline.setHeat(!S.heat.on); return; }
   if ('setloc' in b.dataset) { openSettings(S, { onChange: (s) => { S.settings = s; settingsChanged(); } }); setTimeout(() => $('[data-locsearch] input')?.focus(), 50); return; }
+  if ('onwatch' in b.dataset) { S.onWatch = !S.onWatch; setOnWatch(S.onWatch); S.onWatchChanged(); toast(S.onWatch ? 'On Watch — this screen stays awake; notifications from Advisory up' : 'Off watch'); return; }
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
   if ('lock' in b.dataset) { lockNow('Locked. HQ is still guarding the house.'); return; }
@@ -686,10 +691,11 @@ function onMsg(msg) {
     if (S.tlEvents) S.tlEvents.unshift(msg.event);
     clearTimeout(S.floorT); S.floorT = setTimeout(renderFloor, 400);
     if (['correlation', 'anomaly'].includes(msg.event.kind) && S.view === 'analysis') analysis.refresh();
-    if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S);
   }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
-  else if (msg.t === 'alert') { upsertBy(S.alerts, msg.alert); renderQueue(); triage.draw(); for (const v of VIEWS) v.badge?.(); }
+  else if (msg.t === 'alert') { upsertBy(S.alerts, msg.alert); renderQueue(); triage.draw(); for (const v of VIEWS) v.badge?.(); if (unlocked) notifyAlert(msg.alert, S); }
+  else if (msg.t === 'snoozes') { S.snoozes = msg.snoozes; triage.drawAux?.(); }
+  else if (msg.t === 'digest') { toast(`${msg.digest.title}: ${msg.digest.lines[0]}`); notifyDigest(msg.digest); }
   else if (msg.t === 'incident') { upsertBy(S.incidents, msg.incident); incidents.changed(msg.incident); renderQueue(); for (const v of VIEWS) v.badge?.(); }
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
@@ -710,12 +716,6 @@ function settingsChanged() {
   applyTheme(S.settings.theme);
   if (map3d && themeWas !== S.settings.theme) map3d.setTheme();
   renderTop(); renderPeople(); renderIntel(); renderStatus(); world.update();
-}
-function eventSound(ev) {
-  if (Date.now() - ev.ts > 10000) return;
-  // sounds only for genuine alerts
-  if (ev.level === 'alert' || ev.kind === 'threat' && /RED/.test(ev.message)) sfx('alert');
-  else if (ev.level === 'warn') sfx('warn');
 }
 function upsert(a) { const i = S.agents.findIndex((x) => x.id === a.id); if (i >= 0) S.agents[i] = a; else S.agents.push(a); S.agents.sort((x, y) => x.number - y.number); }
 

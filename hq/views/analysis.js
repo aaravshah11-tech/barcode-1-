@@ -1,6 +1,7 @@
 // ANALYSIS view: correlation rules (editable) and the household's pattern of life.
 import { esc, $, toast, sheet, dayClock, confirmBox } from '../../shared/ui.js';
 import { SIGNALS, RESULT_LEVELS, ALL_MODES, cleanRule } from '../../shared/correlate.js';
+import { drawGrading, newGradeRule } from './grading.js';
 
 const SIGNAL_LABEL = Object.fromEntries(SIGNALS);
 const MODE_LABEL = { home: 'Home', away: 'Away', night: 'Night', lockdown: 'Lockdown' };
@@ -21,6 +22,7 @@ export function createAnalysis(ctx) {
     root.innerHTML = `<div class="view-pad analysis">
       <header class="view-head"><div class="filters" role="tablist" aria-label="Analysis">
         <button role="tab" data-atab="rules" aria-pressed="${st.tab === 'rules'}">Correlation rules</button>
+        <button role="tab" data-atab="grading" aria-pressed="${st.tab === 'grading'}">Grading rules</button>
         <button role="tab" data-atab="pattern" aria-pressed="${st.tab === 'pattern'}">Pattern of life</button></div>
         <span class="grow"></span><span data-atools></span></header>
       <div data-abody></div></div>`;
@@ -31,6 +33,7 @@ export function createAnalysis(ctx) {
   async function load() {
     try {
       if (st.tab === 'rules') Object.assign(st, await ctx.api('/rules'));
+      else if (st.tab === 'grading') st.grules = await ctx.api('/graderules');
       else st.pat = await ctx.api('/patterns');
     } catch (x) { toast(x.message, { kind: 'err' }); }
     draw();
@@ -39,14 +42,16 @@ export function createAnalysis(ctx) {
     if (!root?.isConnected) return;
     root.querySelectorAll('[data-atab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.atab === st.tab)));
     const body = $('[data-abody]', root), tools = $('[data-atools]', root);
+    body.onclick = null; body.onchange = null;
+    if (st.tab === 'grading') return drawGrading(body, tools, ctx, st.grules || [], load);
     if (st.tab === 'rules') {
       tools.innerHTML = '<button class="small btn-primary" data-anew>New rule</button>';
-      body.innerHTML = `<p class="small muted lead">A rule turns a short sequence of signals into one conclusion. Example: front door opens, then hall motion, then a known phone connects within 60 s — that is an <b>ARRIVAL</b>. Rules marked INFO are only logged; anything higher goes to the Triage queue.</p>
+      body.innerHTML = `<p class="small muted lead">A rule turns a short sequence of signals into one conclusion. Example: front door opens, then hall motion, then a known phone connects within 60 s — that is an <b>ARRIVAL</b>. Rules marked LOG are only recorded; anything higher goes to the Triage queue.</p>
         <div class="table-wrap"><table class="grid-table rules-table"><thead><tr><th>On</th><th>Rule</th><th>Sequence</th><th>Within</th><th>Alert states</th><th>Result</th><th class="c-actions"></th></tr></thead><tbody>
         ${st.rules.map((r) => `<tr data-rid="${r.id}"><td><input type="checkbox" data-ron ${r.enabled ? 'checked' : ''} aria-label="Rule on"></td><td><b>${esc(r.name)}</b></td>
           <td class="small seq">${r.steps.map(stepText).join(` <span class="muted">${r.ordered ? '→' : '+'}</span> `)}</td><td class="mono small">${r.windowSec} s</td>
           <td class="small">${r.modes.length === 4 ? 'All' : r.modes.map((m) => MODE_LABEL[m]).join(', ') || 'None'}</td>
-          <td><span class="mono small">${esc(r.label)}</span>${r.likely ? `<small class="muted"> · likely ${esc(r.likely)}</small>` : ''} <span class="sev sev-${r.level === 'INFO' ? 'LOW' : r.level}">${r.level}</span></td>
+          <td><span class="mono small">${esc(r.label)}</span>${r.likely ? `<small class="muted"> · likely ${esc(r.likely)}</small>` : ''} <span class="sev sev-${r.level === 'LOG' ? 'INFO' : r.level}">${r.level}</span></td>
           <td class="c-actions"><button class="small" data-redit>Edit</button><button class="small btn-ghost" data-rdel>Delete</button></td></tr>`).join('') || '<tr class="empty"><td colspan="7">No rules. Press New rule.</td></tr>'}
         </tbody></table></div>
         <h3 class="sub">Recent matches</h3>
@@ -71,7 +76,7 @@ export function createAnalysis(ctx) {
   }
 
   function editor(rule = null) {
-    const r = cleanRule(rule || { name: '', steps: [{ signal: 'door', text: 'open' }, { signal: 'motion' }], windowSec: 60, label: '', level: 'INFO' });
+    const r = cleanRule(rule || { name: '', steps: [{ signal: 'door', text: 'open' }, { signal: 'motion' }], windowSec: 60, label: '', level: 'LOG' });
     const where = (s) => `<select data-sfwhere aria-label="Where"><option value="">Anywhere</option>
       ${rooms().length ? `<optgroup label="Room">${rooms().map((x) => `<option value="room:${x.id}" ${s.roomId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>` : ''}
       ${S.agents.length ? `<optgroup label="Agent">${S.agents.map((a) => `<option value="agent:${a.id}" ${s.agentId === a.id ? 'selected' : ''}>${esc(a.codename)}</option>`).join('')}</optgroup>` : ''}</select>`;
@@ -87,14 +92,14 @@ export function createAnalysis(ctx) {
           <label class="row small" style="gap:6px;margin-top:10px"><input type="checkbox" name="ordered" ${r.ordered ? 'checked' : ''}> In this order</label></div>
         <div class="row"><label class="field grow"><span>Conclusion</span><input name="label" value="${esc(r.label === 'MATCH' && !rule ? '' : r.label)}" maxlength="30" placeholder="e.g. ARRIVAL" required></label>
           <label class="field grow"><span>Likely (optional)</span><input name="likely" value="${esc(r.likely)}" maxlength="40" placeholder="e.g. Mum — or leave empty to use the phone’s owner"></label></div>
-        <div class="row"><label class="field grow"><span>Result</span><select name="level">${RESULT_LEVELS.map((l) => `<option value="${l}" ${r.level === l ? 'selected' : ''}>${l === 'INFO' ? 'INFO — just log it' : `${l} alert in Triage`}</option>`).join('')}</select></label></div>
+        <div class="row"><label class="field grow"><span>Result</span><select name="level">${RESULT_LEVELS.map((l) => `<option value="${l}" ${r.level === l ? 'selected' : ''}>${l === 'LOG' ? 'LOG — just record it' : `${l} alert in Triage`}</option>`).join('')}</select></label></div>
         <fieldset class="field modes-pick"><span class="flabel">Active in alert states</span>${ALL_MODES.map((m) => `<label><input type="checkbox" name="mode" value="${m}" ${r.modes.includes(m) ? 'checked' : ''}> ${MODE_LABEL[m]}</label>`).join('')}</fieldset>
         <p class="small muted" data-testout></p>
         <div class="row" style="justify-content:flex-end"><button type="button" data-rtest>Test on last 7 days</button><button type="button" data-close>Cancel</button><button class="btn-primary">Save rule</button></div></form>`, { title: rule ? 'Edit rule' : 'New correlation rule', wide: true });
     const f = sh.el.querySelector('[data-ruleform]');
     const read = () => ({
       id: r.id, name: f.elements.rname.value, windowSec: Number(f.elements.window.value), ordered: f.elements.ordered.checked,
-      label: f.elements.label.value, likely: f.elements.likely.value, level: f.elements.level.value, enabled: rule ? rule.enabled : true,
+      label: f.elements.label.value, likely: f.elements.likely.value, level: f.elements.level.value, v: 2, enabled: rule ? rule.enabled : true,
       modes: [...f.querySelectorAll('[name=mode]:checked')].map((x) => x.value),
       steps: [...f.querySelectorAll('[data-step]')].map((li) => { const w = li.querySelector('[data-sfwhere]').value; return { signal: li.querySelector('[data-sfsignal]').value, roomId: w.startsWith('room:') ? w.slice(5) : null, agentId: w.startsWith('agent:') ? w.slice(6) : null, text: li.querySelector('[data-sftext]').value }; }),
     });
@@ -122,6 +127,7 @@ export function createAnalysis(ctx) {
     const row = b.closest('[data-rid]'), rule = row && st.rules.find((r) => r.id === row.dataset.rid);
     if (b.dataset.atab) { st.tab = b.dataset.atab; load(); }
     else if ('anew' in b.dataset) editor();
+    else if ('gnew' in b.dataset) newGradeRule(ctx, load);
     else if ('redit' in b.dataset && rule) editor(rule);
     else if ('rdel' in b.dataset && rule) { if (await confirmBox('Delete this rule?', `“${rule.name}” stops running. Past matches stay in the log.`, { ok: 'Delete', danger: true })) { try { await ctx.api(`/rules/${rule.id}`, { method: 'DELETE' }); load(); } catch (x) { toast(x.message, { kind: 'err' }); } } }
     else if ('arebuild' in b.dataset) { try { st.pat = await ctx.api('/patterns/rebuild', { method: 'POST' }); draw(); } catch (x) { toast(x.message, { kind: 'err' }); } }

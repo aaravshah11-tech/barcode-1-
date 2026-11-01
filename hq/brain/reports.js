@@ -67,7 +67,7 @@ export class Reports {
     if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw fail(400, 'Choose a start and an end date (the end after the start).');
     if (to - from > 366 * DAY) throw fail(400, 'Reports can cover up to a year.');
     const secs = (Array.isArray(sections) ? sections : kind === 'sitrep' ? [] : ALL_SECTIONS).filter((k) => SECTION_KEYS.has(k));
-    const clean = { minSeverity: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(filter?.minSeverity) ? filter.minSeverity : null, rooms: (filter?.rooms || []).slice(0, 50).map(String), agents: (filter?.agents || []).slice(0, 50).map(String) };
+    const clean = { minSeverity: ['INFO', 'ADVISORY', 'ALERT', 'CRITICAL'].includes(filter?.minSeverity) ? filter.minSeverity : null, rooms: (filter?.rooms || []).slice(0, 50).map(String), agents: (filter?.agents || []).slice(0, 50).map(String) };
     const data = reportData(this.input(from, to, clean));
     if (!secs.includes('log')) data.log = [];
     const { year, week } = isoWeek(from + DAY);

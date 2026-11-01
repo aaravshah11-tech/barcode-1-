@@ -17,7 +17,7 @@ test('current picture: quiet, or the most serious open alert with its reference'
   const quiet = pictureSummary({ alerts: [], events: [], agents: agents.slice(0, 3), mode: 'night', now });
   assert.equal(quiet.state, 'NIGHT');
   assert.match(quiet.text, /^Quiet\. No alerts in the last 4 hours\. No sensor activity in the last hour\.$/);
-  const busy = pictureSummary({ alerts: [{ id: 'ALT-000412', ts: now - H, severity: 'HIGH', title: 'Person — Back garden', status: 'new' }, { id: 'ALT-000411', ts: now - 2 * H, severity: 'MEDIUM', title: 'x', status: 'new' }], events: [], agents, mode: 'away', now });
+  const busy = pictureSummary({ alerts: [{ id: 'ALT-000412', ts: now - H, severity: 'ALERT', title: 'Person — Back garden', status: 'new' }, { id: 'ALT-000411', ts: now - 2 * H, severity: 'ADVISORY', title: 'x', status: 'new' }], events: [], agents, mode: 'away', now });
   assert.match(busy.text, /2 open alerts; most serious: Person — Back garden \(ALT-000412\)\./);
   assert.match(busy.text, /1 Agent offline: WREN\./);
   assert.equal(busy.significant.id, 'ALT-000412');

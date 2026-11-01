@@ -72,8 +72,8 @@ export class Analytics {
     const last = m.events.at(-1);
     const { roomId, room } = this.hq.ops.roomOf(m.events.find((e) => e.agentId)?.agentId);
     this.db.putDoc('matches', { id: `m-${last.id}-${m.rule.id}`, ts: last.ts, rule: m.rule.id, name: m.rule.name, label: m.rule.label, likely: m.likely, text, level: m.rule.level }, 300);
-    this.hq.logEvent({ kind: 'correlation', level: m.rule.level === 'INFO' ? 'info' : 'warn', message: text, data: { rule: m.rule.id, label: m.rule.label, likely: m.likely || '' } });
-    if (m.rule.level !== 'INFO') {
+    this.hq.logEvent({ kind: 'correlation', level: m.rule.level === 'LOG' ? 'info' : 'warn', message: text, data: { rule: m.rule.id, label: m.rule.label, likely: m.likely || '' } });
+    if (m.rule.level !== 'LOG') {
       this.hq.ops.raise({ severity: m.rule.level, title: `${m.rule.label}${m.likely ? ` (likely: ${m.likely})` : ''}${room ? ` — ${room}` : ''}`, explanation: `Rule “${m.rule.name}”: ${m.events.length} signals in ${m.seconds} s.`, source: 'correlation', kind: `rule:${m.rule.id}`, roomId, room, eventIds: m.events.map((e) => e.id), ts: last.ts });
     }
   }
@@ -128,7 +128,7 @@ export class Analytics {
     if (this.flagged.has(tag)) return;
     this.flagged.add(tag);
     if (this.flagged.size > 2000) this.flagged = new Set([...this.flagged].slice(-500));
-    const severity = a.type === 'quiet' ? 'LOW' : a.confidence >= 80 ? 'MEDIUM' : 'LOW';
+    const severity = a.type === 'quiet' ? 'INFO' : a.confidence >= 80 ? 'ADVISORY' : 'INFO';
     const rec = { id: `an-${ts}-${Math.random().toString(36).slice(2, 6)}`, ts, ...a, severity };
     this.db.putDoc('anomalies', rec, 500);
     this.hq.logEvent({ kind: 'anomaly', level: 'warn', message: `${a.title} (${a.confidence}% confidence) — ${a.reason}`, data: { type: a.type, confidence: a.confidence } });

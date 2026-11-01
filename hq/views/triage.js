@@ -1,7 +1,8 @@
 // TRIAGE QUEUE view: every alert that needs a human decision, newest first.
-// Keyboard: ↑/↓ (or J/K) choose · A acknowledge · E escalate · D dismiss · I make an incident.
+// Keyboard: ↑/↓ (or J/K) choose · A acknowledge · E escalate · D dismiss · I make an incident · S snooze.
+// Above the queue: alert fatigue (are you alerted too often, and by what?), active snoozes and the daily digest.
 import { esc, $, toast, sheet, dayClock } from '../../shared/ui.js';
-import { SEVERITIES, SEV_RANK, ALERT_STATUS, OPEN_ALERT, DISMISS_REASONS, ageText } from '../../shared/triage.js';
+import { SEVERITIES, SEV_RANK, SEV_LABEL, ALERT_STATUS, OPEN_ALERT, DISMISS_REASONS, ageText } from '../../shared/triage.js';
 
 const FILTERS = [['new', 'Unhandled'], ['open', 'Open'], ['all', 'All'], ['dismissed', 'Dismissed'], ['incident', 'In incidents']];
 
@@ -22,7 +23,7 @@ export function createTriage(ctx) {
         <div class="sev-summary" data-sevsum></div>
         <span class="grow"></span>
         <input type="search" class="vh-search" data-tq placeholder="Filter alerts" aria-label="Filter alerts" value="${esc(st.q)}">
-        <select data-tsev aria-label="Severity"><option value="">All severities</option>${SEVERITIES.slice().reverse().map((s) => `<option ${st.sev === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <select data-tsev aria-label="Severity"><option value="">All severities</option>${SEVERITIES.slice().reverse().map((s) => `<option value="${s}" ${st.sev === s ? 'selected' : ''}>${SEV_LABEL[s]}</option>`).join('')}</select>
       </header>
       <div class="view-tools">
         <div class="filters" role="group" aria-label="Show">${FILTERS.map(([k, l]) => `<button data-tfilter="${k}" aria-pressed="${st.filter === k}">${l}</button>`).join('')}</div>
@@ -31,10 +32,11 @@ export function createTriage(ctx) {
         <button class="small" data-tbulk="acknowledge" title="Acknowledge the ticked alerts">Acknowledge selected</button>
         <button class="small" data-tbulk="dismiss" title="Dismiss the ticked alerts">Dismiss selected</button>
       </div>
+      <section class="tri-aux" data-taux></section>
       <div class="table-wrap"><table class="grid-table triage-table" aria-label="Alert queue">
         <thead><tr><th class="c-check"><input type="checkbox" data-tall aria-label="Select all"></th><th>Severity</th><th>Reference</th><th>Alert</th><th>Source</th><th>Room</th><th>Time</th><th>Waiting</th><th>Status</th><th class="c-actions">Actions</th></tr></thead>
         <tbody data-trows></tbody></table></div>
-      <p class="small muted kbd-hint"><kbd>↑</kbd><kbd>↓</kbd> choose · <kbd>A</kbd> acknowledge · <kbd>E</kbd> escalate · <kbd>D</kbd> dismiss · <kbd>I</kbd> incident</p>
+      <p class="small muted kbd-hint"><kbd>↑</kbd><kbd>↓</kbd> choose · <kbd>A</kbd> acknowledge · <kbd>E</kbd> escalate · <kbd>D</kbd> dismiss · <kbd>I</kbd> incident · <kbd>S</kbd> snooze</p>
     </div>`;
     root.addEventListener('click', onClick);
     root.addEventListener('input', (e) => { if (e.target.matches('[data-tq]')) { st.q = e.target.value; draw(); } });
@@ -44,20 +46,69 @@ export function createTriage(ctx) {
       else if (e.target.matches('[data-tall]')) { st.picked = e.target.checked ? new Set(visible().filter((a) => OPEN_ALERT.has(a.status)).map((a) => a.id)) : new Set(); draw(); }
     });
     draw();
+    loadAux();
+  }
+
+  // ----- alert fatigue, snoozes, digest -----
+  let fatigue = null, auxAt = 0;
+  async function loadAux() {
+    auxAt = Date.now();
+    try { [fatigue, S.snoozes] = await Promise.all([ctx.api('/fatigue'), ctx.api('/snoozes')]); } catch { return; }
+    drawAux();
+  }
+  function drawAux() {
+    const box = root && $('[data-taux]', root);
+    if (!box) return;
+    const sz = (S.snoozes || []).filter((x) => x.until > Date.now());
+    const f = fatigue;
+    box.innerHTML = `<div class="aux-card fat-${f?.level || 'low'}"><span class="lbl">Alert load · 7 days</span>
+        <div class="aux-figs"><span><b class="mono">${f ? f.perDay : '—'}</b> a day</span><span><b class="mono">${f ? f.falseRate : '—'}%</b> false alarms</span><span><b class="mono">${f?.medianWaitMin ?? '—'}</b> min typical wait</span></div>
+        <p class="small">${esc(f?.advice || '')}</p>${(f?.sources || []).filter((x) => x.noisy).slice(0, 2).map((x) => `<p class="small c-amber">${esc(x.advice)}</p>`).join('')}</div>
+      <div class="aux-card"><span class="lbl">Snoozed</span>${sz.length ? `<ul class="snz">${sz.map((x) => `<li><span class="grow small">${esc(x.label)} <span class="muted mono">until ${dayClock(x.until)}${x.held ? ` · ${x.held} held back` : ''}</span></span><button class="small btn-ghost" data-unsnooze="${x.id}">End</button></li>`).join('')}</ul>` : '<p class="small muted">Nothing snoozed. Use Snooze on an alert to hold back repeats for a while (Critical always gets through).</p>'}</div>
+      <div class="aux-card"><span class="lbl">Daily digest</span><p class="small muted">${S.settings?.digestOn === false ? 'Off.' : `Every day at ${esc(S.settings?.digestTime || '08:00')}.`} Quiet hours ${S.settings?.quiet?.on ? `${esc(S.settings.quiet.from)}–${esc(S.settings.quiet.to)}` : 'off'}.</p>
+        <div class="row"><button class="small" data-digest>Digest now</button><button class="small btn-ghost" data-digests>Past digests</button></div></div>`;
+  }
+  function snooze(id) {
+    const a = (S.alerts || []).find((x) => x.id === id);
+    if (!a) return;
+    const opts = [a.agentId && ['agent', a.agentId, `Everything from ${a.agent}`], ['title', a.title, `“${a.title}”`], a.kind && ['kind', a.kind, `All ${a.kind} alerts`]].filter(Boolean);
+    const untilMorning = () => { const d = new Date(); d.setHours(7, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return Math.round((d - Date.now()) / 60000); };
+    const s = sheet(`<form data-snzform>
+        <p>Hold back repeats of <b class="mono">${a.id}</b> for a while. They are still written in the log; Critical alerts always get through.</p>
+        <fieldset class="radio-list">${opts.map(([sc, v, l], i) => `<label><input type="radio" name="what" value="${i}" ${i === 0 ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</fieldset>
+        <label class="field"><span>For</span><select name="mins"><option value="15">15 minutes</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="morning">Until 07:00</option></select></label>
+        <label class="row small"><input type="checkbox" name="ack" checked> Acknowledge this alert too</label>
+        <div class="row" style="justify-content:flex-end"><button type="button" data-close>Cancel</button><button class="btn-primary">Snooze</button></div></form>`, { title: 'Snooze' });
+    s.el.querySelector('[data-snzform]').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const el = e.target.elements, [scope, value, label] = opts[Number(el.what.value)];
+      const minutes = el.mins.value === 'morning' ? untilMorning() : Number(el.mins.value);
+      try {
+        await ctx.api('/snoozes', { method: 'POST', body: { scope, value, label, minutes } });
+        if (el.ack.checked && a.status === 'new') await ctx.api(`/alerts/${a.id}/acknowledge`, { method: 'POST', body: { note: 'Snoozed' } });
+        s.close(); toast('Snoozed'); loadAux();
+      } catch (x) { toast(x.message, { kind: 'err' }); }
+    });
+  }
+  async function digests() {
+    let list = [];
+    try { list = await ctx.api('/digest'); } catch (x) { return toast(x.message, { kind: 'err' }); }
+    sheet(`<div class="digests">${list.map((d) => `<section><h3 class="sub">${esc(d.title)}</h3><ul class="small">${d.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></section>`).join('') || '<p class="small muted">No digests yet. The first arrives at the digest time, or press Digest now.</p>'}</div>`, { title: 'Daily digests', wide: true });
   }
 
   function draw() {
     if (!root?.isConnected) return;
     const list = visible(), now = Date.now();
     const counts = Object.fromEntries(SEVERITIES.map((s) => [s, (S.alerts || []).filter((a) => a.status === 'new' && a.severity === s).length]));
-    $('[data-sevsum]', root).innerHTML = SEVERITIES.slice().reverse().map((s) => `<span class="sev-count sc-${s}"><b class="mono" ${counts[s] ? "" : "data-zero"}>${counts[s]}</b> ${s}</span>`).join('') + '<span class="small muted">unhandled</span>';
+    $('[data-sevsum]', root).innerHTML = SEVERITIES.slice().reverse().map((s) => `<span class="sev-count sc-${s}"><b class="mono" ${counts[s] ? "" : "data-zero"}>${counts[s]}</b> ${SEV_LABEL[s]}</span>`).join('') + '<span class="small muted">unhandled</span>';
+    if (Date.now() - auxAt > 60000) loadAux(); else drawAux();
     root.querySelectorAll('[data-tfilter]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tfilter === st.filter)));
     if (st.sel && !list.some((a) => a.id === st.sel)) st.sel = null;
     $('[data-trows]', root).innerHTML = list.length ? list.slice(0, 300).map((a) => {
       const open = OPEN_ALERT.has(a.status);
       return `<tr data-aid="${a.id}" class="${a.id === st.sel ? 'sel' : ''} ${a.status === 'new' ? 'unhandled' : ''}" tabindex="-1">
         <td class="c-check">${open ? `<input type="checkbox" data-tpick="${a.id}" ${st.picked.has(a.id) ? 'checked' : ''} aria-label="Select ${a.id}">` : ''}</td>
-        <td><span class="sev sev-${a.severity}">${a.severity}</span></td>
+        <td><span class="sev sev-${a.severity}">${SEV_LABEL[a.severity] || a.severity}</span></td>
         <td class="mono small">${a.id}</td>
         <td class="c-title"><b>${esc(a.title)}</b>${a.count > 1 ? ` <span class="tag">×${a.count}</span>` : ''}${a.explanation ? `<small>${esc(a.explanation)}</small>` : ''}${a.dismissReason ? `<small>Dismissed: ${esc(a.dismissReason)}</small>` : ''}</td>
         <td class="small">${esc(a.agent || (a.source === 'system' ? 'HQ' : a.source))}</td>
@@ -65,7 +116,7 @@ export function createTriage(ctx) {
         <td class="mono small" title="${new Date(a.ts).toLocaleString('en-GB')}">${dayClock(a.ts)}</td>
         <td class="mono small ${a.status === 'new' ? age(now - a.ts) : 'muted'}" data-age="${a.status === 'new' ? a.ts : ''}">${a.status === 'new' ? ageText(now - a.ts) : '—'}</td>
         <td class="small">${a.status === 'incident' ? `<button class="linkish" data-topeninc="${a.incidentId}">${esc(a.incidentRef || 'Incident')}</button>` : `<span class="st st-${a.status}">${ALERT_STATUS[a.status]}</span>`}</td>
-        <td class="c-actions">${open ? `<button class="small" data-tact="acknowledge" title="Acknowledge (A)" ${a.status === 'acknowledged' ? 'disabled' : ''}>Ack</button><button class="small" data-tact="escalate" title="Escalate (E)" ${a.severity === 'CRITICAL' && a.status === 'escalated' ? 'disabled' : ''}>Escalate</button><button class="small" data-tact="dismiss" title="Dismiss with a reason (D)">Dismiss</button><button class="small" data-tact="incident" title="Convert to incident (I)">Incident</button>`
+        <td class="c-actions">${open ? `<button class="small" data-tact="acknowledge" title="Acknowledge (A)" ${a.status === 'acknowledged' ? 'disabled' : ''}>Ack</button><button class="small" data-tact="escalate" title="Escalate (E)" ${a.severity === 'CRITICAL' && a.status === 'escalated' ? 'disabled' : ''}>Escalate</button><button class="small" data-tact="dismiss" title="Dismiss with a reason (D)">Dismiss</button><button class="small" data-tact="incident" title="Convert to incident (I)">Incident</button><button class="small btn-ghost" data-tact="snooze" title="Snooze repeats (S)">Snooze</button>`
           : a.status === 'dismissed' ? '<button class="small btn-ghost" data-tact="reopen">Reopen</button>' : ''}</td></tr>`;
     }).join('') : `<tr class="empty"><td colspan="10">${st.filter === 'new' ? 'No unhandled alerts. The queue is clear.' : 'Nothing to show for this filter.'}</td></tr>`;
     drawPicked();
@@ -84,6 +135,7 @@ export function createTriage(ctx) {
     if (!a) return;
     if (action === 'dismiss') return dismiss([id]);
     if (action === 'incident') return convert([id]);
+    if (action === 'snooze') return snooze(id);
     try { await ctx.api(`/alerts/${id}/${action}`, { method: 'POST', body: {} }); } catch (x) { toast(x.message, { kind: 'err' }); }
   }
   function dismiss(ids) {
@@ -136,6 +188,9 @@ export function createTriage(ctx) {
     if (b.dataset.tfilter) { st.filter = b.dataset.tfilter; st.picked.clear(); draw(); }
     else if (b.dataset.tact && row) act(row.dataset.aid, b.dataset.tact);
     else if (b.dataset.topeninc) ctx.openIncident(b.dataset.topeninc);
+    else if (b.dataset.unsnooze) { try { await ctx.api(`/snoozes/${b.dataset.unsnooze}`, { method: 'DELETE' }); loadAux(); } catch (x) { toast(x.message, { kind: 'err' }); } }
+    else if ('digest' in b.dataset) { try { const d = await ctx.api('/digest', { method: 'POST' }); toast(d.lines[0]); } catch (x) { toast(x.message, { kind: 'err' }); } }
+    else if ('digests' in b.dataset) digests();
     else if (b.dataset.tbulk) {
       const ids = [...st.picked];
       if (!ids.length) return;
@@ -152,10 +207,10 @@ export function createTriage(ctx) {
     const k = e.key.toLowerCase();
     if (k === 'arrowdown' || k === 'j') { st.sel = list[Math.min(list.length - 1, i + 1)]?.id || null; draw(); root.querySelector('tr.sel')?.scrollIntoView({ block: 'nearest' }); return true; }
     if (k === 'arrowup' || k === 'k') { st.sel = list[Math.max(0, i - 1)]?.id || null; draw(); root.querySelector('tr.sel')?.scrollIntoView({ block: 'nearest' }); return true; }
-    const map = { a: 'acknowledge', e: 'escalate', d: 'dismiss', i: 'incident' };
+    const map = { a: 'acknowledge', e: 'escalate', d: 'dismiss', i: 'incident', s: 'snooze' };
     if (map[k] && st.sel && !e.shiftKey) { const a = list.find((x) => x.id === st.sel); if (a && OPEN_ALERT.has(a.status)) act(st.sel, map[k]); return true; }
     return false;
   }
 
-  return { render, draw, tick, key, convert, setFilter(f) { st.filter = f; draw(); }, select(id) { st.sel = id; st.filter = 'new'; } };
+  return { render, draw, drawAux, tick, key, convert, setFilter(f) { st.filter = f; draw(); }, select(id) { st.sel = id; st.filter = 'new'; } };
 }

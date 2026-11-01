@@ -8,10 +8,14 @@ export const SIGNALS = [
   ['device', 'Phone / device appears'], ['agent', 'Agent online/offline'],
 ];
 const SIGNAL_KEYS = new Set(SIGNALS.map(([k]) => k));
-export const RESULT_LEVELS = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+export const RESULT_LEVELS = ['LOG', 'INFO', 'ADVISORY', 'ALERT', 'CRITICAL'];
 export const ALL_MODES = ['home', 'away', 'night', 'lockdown'];
 
 const str = (v, n) => String(v ?? '').replace(/[<>]/g, '').trim().slice(0, n);
+
+/** Rules saved before v3 used INFO = "just log it" and LOW / MEDIUM / HIGH; v: 2 marks the new scale. */
+const OLD_LEVEL = { INFO: 'LOG', LOW: 'INFO', MEDIUM: 'ADVISORY', HIGH: 'ALERT', CRITICAL: 'CRITICAL' };
+const levelOf = (r) => (r.v === 2 ? r.level : OLD_LEVEL[r.level] || r.level);
 
 /** Clean a rule from the editor (anything odd is dropped or clamped). */
 export function cleanRule(r = {}) {
@@ -30,14 +34,15 @@ export function cleanRule(r = {}) {
     steps: steps.length ? steps : [{ signal: 'motion', roomId: null, agentId: null, text: '' }],
     label: str(r.label, 30).toUpperCase() || 'MATCH',
     likely: str(r.likely, 40),
-    level: RESULT_LEVELS.includes(r.level) ? r.level : 'INFO',
+    level: RESULT_LEVELS.includes(levelOf(r)) ? levelOf(r) : 'LOG',
+    v: 2,
     modes: (Array.isArray(r.modes) ? r.modes : ALL_MODES).filter((m) => ALL_MODES.includes(m)),
   };
 }
 
 /** The example rules a new HQ starts with (they can be edited, switched off or deleted). */
 export const DEFAULT_RULES = [
-  cleanRule({ id: 'rule-arrival', name: 'Arrival', windowSec: 60, ordered: true, label: 'ARRIVAL', likely: '', level: 'INFO', modes: ALL_MODES,
+  cleanRule({ id: 'rule-arrival', name: 'Arrival', windowSec: 60, ordered: true, label: 'ARRIVAL', likely: '', level: 'LOG', modes: ALL_MODES,
     steps: [{ signal: 'door', text: 'open' }, { signal: 'motion' }, { signal: 'device' }] }),
   cleanRule({ id: 'rule-intrusion', name: 'Entry while unoccupied', windowSec: 45, ordered: true, label: 'INTRUSION SEQUENCE', level: 'CRITICAL', modes: ['away', 'lockdown'],
     steps: [{ signal: 'door', text: 'open' }, { signal: 'motion' }] }),

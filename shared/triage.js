@@ -2,14 +2,17 @@
 //  - Which Mission Log events become alerts, and how severe they are.
 //  - Incident references (INC-2026-0042) and the order an incident moves through.
 
-export const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-export const SEV_RANK = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
-export const validSeverity = (s) => (SEVERITIES.includes(s) ? s : 'MEDIUM');
+export const SEVERITIES = ['INFO', 'ADVISORY', 'ALERT', 'CRITICAL'];
+export const SEV_RANK = { INFO: 1, ADVISORY: 2, ALERT: 3, CRITICAL: 4 };
+/** Alerts saved before v3 used LOW / MEDIUM / HIGH; they are read as INFO / ADVISORY / ALERT. */
+export const LEGACY_SEVERITY = { LOW: 'INFO', MEDIUM: 'ADVISORY', HIGH: 'ALERT' };
+export const validSeverity = (s) => (SEVERITIES.includes(s) ? s : LEGACY_SEVERITY[s] || 'ADVISORY');
+export const SEV_LABEL = { INFO: 'Info', ADVISORY: 'Advisory', ALERT: 'Alert', CRITICAL: 'Critical' };
 /** One step up (Escalate). */
 export const escalated = (s) => SEVERITIES[Math.min(SEVERITIES.length - 1, SEVERITIES.indexOf(validSeverity(s)) + 1)];
 
 /** Alert statuses. "new" = nobody has handled it yet (it shows its age). */
-export const ALERT_STATUS = { new: 'Unhandled', acknowledged: 'Acknowledged', escalated: 'Escalated', dismissed: 'Dismissed', incident: 'In incident' };
+export const ALERT_STATUS = { new: 'Unhandled', acknowledged: 'Acknowledged', escalated: 'Escalated', dismissed: 'Dismissed', incident: 'In incident', merged: 'Merged' };
 export const OPEN_ALERT = new Set(['new', 'acknowledged', 'escalated']);
 
 export const DISMISS_REASONS = ['False alarm', 'Expected activity (household member)', 'Test', 'Duplicate', 'Other'];
@@ -26,21 +29,21 @@ export function severityFor(ev) {
   const msg = String(ev.message || '');
   if (ev.kind === 'system') {
     if (/^PANIC raised/.test(msg)) return 'CRITICAL';
-    if (/^Failed login attempt/.test(msg)) return 'MEDIUM';
-    if (/^Internet connection lost/.test(msg)) return 'LOW';
+    if (/^Failed login attempt/.test(msg)) return 'ADVISORY';
+    if (/^Internet connection lost/.test(msg)) return 'INFO';
     return null; // mode changes, alarm protocol, stand-downs, phones linking: recorded, not alerts
   }
   if (SENSOR.has(ev.kind)) {
-    if (ev.level === 'alert') return ev.data?.armed === 'lockdown' ? 'CRITICAL' : 'HIGH';
-    if (ev.level === 'warn') return 'LOW';
+    if (ev.level === 'alert') return ev.data?.armed === 'lockdown' ? 'CRITICAL' : 'ALERT';
+    if (ev.level === 'warn') return 'INFO';
     return null;
   }
   if (ev.kind === 'agent') {
     if (/disconnected by HQ/.test(msg)) return null; // done on purpose by the operator
     if (/\boffline\b/.test(msg)) return null; // tamper detection raises its own, better-explained alert
-    return ev.level === 'warn' || ev.level === 'alert' ? 'LOW' : null; // offline, low battery
+    return ev.level === 'warn' || ev.level === 'alert' ? 'INFO' : null; // offline, low battery
   }
-  return ev.level === 'alert' ? 'HIGH' : null;
+  return ev.level === 'alert' ? 'ALERT' : null;
 }
 
 /** Short title for an alert made from an event ("Motion — Kitchen"). */

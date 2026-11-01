@@ -134,7 +134,7 @@ const SHOTS = process.argv[2] || '';
   check(backup.sentinel === 'hq-backup' && backup.events.length > 2, 'HQ backup downloads');
   check((await page.textContent('[data-hqcodeshow]')).trim() === hqCode, 'HQ code shown in Settings');
   await page.click('[data-tab="alerts"]');
-  await page.waitForSelector('[data-rule="awayMotion"]');
+  await page.waitForSelector('[data-alertset]');
   check(true, 'Alerts tab opens');
   await page.click('[data-tab="phones"]');
   await page.waitForSelector('[data-linkphone]');

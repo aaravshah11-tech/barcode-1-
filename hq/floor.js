@@ -6,7 +6,7 @@ import { missionById } from '../shared/missions.js';
 import { SEV_RANK, ageText } from '../shared/triage.js';
 
 const H = 3600000;
-const SEV_LABEL = { CRITICAL: 'Critical', HIGH: 'Alert', MEDIUM: 'Advisory', LOW: 'Info' };
+const SEV_LABEL = { CRITICAL: 'Critical', ALERT: 'Alert', ADVISORY: 'Advisory', INFO: 'Info' };
 export const sevWord = (s) => SEV_LABEL[s] || s;
 const ago = (ms) => { const m = Math.floor(ms / 60000); return m < 1 ? '<1m' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
 
@@ -83,7 +83,7 @@ export function renderTriageSummary(S) {
   const box = $('[data-sevsum2]');
   if (!box) return;
   const open = (S.alerts || []).filter((a) => a.status === 'new');
-  box.innerHTML = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((s) => { const n = open.filter((a) => a.severity === s).length; return `<div class="sc sc-${s}"><span class="lbl">${sevWord(s)}</span><b class="${n ? '' : 'zero'}">${n}</b></div>`; }).join('');
+  box.innerHTML = ['CRITICAL', 'ALERT', 'ADVISORY', 'INFO'].map((s) => { const n = open.filter((a) => a.severity === s).length; return `<div class="sc sc-${s}"><span class="lbl">${sevWord(s)}</span><b class="${n ? '' : 'zero'}">${n}</b></div>`; }).join('');
 }
 
 export function renderPerimeterMini(S) {

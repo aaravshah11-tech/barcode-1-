@@ -31,7 +31,7 @@ export class Tamper {
   raise(agentId, type, ev, extra = '') {
     const [title, why] = TAMPER_TEXT[type] || ['Tamper', ''];
     const armed = ARMED.has(this.mode());
-    const severity = type === 'drain' ? 'LOW' : (type === 'covered' || type === 'offline' || type === 'unplugged') && armed ? 'HIGH' : 'MEDIUM';
+    const severity = type === 'drain' ? 'INFO' : (type === 'covered' || type === 'offline' || type === 'unplugged') && armed ? 'ALERT' : 'ADVISORY';
     const { roomId, room } = this.hq.ops.roomOf(agentId);
     const a = this.db.agent(agentId);
     this.db.updateAgent(agentId, { lastTamper: { type, ts: ev?.ts || this.hq.now() } });

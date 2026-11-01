@@ -2,6 +2,7 @@
 // computer calls it directly; linked phones call it over their encrypted link.
 import { toCsv } from '../../shared/export.js';
 import { missionById } from '../../shared/missions.js';
+import { grade } from '../../shared/grading.js';
 import { coverage } from '../../shared/coverage.js';
 import { denied } from '../../shared/roles.js';
 import { describe } from './auditlog.js';
@@ -247,6 +248,21 @@ export function makeApi({ hq, db, auth }) {
     mm = p.match(/^\/agents\/([\w-]{1,64})\/facing$/);
     if (mm && m === 'PUT') { const a = hq.setFacing(mm[1], body.dir); if (!a) throw fail(400, 'Place the Agent on the floor plan first.'); return a; }
     if (p === '/coverage' && m === 'GET') return coverage(hq.house(), hq.snapshot().agents);
+    // ----- alert grading, snoozes, fatigue, digest -----
+    if (p === '/graderules' && m === 'GET') return hq.ops.gradeRules();
+    mm = p.match(/^\/graderules\/([\w-]{1,64})$/);
+    if (mm && m === 'PUT') return hq.ops.saveGradeRule({ ...body, id: mm[1] });
+    if (mm && m === 'DELETE') return hq.ops.deleteGradeRule(mm[1]);
+    if (p === '/graderules/test' && m === 'POST') {
+      return grade({ severity: body.severity || 'ALERT', kind: body.kind || 'motion', cls: body.cls || null, zone: body.zone || 'inside', room: body.room || '', title: body.title || 'Test' }, { ...hq.ops.gradeContext(null, body.kind, null, hq.now()), mode: body.mode || hq.settings().mode, snoozes: [] });
+    }
+    if (p === '/snoozes' && m === 'GET') return hq.ops.snoozes();
+    if (p === '/snoozes' && m === 'POST') return hq.ops.snooze({ ...body, by });
+    mm = p.match(/^\/snoozes\/([\w-]{1,64})$/);
+    if (mm && m === 'DELETE') return hq.ops.unsnooze(mm[1], by);
+    if (p === '/fatigue' && m === 'GET') return hq.ops.fatigue();
+    if (p === '/digest' && m === 'GET') return db.docs('digests').sort((a, b) => b.ts - a.ts).slice(0, 14);
+    if (p === '/digest' && m === 'POST') return hq.ops.digestNow();
     if (p === '/register' && m === 'GET') return hq.fleet.rows();
     if (p === '/fleet/summary' && m === 'GET') return hq.fleet.summary();
     if (p === '/agents/bulk' && m === 'POST') return hq.fleet.bulk(body);

@@ -82,7 +82,7 @@ export class Resilience {
     const list = await this.db.localBackups();
     for (const k of ['nightly', 'manual']) for (const old of list.filter((b) => b.kind === k).slice(k === 'nightly' ? 7 : 5)) await this.db.deleteLocalBackup(old.id);
     this.hq.logEvent({ kind: 'system', level: verified.ok ? 'info' : 'warn', message: `${kind === 'nightly' ? 'Nightly' : 'Manual'} backup made (encrypted) and test-restored: ${verified.ok ? 'OK' : 'FAILED'}` });
-    if (!verified.ok) this.hq.ops.raise({ severity: 'MEDIUM', title: 'Backup failed its test restore', explanation: verified.detail, source: 'system', kind: 'backup' });
+    if (!verified.ok) this.hq.ops.raise({ severity: 'ADVISORY', title: 'Backup failed its test restore', explanation: verified.detail, source: 'system', kind: 'backup' });
     this.db.setSetting('lastBackup', { at: info.at, ok: verified.ok });
     return info;
   }
@@ -178,7 +178,7 @@ export class Resilience {
     const mins = Math.round((to - from) / 60000);
     const len = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
     const ev = this.hq.logEvent({ kind: 'system', level: why === 'closed' ? 'info' : 'warn', message: `HQ was not running for ${len} (${why})` });
-    if (why !== 'closed') this.hq.ops.raise({ severity: why === 'hung' ? 'MEDIUM' : 'LOW', title: `HQ was down for ${len}`, explanation: `HQ ${why === 'asleep' ? 'was asleep (the computer slept)' : why === 'hung' ? 'stopped responding and was restarted by its watchdog' : 'stopped without being closed (crash, power cut or the browser was killed)'}. Agents couldn’t report during that time.`, source: 'system', kind: 'hq-down', eventIds: [ev.id] });
+    if (why !== 'closed') this.hq.ops.raise({ severity: why === 'hung' ? 'ADVISORY' : 'INFO', title: `HQ was down for ${len}`, explanation: `HQ ${why === 'asleep' ? 'was asleep (the computer slept)' : why === 'hung' ? 'stopped responding and was restarted by its watchdog' : 'stopped without being closed (crash, power cut or the browser was killed)'}. Agents couldn’t report during that time.`, source: 'system', kind: 'hq-down', eventIds: [ev.id] });
     return rec;
   }
   /** Reports from the page's watchdog (sleep, a hang, an automatic reload). */

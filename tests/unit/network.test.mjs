@@ -82,7 +82,7 @@ test('HQ: register lists SENTINEL’s own devices; import raises “new device�
   const phone = assets.find((a) => a.mac === '3C:22:FB:12:34:56');
   await call('PUT', `/network/assets/${phone.id}`, { ...phone, name: 'Mum’s iPhone', owner: 'Mum', trusted: true });
   await assert.rejects(call('DELETE', `/network/assets/${assets.find((a) => a.ref === 'hq').id}`), /listed automatically/);
-  // second import: Mum's trusted phone → a "device appears" signal for the correlation rules; untrusted ones → LOW alerts
+  // second import: Mum's trusted phone → a "device appears" signal for the correlation rules; untrusted ones → INFO alerts
   clock.t += 3600000;
   await call('POST', '/network/import', { text: ROUTER });
   assert.ok(db.events({ kind: 'device' }).some((e) => e.data.owner === 'Mum'), 'trusted device seen → device event with owner');
@@ -92,7 +92,7 @@ test('HQ: register lists SENTINEL’s own devices; import raises “new device�
   hq.agentStatus(agentId, { net: 'wifi' });
   hq.agentStatus(agentId, { net: '4g' });
   alerts = await call('GET', '/alerts');
-  assert.ok(alerts.some((a) => /^Agent left the Wi-Fi/.test(a.title) && a.severity === 'MEDIUM'));
+  assert.ok(alerts.some((a) => /^Agent left the Wi-Fi/.test(a.title) && a.severity === 'ADVISORY'));
   // health
   await call('PUT', '/network/checks', { answers: { wpa: 'yes', adminpw: 'no', bogus: 'yes' } });
   const h = await call('GET', '/network/health');

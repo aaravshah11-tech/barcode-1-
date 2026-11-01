@@ -32,11 +32,11 @@ const SHOTS = process.argv[2] || '';
   await page.waitForTimeout(300);
   check((await page.textContent('[data-minique]')).includes('No unhandled alerts'), 'HOME: motion is logged, not queued for triage');
 
-  // AWAY: motion → HIGH alert in the Operations queue panel and on the rail
+  // AWAY: motion → ALERT alert in the Operations queue panel and on the rail
   await api('PATCH', '/settings', { mode: 'away' });
   await motion();
-  await page.waitForSelector('[data-minique] .sev-HIGH');
-  check((await page.textContent('[data-minique]')).includes('Motion detected — Kitchen'), 'AWAY: motion → HIGH alert “Motion detected — Kitchen” in the Alert queue panel');
+  await page.waitForSelector('[data-minique] .sev-ALERT');
+  check((await page.textContent('[data-minique]')).includes('Motion detected — Kitchen'), 'AWAY: motion → ALERT alert “Motion detected — Kitchen” in the Alert queue panel');
   check(await page.isVisible('[data-badge="triage"].crit') && (await page.textContent('[data-badge="triage"]')) === '1', 'Triage rail button shows 1 unhandled (red: HIGH)');
   await motion();
   await page.waitForSelector('[data-minique] >> text=×2');
@@ -46,7 +46,7 @@ const SHOTS = process.argv[2] || '';
   await page.click('.rail [data-view="triage"]');
   await page.waitForSelector('.triage-table [data-aid]');
   const row = await page.textContent('.triage-table tbody');
-  check(/ALT-\d{6}/.test(row) && row.includes('HIGH') && row.includes('Kitchen') && row.includes('AGENT-01'), 'queue row: severity, reference, alert, source Agent, room, time');
+  check(/ALT-\d{6}/.test(row) && row.includes('Alert') && row.includes('Kitchen') && row.includes('AGENT-01'), 'queue row: severity, reference, alert, source Agent, room, time');
   check(/AWAY/.test(row), 'the alert explains why (activity while AWAY)');
   check(/<1 min|\d+ min/.test(await page.textContent('[data-age]')), 'shows how long it has been waiting');
   await shot('triage-queue');

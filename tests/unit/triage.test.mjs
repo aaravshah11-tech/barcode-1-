@@ -23,21 +23,21 @@ async function setup() {
 
 test('severity rules: only events that need a decision become alerts', () => {
   assert.equal(severityFor({ kind: 'motion', level: 'info' }), null, 'activity while home is just logged');
-  assert.equal(severityFor({ kind: 'motion', level: 'alert', data: { armed: 'away' } }), 'HIGH');
+  assert.equal(severityFor({ kind: 'motion', level: 'alert', data: { armed: 'away' } }), 'ALERT');
   assert.equal(severityFor({ kind: 'door', level: 'alert', data: { armed: 'lockdown' } }), 'CRITICAL');
   assert.equal(severityFor({ kind: 'system', level: 'alert', message: 'PANIC raised by HQ' }), 'CRITICAL');
-  assert.equal(severityFor({ kind: 'system', level: 'warn', message: 'Failed login attempt' }), 'MEDIUM');
-  assert.equal(severityFor({ kind: 'system', level: 'warn', message: 'Internet connection lost' }), 'LOW');
+  assert.equal(severityFor({ kind: 'system', level: 'warn', message: 'Failed login attempt' }), 'ADVISORY');
+  assert.equal(severityFor({ kind: 'system', level: 'warn', message: 'Internet connection lost' }), 'INFO');
   assert.equal(severityFor({ kind: 'system', level: 'alert', message: 'Security mode: LOCKDOWN' }), null, 'a mode change is not an alert');
   assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “WOLF” offline' }), null, 'tamper detection explains offline Agents instead');
-  assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 WOLF: battery low (15%) — plug it in' }), 'LOW');
+  assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 WOLF: battery low (15%) — plug it in' }), 'INFO');
   assert.equal(severityFor({ kind: 'agent', level: 'warn', message: 'AGENT-01 “WOLF” disconnected by HQ' }), null);
   assert.equal(severityFor({ kind: 'threat', level: 'alert' }), null);
   assert.equal(alertTitle({ kind: 'motion', message: 'x' }, 'Kitchen'), 'Motion detected — Kitchen');
 });
 
 test('escalation, incident references, status moves, age text', () => {
-  assert.equal(escalated('LOW'), 'MEDIUM');
+  assert.equal(escalated('INFO'), 'ADVISORY');
   assert.equal(escalated('CRITICAL'), 'CRITICAL');
   assert.equal(incidentRef(2026, 42), 'INC-2026-0042');
   assert.ok(canMove('open', 'investigating') && canMove('investigating', 'resolved') && canMove('resolved', 'closed'));
@@ -57,7 +57,7 @@ test('an armed sensor event becomes an alert; repeats within a minute merge', as
   let open = await call('GET', '/alerts?status=open');
   assert.equal(open.length, 1);
   assert.equal(open[0].count, 2, 'merged into one row (×2)');
-  assert.equal(open[0].severity, 'HIGH');
+  assert.equal(open[0].severity, 'ALERT');
   assert.equal(open[0].status, 'new');
   assert.match(open[0].id, /^ALT-\d{6}$/);
   assert.match(open[0].agent, /WOLF/);
@@ -100,7 +100,7 @@ test('incidents: INC-YYYY-NNNN, linked alerts, status flow, notes, timeline, pla
   const inc = await call('POST', '/incidents', { alertIds: [a.id], assignee: 'Director' });
   assert.equal(inc.ref, 'INC-2026-0001');
   assert.equal(inc.status, 'open');
-  assert.equal(inc.severity, 'HIGH', 'takes the worst alert severity');
+  assert.equal(inc.severity, 'ALERT', 'takes the worst alert severity');
   assert.deepEqual(inc.alertIds, [a.id]);
   assert.equal((await call('GET', '/alerts'))[0].status, 'incident');
   assert.equal((await call('POST', '/incidents', { title: 'Second' })).ref, 'INC-2026-0002');
@@ -119,11 +119,11 @@ test('incidents: INC-YYYY-NNNN, linked alerts, status flow, notes, timeline, pla
   assert.equal(d.incident.notes[0].text, 'Checked the camera position — fine.');
 });
 
-test('PANIC is CRITICAL; a failed sign-in is MEDIUM', async () => {
+test('PANIC is CRITICAL; a failed sign-in is ADVISORY', async () => {
   const { call, hq } = await setup();
   await call('POST', '/panic');
   hq.logEvent({ kind: 'system', level: 'warn', message: 'Failed login attempt' });
   const list = await call('GET', '/alerts');
   assert.ok(list.some((a) => a.severity === 'CRITICAL' && a.title === 'Panic raised'));
-  assert.ok(list.some((a) => a.severity === 'MEDIUM' && a.title === 'Failed sign-in attempt'));
+  assert.ok(list.some((a) => a.severity === 'ADVISORY' && a.title === 'Failed sign-in attempt'));
 });

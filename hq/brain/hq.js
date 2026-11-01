@@ -27,6 +27,10 @@ export const DEFAULT_SETTINGS = {
   northDeg: 0, // which compass direction the top of the floor plan faces (for sun and shadows)
   ships: [], // GLOBAL INTEL ship watch list: [{ mmsi, name }]
   airspaceKm: 40, // GLOBAL INTEL airspace radar range
+  quiet: { on: true, from: '23:00', to: '07:00' }, // quiet hours: only Critical makes a sound or notification
+  digestOn: true, digestTime: '08:00', // the daily digest
+  staleMinutes: 15, // warn when an Agent hasn't reported for this long
+  notifyMin: 'ALERT', // browser notifications from this severity up
 };
 const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
 const THEMES = ['graphite', 'navy'];
@@ -64,6 +68,7 @@ export class HQ extends Emitter {
     this.recomputeThreat(false);
     this.timers.push(setInterval(() => this.recomputeThreat(), 30000));
     this.timers.push(setInterval(() => this.prune(), 3600000));
+    this.timers.push(setInterval(() => this.ops.tickDigest(), 60000)); // the daily digest
     this.prune();
     this.analytics.start();
     this.reports.start();
@@ -116,6 +121,11 @@ export class HQ extends Emitter {
       s.location = l && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
         ? { name: String(l.name || 'Home').replace(/[<>]/g, '').slice(0, 60), lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 } : null;
     }
+    if (patch.quiet && typeof patch.quiet === 'object') s.quiet = { on: !!patch.quiet.on, from: time(patch.quiet.from, s.quiet?.from || '23:00'), to: time(patch.quiet.to, s.quiet?.to || '07:00') };
+    if ('digestOn' in patch) s.digestOn = !!patch.digestOn;
+    if ('digestTime' in patch) s.digestTime = time(patch.digestTime, s.digestTime || '08:00');
+    if ('staleMinutes' in patch) s.staleMinutes = [5, 15, 30, 60, 120].includes(Number(patch.staleMinutes)) ? Number(patch.staleMinutes) : 15;
+    if ('notifyMin' in patch) s.notifyMin = ['ADVISORY', 'ALERT', 'CRITICAL'].includes(patch.notifyMin) ? patch.notifyMin : 'ALERT';
     if ('autoLockMin' in patch) s.autoLockMin = [0, 5, 15, 30, 60].includes(Number(patch.autoLockMin)) ? Number(patch.autoLockMin) : 15;
     this.db.setSetting('hq', s);
     if ('mode' in patch && s.mode !== prevMode) {

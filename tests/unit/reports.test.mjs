@@ -56,11 +56,11 @@ test('reports: weekly RPT-YYYY-Wnn with figures; custom RPT-YYYY-NNNN; live SITR
   assert.equal(wk.ref, `RPT-2026-W${String(isoWeek(clock.t - 3 * 86400000).week).padStart(2, '0')}`);
   assert.equal(wk.data.days.length, 7);
   assert.equal(wk.data.totals.activity, 28, '7+6+…+1 events last week');
-  assert.equal(wk.data.alerts.bySev.HIGH, 0, 'today’s alert is not in last week');
+  assert.equal(wk.data.alerts.bySev.ALERT, 0, 'today’s alert is not in last week');
   assert.ok(wk.sitrep.length >= 4);
   const c = await call('POST', '/reports', { kind: 'custom', from: clock.t - 86400000, to: clock.t + 1000, title: 'Today so far', sections: ['summary', 'alerts', 'log'] });
   assert.equal(c.ref, 'RPT-2026-0001');
-  assert.equal(c.data.alerts.bySev.HIGH, 1);
+  assert.equal(c.data.alerts.bySev.ALERT, 1);
   assert.ok(c.data.alerts.mtta != null, 'time to first action measured');
   assert.ok(c.data.log.length > 0);
   await assert.rejects(call('POST', '/reports', { kind: 'custom', from: 5, to: 1 }), /end after the start/);

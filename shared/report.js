@@ -48,7 +48,7 @@ export function reportData(input) {
   const rooms = new Map();
   for (const e of activity) { const r = agentRoom(e.agentId) || 'Not on the plan'; rooms.set(r, (rooms.get(r) || 0) + 1); }
   // alerts
-  const bySev = Object.fromEntries(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((s) => [s, alerts.filter((a) => a.severity === s).length]));
+  const bySev = Object.fromEntries(['CRITICAL', 'ALERT', 'ADVISORY', 'INFO'].map((s) => [s, alerts.filter((a) => a.severity === s).length]));
   const handled = alerts.filter((a) => a.handledAt);
   const mtta = handled.length ? handled.reduce((s, a) => s + (a.handledAt - a.ts), 0) / handled.length : null;
   const byStatus = {}; for (const a of alerts) byStatus[a.status] = (byStatus[a.status] || 0) + 1;
@@ -64,7 +64,7 @@ export function reportData(input) {
   const outages = (input.outages || []).filter((o) => o.from < to && (o.to ?? to) >= from);
   const newDevices = events.filter((e) => e.kind === 'device' && e.data?.new).map((e) => ({ ts: e.ts, text: e.message }));
   return {
-    from, to, totals: { events: events.length, activity: activity.length, alerts: alerts.length, critical: bySev.CRITICAL + bySev.HIGH, incidentsOpened: incidents.filter((i) => inP(i.createdAt)).length, unhandled: alerts.filter((a) => a.status === 'new').length },
+    from, to, totals: { events: events.length, activity: activity.length, alerts: alerts.length, critical: bySev.CRITICAL + bySev.ALERT, incidentsOpened: incidents.filter((i) => inP(i.createdAt)).length, unhandled: alerts.filter((a) => a.status === 'new').length },
     days, rooms: [...rooms].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     alerts: { bySev, byStatus, mtta, mttaText: mins(mtta), dismissReasons, notable: alerts.filter((a) => SEV_RANK[a.severity] >= 3).sort((a, b) => a.ts - b.ts).slice(0, 25).map((a) => ({ ts: a.ts, id: a.id, severity: a.severity, title: a.title, status: a.status })) },
     incidents: incidents.map((i) => ({ ref: i.ref, title: i.title, severity: i.severity, status: i.status, assignee: i.assignee, createdAt: i.createdAt })),
@@ -82,7 +82,7 @@ export function sitrepText(d, { state = 'HOME', threat = 'GREEN', agentsOnline =
   const out = [];
   out.push({ h: '1. Situation', lines: [`Alert state ${state}. Threat level ${threat}. ${agentsOnline} of ${agentsTotal} Agent${agentsTotal === 1 ? '' : 's'} online.`, ...(d.states.length ? [`Alert state changed ${d.states.length} time${d.states.length === 1 ? '' : 's'}: ${d.states.map((x) => `${fmtDT(x.ts)} ${x.text.replace(/^(Security mode|Alert state): /, '').split(' — ')[0]}`).join('; ')}.`] : [])] });
   out.push({ h: '2. Activity', lines: [`${t.activity} sensor event${t.activity === 1 ? '' : 's'} recorded.${d.rooms.length ? ` Busiest: ${d.rooms.slice(0, 3).map((r) => `${r.name} (${r.count})`).join(', ')}.` : ''}`] });
-  out.push({ h: '3. Alerts and incidents', lines: [t.alerts ? `${t.alerts} alert${t.alerts === 1 ? '' : 's'}: ${s.CRITICAL} critical, ${s.HIGH} high, ${s.MEDIUM} medium, ${s.LOW} low. ${t.unhandled} still unhandled. Average time to first action ${d.alerts.mttaText}.` : 'No alerts.', ...(d.incidents.length ? [`Incidents: ${d.incidents.map((i) => `${i.ref} ${i.title} (${i.status})`).join('; ')}.`] : []), ...d.alerts.notable.slice(0, 5).map((a) => `${fmtDT(a.ts)} ${a.severity} — ${a.title}.`)] });
+  out.push({ h: '3. Alerts and incidents', lines: [t.alerts ? `${t.alerts} alert${t.alerts === 1 ? '' : 's'}: ${s.CRITICAL} critical, ${s.ALERT} alert, ${s.ADVISORY} advisory, ${s.INFO} info. ${t.unhandled} still unhandled. Average time to first action ${d.alerts.mttaText}.` : 'No alerts.', ...(d.incidents.length ? [`Incidents: ${d.incidents.map((i) => `${i.ref} ${i.title} (${i.status})`).join('; ')}.`] : []), ...d.alerts.notable.slice(0, 5).map((a) => `${fmtDT(a.ts)} ${a.severity} — ${a.title}.`)] });
   if (d.anomalies.length || d.correlations.length) out.push({ h: '4. Analysis', lines: [...d.anomalies.slice(0, 5).map((a) => `${fmtDT(a.ts)} ${a.title} (${a.confidence}% confidence).`), ...d.correlations.slice(0, 5).map((c) => `${fmtDT(c.ts)} ${c.text}.`)] });
   out.push({ h: `${out.length + 1}. Equipment and network`, lines: [
     `${d.agents.filter((a) => a.tampers).length ? `Tamper reports: ${d.agents.filter((a) => a.tampers).map((a) => `${a.label} (${a.tampers})`).join(', ')}. ` : 'No tamper reports. '}${d.agents.filter((a) => a.battery != null && a.battery < 0.2).map((a) => `${a.label} battery ${Math.round(a.battery * 100)}%`).join(', ')}`.trim(),
@@ -93,7 +93,7 @@ export function sitrepText(d, { state = 'HOME', threat = 'GREEN', agentsOnline =
 
 // ---------------- PDF ----------------
 const C = { ink: '#1b2430', muted: '#5b6672', line: '#c9d0d8', light: '#eef1f4', accent: '#3f6d93', amber: '#b07a12', red: '#b3261e', band: '#233329', bandText: '#e1ecdf' };
-const SEV_C = { CRITICAL: C.red, HIGH: C.red, MEDIUM: C.amber, LOW: C.muted };
+const SEV_C = { CRITICAL: C.red, ALERT: C.red, ADVISORY: C.amber, INFO: C.muted };
 
 /** Build the PDF for a stored report: { ref, title, kind, from, to, generatedAt, generatedBy, sections, data, sitrep } */
 export function reportPdf(rep) {
@@ -159,7 +159,7 @@ export function reportPdf(rep) {
   if (rep.sitrep) { h1('Situation report'); for (const s of rep.sitrep) { need(30); pdf.text(M, y, s.h, { size: 9.5, font: 'F2' }); y += 13; for (const l of s.lines.filter(Boolean)) para(l, { indent: 12 }); y += 4; } }
   if (sec.has('summary')) {
     h1('Summary');
-    figures([{ label: 'Sensor events', value: d.totals.activity }, { label: 'Alerts', value: d.totals.alerts }, { label: 'High / critical', value: d.totals.critical, color: d.totals.critical ? C.red : C.ink }, { label: 'Incidents opened', value: d.totals.incidentsOpened }, { label: 'Internet uptime', value: d.network.uptime != null ? `${d.network.uptime}%` : '—' }]);
+    figures([{ label: 'Sensor events', value: d.totals.activity }, { label: 'Alerts', value: d.totals.alerts }, { label: 'Alert / critical', value: d.totals.critical, color: d.totals.critical ? C.red : C.ink }, { label: 'Incidents opened', value: d.totals.incidentsOpened }, { label: 'Internet uptime', value: d.network.uptime != null ? `${d.network.uptime}%` : '—' }]);
     para(`Average time from alert to first action: ${d.alerts.mttaText}. Unhandled at the end of the period: ${d.totals.unhandled}.`, { color: C.muted });
   }
   if (sec.has('activity')) {
@@ -169,7 +169,7 @@ export function reportPdf(rep) {
   }
   if (sec.has('alerts')) {
     h1('Alerts and triage');
-    barChart('Alerts by severity', ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((s) => ({ label: s, v: d.alerts.bySev[s], color: SEV_C[s] })), { height: 80 });
+    barChart('Alerts by severity', ['CRITICAL', 'ALERT', 'ADVISORY', 'INFO'].map((s) => ({ label: s, v: d.alerts.bySev[s], color: SEV_C[s] })), { height: 80 });
     const st = Object.entries(d.alerts.byStatus).map(([k, v]) => `${k} ${v}`).join(' · ');
     if (st) para(`By outcome: ${st}.`, { color: C.muted });
     const dr = Object.entries(d.alerts.dismissReasons).map(([k, v]) => `${k} (${v})`).join(', ');
