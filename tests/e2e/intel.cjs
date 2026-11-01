@@ -32,7 +32,8 @@ function forecast() {
   const shot = (p, n) => SHOTS && p.screenshot({ path: path.join(SHOTS, `${n}.png`) });
   await openHQ(page, world);
 
-  // ---- Intel panel: no location yet ----
+  // ---- Intel panel (shown from the workspace's panel list): no location yet ----
+  await page.evaluate(() => window.__ws().show('situation'));
   await page.waitForSelector('[data-intel] [data-setloc]');
   check(true, 'Situation panel asks for a location for weather and sunrise/sunset');
   await page.click('[data-intel] [data-setloc]');

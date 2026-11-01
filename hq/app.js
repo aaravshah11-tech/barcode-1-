@@ -34,6 +34,7 @@ import { createAccess, twoStepSheet } from './views/access.js';
 import { createShift, showHandover } from './views/shift.js';
 import { createData } from './views/data.js';
 import { startWatchdog } from './watchdog.js';
+import { renderPicture, renderTriageSummary, renderPerimeterMini, renderTimeline, fleetRow, fleetOrder } from './floor.js';
 import { VERSION } from '../shared/changelog.js';
 import { ageText, SEV_RANK } from '../shared/triage.js';
 
@@ -188,6 +189,7 @@ function launch() {
   tick();
   if (MODE === 'hq') keepAwake();
   setTimeout(() => maybeAutoBriefing(S), 1200);
+  loadTimeline(); clearInterval(S.tlTimer); S.tlTimer = setInterval(loadTimeline, 5 * 60000);
   setTimeout(() => showHandover({ S, api: (...a) => T.api(...a) }), 1500);
   let seen = null; try { seen = localStorage.getItem('sentinel.seenVersion'); } catch { /* ignore */ }
   if (seen !== VERSION) { setTimeout(() => toast(`SENTINEL ${VERSION} — see what’s new in Settings › What’s new`), 2500); try { localStorage.setItem('sentinel.seenVersion', VERSION); } catch { /* ignore */ } }
@@ -281,9 +283,13 @@ const OPS_PANELS = () => [
       <div class="map-hint" data-maphint hidden></div>
       <div class="heat-legend" data-heatlegend hidden></div><div class="map-tip mono" data-maptip hidden></div>
       <div class="replay-bar" data-replaybar hidden></div></div><p class="threat-reason" data-reason></p>` },
-  { id: 'queue', title: 'Alert queue', defaultW: 3, defaultH: 8, html: '<div class="panel-head"><h2>Alert queue <span data-qcount></span></h2><button class="small" data-view="triage" title="Open the Triage queue (2)">Open</button></div><div class="wp-body"><ol class="mini-queue" data-minique></ol></div>' },
+  { id: 'picture', title: 'Current picture', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Current picture</h2></div><div class="wp-body"><div data-picture></div><div data-peoplelist class="pic-controls"></div></div>' },
+  { id: 'queue', title: 'Triage', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Triage <span data-qcount></span></h2><button class="small" data-view="triage" title="Open the Triage queue (2)">Open</button></div><div class="wp-body"><div class="sevsum2" data-sevsum2></div><ol class="mini-queue" data-minique></ol></div>' },
+  { id: 'perimeter', title: 'Perimeter', defaultW: 3, defaultH: 7, html: '<div class="panel-head"><h2>Perimeter</h2><span class="lbl">Met · Open-Meteo</span></div><div class="wp-body" data-perimini></div>' },
+  { id: 'timeline', title: 'Activity timeline', defaultW: 9, defaultH: 5, html: '<div class="panel-head"><h2>Activity · last 24 hours</h2><span class="small muted">Drag along a lane to replay on the map</span></div><div class="wp-body acttl" data-acttl></div>' },
+  { id: 'ask', title: 'Ask the Analyst', defaultW: 3, defaultH: 5, html: '<div class="panel-head"><h2>Ask the Analyst</h2><span class="lbl" data-analyststate></span></div><div class="wp-body ask-body"><p class="small muted ask-last" data-asklast></p><form data-askform class="ask-form"><input name="q" placeholder="Ask about anything that happened…" autocomplete="off" aria-label="Ask the Analyst"><button class="icon-btn" aria-label="Ask">↵</button></form></div>' },
   { id: 'state', title: 'Alert state', defaultW: 3, defaultH: 7, html: '<div class="panel-head"><h2>Alert state</h2></div><div class="wp-body" data-peoplelist></div>' },
-  { id: 'agents', title: 'Agents', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Agents <span data-count></span></h2></div><div class="wp-body agents" data-agents></div>' },
+  { id: 'agents', title: 'Agent fleet', defaultW: 3, defaultH: 11, html: '<div class="panel-head"><h2>Agent fleet <span data-count></span></h2></div><div class="wp-body agents" data-agents></div>' },
   { id: 'network', title: 'Network', defaultW: 3, defaultH: 9, html: '<div class="panel-head"><h2>Network</h2></div><div class="wp-body"><dl class="kv netinfo" data-network></dl><div data-netchart></div><div data-netextra></div></div>' },
   { id: 'comms', title: 'Messages', defaultW: 3, defaultH: 8, html: `<div class="panel-head"><h2>Messages to Agents</h2></div><div class="wp-body">
       <form data-comms class="comms-form">
@@ -301,9 +307,13 @@ const OPS_PANELS = () => [
 ];
 export const OPS_EXTRA_PANELS = []; // later parts add panels (e.g. the Triage queue)
 const OPS_PRESETS = {
-  Standard: [{ id: 'state', x: 0, y: 0, w: 3, h: 7 }, { id: 'agents', x: 0, y: 7, w: 3, h: 9 }, { id: 'network', x: 0, y: 16, w: 3, h: 9 }, { id: 'map', x: 3, y: 0, w: 6, h: 16 }, { id: 'log', x: 3, y: 16, w: 6, h: 9 }, { id: 'queue', x: 9, y: 0, w: 3, h: 8 }, { id: 'comms', x: 9, y: 8, w: 3, h: 8 }, { id: 'situation', x: 9, y: 16, w: 3, h: 9 }],
-  'Map focus': [{ id: 'map', x: 0, y: 0, w: 9, h: 19 }, { id: 'state', x: 9, y: 0, w: 3, h: 7 }, { id: 'queue', x: 9, y: 7, w: 3, h: 6 }, { id: 'log', x: 9, y: 13, w: 3, h: 6 }, { id: 'agents', x: 0, y: 19, w: 4, h: 8 }, { id: 'network', x: 4, y: 19, w: 4, h: 8, hidden: true }, { id: 'comms', x: 8, y: 19, w: 4, h: 8, hidden: true }, { id: 'situation', x: 8, y: 19, w: 4, h: 8, hidden: true }],
-  'Event review': [{ id: 'queue', x: 0, y: 0, w: 7, h: 6 }, { id: 'log', x: 0, y: 6, w: 7, h: 12 }, { id: 'map', x: 7, y: 0, w: 5, h: 18 }, { id: 'state', x: 0, y: 18, w: 4, h: 7 }, { id: 'agents', x: 4, y: 18, w: 4, h: 7 }, { id: 'network', x: 8, y: 18, w: 4, h: 7 }, { id: 'comms', x: 0, y: 25, w: 6, h: 8, hidden: true }, { id: 'situation', x: 6, y: 25, w: 6, h: 8, hidden: true }],
+  Day: [{ id: 'picture', x: 0, y: 0, w: 3, h: 9 }, { id: 'queue', x: 0, y: 9, w: 3, h: 9 }, { id: 'map', x: 3, y: 0, w: 6, h: 18 }, { id: 'agents', x: 9, y: 0, w: 3, h: 11 }, { id: 'perimeter', x: 9, y: 11, w: 3, h: 7 },
+    { id: 'timeline', x: 0, y: 18, w: 9, h: 5 }, { id: 'ask', x: 9, y: 18, w: 3, h: 5 }, { id: 'log', x: 0, y: 23, w: 6, h: 8 }, { id: 'comms', x: 6, y: 23, w: 3, h: 8 }, { id: 'network', x: 9, y: 23, w: 3, h: 8 },
+    { id: 'situation', x: 0, y: 31, w: 6, h: 8, hidden: true }, { id: 'state', x: 6, y: 31, w: 3, h: 7, hidden: true }],
+  'Night watch': [{ id: 'map', x: 0, y: 0, w: 8, h: 18 }, { id: 'picture', x: 8, y: 0, w: 4, h: 8 }, { id: 'queue', x: 8, y: 8, w: 4, h: 10 }, { id: 'timeline', x: 0, y: 18, w: 8, h: 5 }, { id: 'agents', x: 8, y: 18, w: 4, h: 9 }, { id: 'perimeter', x: 0, y: 23, w: 4, h: 6 }, { id: 'ask', x: 4, y: 23, w: 4, h: 5 },
+    { id: 'log', x: 0, y: 29, w: 6, h: 8, hidden: true }, { id: 'comms', x: 6, y: 29, w: 6, h: 8, hidden: true }, { id: 'network', x: 0, y: 37, w: 6, h: 8, hidden: true }, { id: 'situation', x: 6, y: 37, w: 6, h: 8, hidden: true }, { id: 'state', x: 0, y: 45, w: 4, h: 7, hidden: true }],
+  Wall: [{ id: 'map', x: 0, y: 0, w: 7, h: 19 }, { id: 'picture', x: 7, y: 0, w: 5, h: 8 }, { id: 'agents', x: 7, y: 8, w: 5, h: 11 }, { id: 'perimeter', x: 0, y: 19, w: 4, h: 6 }, { id: 'timeline', x: 4, y: 19, w: 8, h: 6 },
+    { id: 'queue', x: 0, y: 25, w: 4, h: 8, hidden: true }, { id: 'ask', x: 4, y: 25, w: 4, h: 5, hidden: true }, { id: 'log', x: 0, y: 33, w: 6, h: 8, hidden: true }, { id: 'comms', x: 6, y: 33, w: 6, h: 8, hidden: true }, { id: 'network', x: 0, y: 41, w: 6, h: 8, hidden: true }, { id: 'situation', x: 6, y: 41, w: 6, h: 8, hidden: true }, { id: 'state', x: 0, y: 49, w: 4, h: 7, hidden: true }],
 };
 let ws = null;
 registerView({
@@ -365,12 +375,34 @@ registerView({ id: 'data', label: 'Data and backups', icon: 'database', roles: [
 let viewRefresh = null;
 /** Coverage and the Agent register follow Agent changes (debounced). */
 function refreshAgentViews() { clearTimeout(viewRefresh); viewRefresh = setTimeout(() => { if (S.view === 'coverage') coverageView.refresh(); else if (S.view === 'register') registerViewer.refresh(); }, 400); }
+// ---------------- OPERATIONS FLOOR (see floor.js) ----------------
+S.tlEvents = null;
+function renderFloor() {
+  renderPicture(S, S.analystPicture);
+  renderTriageSummary(S);
+  renderPerimeterMini(S);
+  renderTimeline({ S, scrub });
+}
+async function loadTimeline() {
+  try { S.tlEvents = await T.api(`/log?since=${Date.now() - 86400000}&limit=5000`); renderTimeline({ S, scrub }); } catch { /* keep the live list */ }
+}
+let scrubbing = null;
+/** Dragging along the Activity Timeline replays the last 24 h on the map, at that moment. */
+function scrub(t) {
+  if (timeline.replaying && scrubbing === 'on') { timeline.seek(t); return; }
+  if (scrubbing === 'starting') { S.scrubTo = t; return; }
+  scrubbing = 'starting'; S.scrubTo = t;
+  timeline.startWindow({ from: Date.now() - 86400000, to: Date.now(), label: 'Timeline' }).then((ok) => { scrubbing = ok ? 'on' : null; if (ok) { timeline.play(false); timeline.seek(S.scrubTo); } });
+}
+function askAnalyst(q) { analystPanel?.(q); }
+let analystPanel = null;
+export const setAnalystPanel = (f) => { analystPanel = f; };
 function renderQueue() {
   const box = $('[data-minique]');
   if (!box) return;
   const u = unhandled().sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || b.ts - a.ts), now = Date.now();
   const c = $('[data-qcount]'); if (c) c.textContent = u.length ? `(${u.length})` : '';
-  box.innerHTML = u.length ? u.slice(0, 8).map((a) => `<li><button data-view="triage" data-qalert="${a.id}"><span class="sev sev-${a.severity}">${a.severity}</span><span class="grow">${esc(a.title)}${a.count > 1 ? ` ×${a.count}` : ''}</span><span class="mono small muted" data-qage="${a.ts}">${ageText(now - a.ts)}</span></button></li>`).join('')
+  box.innerHTML = u.length ? u.slice(0, 5).map((a) => `<li><button data-view="triage" data-qalert="${a.id}"><span class="sev sev-${a.severity}">${a.severity}</span><span class="grow">${esc(a.title)}${a.count > 1 ? ` ×${a.count}` : ''}</span><span class="mono small muted" data-qage="${a.ts}">${ageText(now - a.ts)}</span></button></li>`).join('')
     : '<li class="small muted empty">No unhandled alerts.</li>';
 }
 function upsertBy(list, item) { const i = list.findIndex((x) => x.id === item.id); if (i >= 0) list[i] = item; else list.unshift(item); }
@@ -625,6 +657,8 @@ function onMsg(msg) {
     addEvent(msg.event); renderStats();
     if (!timeline.replaying) { map3d?.event(msg.event); const a = S.agents.find((x) => x.id === msg.event.agentId); if (a?.place?.roomId && ACTIVITY_KINDS.has(msg.event.kind)) planFlash(a.place.roomId, msg.event.level === 'alert'); }
     timeline.liveEvent(msg.event);
+    if (S.tlEvents) S.tlEvents.unshift(msg.event);
+    clearTimeout(S.floorT); S.floorT = setTimeout(renderFloor, 400);
     if (['correlation', 'anomaly'].includes(msg.event.kind) && S.view === 'analysis') analysis.refresh();
     if (unlocked) eventSound(msg.event); notifyEvent(msg.event, S);
   }
@@ -676,7 +710,7 @@ function addEvent(ev) {
 }
 
 // ---------------- rendering ----------------
-function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); renderStatus(); renderQueue(); for (const v of VIEWS) v.badge?.(); }
+function renderAll() { renderTop(); renderAgents(); renderLog(); renderPeople(); renderStats(); renderNetwork(); renderIntel(); renderPlan(); renderComms(); renderStatus(); renderQueue(); renderFloor(); for (const v of VIEWS) v.badge?.(); }
 
 // ---------------- the floor plan on the map panel (the 3D map replaces this in the next upgrade) ----------------
 const houseHasRooms = () => !!S.house?.floors?.some((f) => f.rooms.length);
@@ -810,7 +844,7 @@ function renderAgents() {
   renderComms();
   if (!box.dataset.drag) { box.dataset.drag = '1'; box.addEventListener('dragstart', (e) => { const id = e.target.closest('[data-agent]')?.dataset.agent; if (id) { e.dataTransfer.setData('text/sentinel-agent', id); e.dataTransfer.effectAllowed = 'move'; if (S.mapView !== '3d' && houseHasRooms()) { S.mapView = '3d'; launchMapView(); } } }); }
   $('[data-count]').textContent = S.agents.length ? `(${S.agents.filter((a) => a.online).length}/${S.agents.length} online)` : '';
-  box.innerHTML = S.agents.length ? S.agents.map(agentCard).join('')
+  box.innerHTML = S.agents.length ? fleetOrder(S.agents).map((a) => fleetRow(a, S.house)).join('')
     : '<div class="empty"><div class="big">No agents deployed</div>Select <b>Recruit</b> and scan the code with a spare phone or tablet.</div>';
   renderStatus();
   renderRadar();
@@ -862,7 +896,7 @@ async function panic() {
 
 function tick() {
   $$('[data-ago]').forEach((el) => { const t = Number(el.dataset.ago); el.textContent = `last signal ${ago(t)}`; });
-  if (Date.now() % 60000 < 1000) renderPeople();
+  if (Date.now() % 60000 < 1000) { renderPeople(); renderPicture(S, S.analystPicture); }
   renderStatus();
   renderIntel();
   triage.tick();
@@ -936,6 +970,12 @@ function renderComms() {
   const ol = $('[data-sent]');
   if (ol) ol.innerHTML = (S.messages || []).slice(0, 4).map((m) => `<li><span class="grow">“${esc(m.text)}” <span class="muted">→ ${esc(m.label)}</span></span><span class="small ${m.acks.length >= m.to.length ? 'c-green' : 'muted'}">${m.acks.length}/${m.to.length} ack</span></li>`).join('');
 }
+document.addEventListener('submit', (e) => {
+  if (!e.target.matches('[data-askform]')) return;
+  e.preventDefault();
+  const q = e.target.elements.q.value.trim();
+  if (q) { askAnalyst(q); e.target.elements.q.value = ''; }
+});
 document.addEventListener('submit', async (e) => {
   if (!e.target.matches('[data-comms]')) return;
   e.preventDefault();

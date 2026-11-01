@@ -43,7 +43,7 @@ const SHOTS = process.argv[2] || '';
   check((await page.textContent('[data-agents]')).includes('No agents deployed'), 'empty Agents list explains how to recruit');
   check((await page.textContent('[data-log]')).includes('HQ session started'), 'Mission Log: HQ ONLINE');
   check(!(await page.evaluate(() => document.body.classList.contains('fx'))), 'no scanline / glitch effects');
-  check(await page.$$eval('[data-wsgrid] [data-panel]', (p) => p.length) === 8, 'workspace: 8 panels on the Operations screen');
+  check(await page.$$eval('[data-wsgrid] [data-panel]', (p) => p.length) === 10, 'Operations Floor: 10 panels in the Day layout');
 
   // Status bar
   await page.waitForFunction(() => document.querySelector('[data-sbop]')?.textContent === 'NIGHTOWL');
@@ -65,20 +65,20 @@ const SHOTS = process.argv[2] || '';
   // Workspace: edit, move a panel, save the layout
   await page.click('[data-wsedit]');
   await page.waitForSelector('[data-wsgrid].editing');
-  const before = await page.$eval('[data-panel="comms"]', (e) => e.style.gridColumn);
-  const head = await page.$('[data-panel="comms"] .panel-head h2'), hb = await head.boundingBox();
+  const before = await page.$eval('[data-panel="perimeter"]', (e) => e.style.gridColumn);
+  const head = await page.$('[data-panel="perimeter"] .panel-head h2'), hb = await head.boundingBox();
   await page.mouse.move(hb.x + 5, hb.y + 5); await page.mouse.down();
   await page.mouse.move(hb.x - 600, hb.y + 5, { steps: 8 }); await page.mouse.up();
-  const after = await page.$eval('[data-panel="comms"]', (e) => e.style.gridColumn);
+  const after = await page.$eval('[data-panel="perimeter"]', (e) => e.style.gridColumn);
   check(before !== after, `Edit layout: drag a panel by its title bar (${before} → ${after})`);
-  page.once('dialog', (d) => d.accept('Night watch'));
+  page.once('dialog', (d) => d.accept('Evening'));
   await page.click('[data-wssave]');
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sentinel.layouts')).current === 'Night watch');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sentinel.layouts')).current === 'Evening');
   check(true, 'Save as… stores the layout under a name');
-  await page.selectOption('[data-wslayout]', 'Map focus');
+  await page.selectOption('[data-wslayout]', 'Night watch');
   await page.waitForSelector('[data-panel="map"]');
-  check(true, 'presets: Map focus');
-  await page.selectOption('[data-wslayout]', 'Standard');
+  check(true, 'layouts: Night watch');
+  await page.selectOption('[data-wslayout]', 'Day');
   await page.click('[data-wsedit]');
   await shot('dashboard-empty');
 
