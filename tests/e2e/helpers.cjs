@@ -93,3 +93,6 @@ exports.finish = async (browsers, world, errors, name) => {
   console.log(failures ? `\n${failures} FAILED` : `\nAll ${name} checks passed`);
   process.exit(failures ? 1 : 0);
 };
+
+/** Open a screen by id (top-level or a tab inside Agents / Records / Administration). */
+exports.go = async (page, id) => { await page.evaluate((v) => window.__go(v), id); await page.waitForSelector(`[data-viewroot][data-view="${id}"]`); };

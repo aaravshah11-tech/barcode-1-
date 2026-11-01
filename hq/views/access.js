@@ -39,14 +39,14 @@ export function twoStepSheet(ctx, { enabled = false, onDone } = {}) {
 
 /** ctx = { S, api(path, opts) } */
 export function createAccess(ctx) {
-  const st = { tab: 'users', users: [], sessions: [], audit: null, q: '' };
+  const st = { tab: ctx.only || 'users', users: [], sessions: [], audit: null, q: '' };
   let root = null;
 
   function render(el) {
     root = el;
     root.innerHTML = `<div class="view-pad access">
       <header class="view-head"><div class="filters" role="tablist" aria-label="Access">
-        <button role="tab" data-atab2="users">Users and roles</button><button role="tab" data-atab2="sessions">Sessions</button><button role="tab" data-atab2="audit">Audit log</button></div>
+        ${ctx.only ? '' : '<button role="tab" data-atab2="users">Users and roles</button><button role="tab" data-atab2="sessions">Sessions</button><button role="tab" data-atab2="audit">Audit log</button>'}</div>
         <span class="grow"></span><span data-atools2></span></header><div data-abody2></div></div>`;
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
@@ -56,7 +56,7 @@ export function createAccess(ctx) {
   async function load() {
     try {
       if (st.tab === 'users') st.users = await ctx.api('/users');
-      else if (st.tab === 'sessions') st.sessions = await ctx.api('/auth/sessions');
+      else if (st.tab === 'sessions') { st.sessions = await ctx.api('/auth/sessions'); st.me = await ctx.api('/me'); }
       else st.audit = await ctx.api('/audit?limit=1000');
     } catch (x) { toast(x.message, { kind: 'err' }); }
     draw();
@@ -78,7 +78,7 @@ export function createAccess(ctx) {
         </tbody></table></div>
         <p class="small muted">SENTINEL is for your household only. Each person signs in with their own username, so the audit log shows exactly who did what.</p>`;
     } else if (st.tab === 'sessions') {
-      tools.innerHTML = '<button class="small btn-danger" data-aendall>End all other sessions</button>';
+      tools.innerHTML = `<button class="small" data-a2fa>${st.me?.twoFactor ? 'Two-step sign-in: on' : 'Turn on two-step sign-in'}</button><button class="small btn-danger" data-aendall>End all other sessions</button>`;
       body.innerHTML = `<div class="table-wrap"><table class="grid-table"><thead><tr><th>User</th><th>Role</th><th>Where</th><th>Signed in</th><th>Last active</th><th class="c-actions"></th></tr></thead><tbody>
         ${st.sessions.map((x) => `<tr data-sess="${x.id}"><td><b>${esc(x.username)}</b>${x.current ? ' <span class="tag">this screen</span>' : ''}</td><td class="mono small">${x.role}</td><td class="small">${esc(x.via)}</td><td class="mono small">${fmt(x.started)}</td><td class="mono small">${fmt(x.lastActive)}</td>
           <td class="c-actions">${x.current ? '' : '<button class="small" data-aend>End session</button>'}</td></tr>`).join('') || '<tr class="empty"><td colspan="6">No sessions.</td></tr>'}</tbody></table></div>
@@ -117,7 +117,7 @@ export function createAccess(ctx) {
     try {
       if (b.dataset.atab2) { st.tab = b.dataset.atab2; load(); }
       else if ('auser' in b.dataset) addUser();
-      else if ('a2fa' in b.dataset) twoStepSheet(ctx, { enabled: !!st.users.find((x) => x.username === ctx.S.operator)?.twoFactor, onDone: load });
+      else if ('a2fa' in b.dataset) twoStepSheet(ctx, { enabled: !!(st.me?.twoFactor ?? st.users.find((x) => x.username === ctx.S.operator)?.twoFactor), onDone: load });
       else if ('adisable' in b.dataset && u) { const x = st.users.find((y) => y.username === u); await ctx.api(`/users/${encodeURIComponent(u)}`, { method: 'PATCH', body: { disabled: !x.disabled } }); load(); }
       else if ('aremove' in b.dataset && u) { if (await confirmBox(`Remove ${u}?`, 'They can no longer sign in. Their past actions stay in the audit log.', { ok: 'Remove', danger: true })) { await ctx.api(`/users/${encodeURIComponent(u)}`, { method: 'DELETE' }); load(); } }
       else if ('aend' in b.dataset && sid) { await ctx.api(`/auth/sessions/${sid}`, { method: 'DELETE' }); load(); }

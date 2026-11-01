@@ -5,23 +5,26 @@ import { esc, $, LOGO } from '../shared/ui.js';
  * Shows the sign-in (or first-time setup) screen in `root` until the right details are entered.
  * `api` is the transport's api(). Resolves with { codename, session, role? }.
  */
-export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
+export function lockScreen(root, api, { remote = false, reason = '', checks = null } = {}) {
   return new Promise(async (resolve) => {
     let st = { setup: true };
     try { st = await api('/auth/status'); } catch (e) { root.innerHTML = frame(`<p class="c-red">${esc(e.message)}</p>`); return; }
     const setup = !st.setup;
     if (setup && remote) { root.innerHTML = frame('<p>No Director account exists yet. Create it on the HQ computer first.</p>'); return; }
+    const lines = (checks?.() || []).map(([k, v, ok = true], i) => `<li style="animation-delay:${i * 110}ms"><span>${esc(k)}</span><b class="${ok ? '' : 'c-amber'}">${esc(v)}</b></li>`).join('');
     root.innerHTML = frame(`
-      <h1 class="login-h">${setup ? 'Create the Director account' : 'Sign in'}</h1>
-      <p class="small muted login-sub">${setup ? 'The Director has full control of SENTINEL. You’ll need these details every time HQ is opened.' : reason ? esc(reason) : 'Authorised users only.'}</p>
+      ${lines ? `<ol class="boot-checks">${lines}</ol>` : ''}
+      <div class="login-body" style="animation-delay:${lines ? 520 : 0}ms">
+      <h1 class="login-h">${setup ? 'Create the operator account' : 'Sign in'}</h1>
+      <p class="small muted login-sub">${setup ? 'One account with full control of SENTINEL. Choose your callsign (for example FIRST DESK) and a PIN or password.' : reason ? esc(reason) : 'Authorised operator only.'}</p>
       <form data-login autocomplete="off" novalidate>
-        <label class="field"><span>Username</span><input name="codename" maxlength="24" autocapitalize="none" spellcheck="false" required autofocus autocomplete="username"></label>
+        <label class="field"><span>${setup ? 'Callsign' : 'Callsign / username'}</span><input name="codename" maxlength="24" autocapitalize="characters" spellcheck="false" required autofocus autocomplete="username" ${setup ? 'placeholder="FIRST DESK"' : ''}></label>
         <label class="field"><span>PIN or password</span><input name="pin" type="password" minlength="4" maxlength="64" required class="mono" autocomplete="${setup ? 'new-password' : 'current-password'}"></label>
         ${setup ? '<label class="field"><span>Confirm PIN or password</span><input name="pin2" type="password" minlength="4" maxlength="64" required class="mono" autocomplete="new-password"></label>' : ''}
         <label class="field" data-otpfield hidden><span>6-digit code from your authenticator app</span><input name="otp" inputmode="numeric" pattern="[0-9]*" maxlength="6" class="mono otp" autocomplete="one-time-code"></label>
         <p class="c-red small" data-err role="alert"></p>
         <button class="btn-primary login-btn">${setup ? 'Create account' : 'Sign in'}</button>
-      </form>
+      </form></div>
       ${setup ? '<p class="small muted">At least 4 characters. Only a salted hash is stored. After 5 wrong attempts sign-in is locked for a minute (longer each time).</p>' : ''}`);
     const form = $('[data-login]', root), err = $('[data-err]', root);
     form.addEventListener('submit', async (e) => {
@@ -55,4 +58,4 @@ export function lockScreen(root, api, { remote = false, reason = '' } = {}) {
 const frame = (inner) => `<div class="gate"><div class="login-panel">
   <div class="login-brand">${LOGO}<div><b>SENTINEL</b><small>Household security operations</small></div></div>
   ${inner}
-  <p class="login-notice">Use of this system is monitored and logged. Unauthorised access is prohibited.</p></div></div>`;
+  <p class="login-notice">Access to this system is logged.</p></div></div>`;

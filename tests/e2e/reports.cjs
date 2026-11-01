@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
-const { startWorld, launch, openHQ, recruit, hqApi, check, finish } = require('./helpers.cjs');
+const { go, startWorld, launch, openHQ, recruit, hqApi, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
@@ -21,7 +21,7 @@ const SHOTS = process.argv[2] || '';
   await api('PATCH', '/settings', { mode: 'home' });
   const pdfOf = async (click) => { const [dl] = await Promise.all([page.waitForEvent('download'), click()]); const buf = fs.readFileSync(await dl.path()); return { name: dl.suggestedFilename(), buf }; };
 
-  await page.keyboard.press('8');
+  await go(page, 'reports');
   await page.waitForSelector('.sitrep h4');
   const sit = await page.textContent('.sitrep');
   check(sit.includes('1. Situation') && sit.includes('Alert state HOME') && sit.includes('3. Alerts and incidents') && /1 alert: 0 critical, 1 high/.test(sit), 'SITREP: numbered sections — situation, activity, alerts, equipment, actions');

@@ -2,7 +2,7 @@
 // new/untrusted device alerts, health check with plain-English advice, internet history.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startWorld, launch, openHQ, recruit, check, finish } = require('./helpers.cjs');
+const { go, startWorld, launch, openHQ, recruit, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 const ROUTER = `Device Name\tIP Address\tMAC Address
 Mums-iPhone\t192.168.1.23\t3C:22:FB:12:34:56
@@ -19,7 +19,7 @@ ESP_1A2B3C\t192.168.1.77\t24:0a:c4:1a:2b:3c`;
   await openHQ(page, world);
   await recruit(page, await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true }), world);
 
-  await page.keyboard.press('7');
+  await go(page, 'network');
   await page.waitForSelector('.asset-table [data-asset]');
   check((await page.textContent('.scope-note')).includes('SENTINEL never scans anything'), 'states clearly: home network only, nothing is scanned');
   const t0 = await page.textContent('.asset-table');

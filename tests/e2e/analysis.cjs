@@ -1,7 +1,7 @@
 // Redesign part 3: CORRELATION RULES (editable) and PATTERN-OF-LIFE anomalies.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startWorld, launch, openHQ, recruit, hqApi, check, finish } = require('./helpers.cjs');
+const { go, startWorld, launch, openHQ, recruit, hqApi, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
@@ -35,7 +35,7 @@ const SHOTS = process.argv[2] || '';
   check(true, 'door → hall motion → Mum’s phone within 60 s → “ARRIVAL (likely: Mum)” in the log');
   check(await page.evaluate(() => !window.__hq.hq.ops.alerts().some((a) => a.source === 'correlation')), 'ARRIVAL is INFO: logged, not sent to Triage');
 
-  await page.keyboard.press('4');
+  await go(page, 'analysis');
   await page.waitForSelector('.rules-table [data-rid="rule-arrival"]');
   const rules = await page.textContent('.rules-table');
   check(rules.includes('Arrival') && rules.includes('Entry while unoccupied') && rules.includes('Door sensor “open”') && rules.includes('Phone / device appears'), 'Analysis › Correlation rules lists the example rules and their sequences');

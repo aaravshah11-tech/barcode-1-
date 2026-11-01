@@ -46,8 +46,11 @@ function tone(freq, { start = 0, dur = 0.12, type = 'sine', gain = 0.25, to = nu
 }
 
 // Sounds only for genuine alerts — short and understated. Everything else is silent.
+// Almost silent: one soft low tone for Advisory, a two-tone for Alert, a firmer two-tone for Critical.
+const advisory = () => tone(392, { dur: 0.42, type: 'sine', gain: 0.1 });
 const SOUNDS = {
-  alert: () => { tone(880, { dur: 0.16, type: 'sine', gain: 0.18 }); tone(660, { start: 0.2, dur: 0.22, type: 'sine', gain: 0.16 }); },
-  warn: () => tone(740, { dur: 0.14, type: 'sine', gain: 0.12 }),
+  advisory, warn: advisory,
+  alert: () => { tone(587, { dur: 0.22, type: 'sine', gain: 0.14 }); tone(440, { start: 0.26, dur: 0.3, type: 'sine', gain: 0.13 }); },
+  critical: () => { tone(698, { dur: 0.2, type: 'triangle', gain: 0.16 }); tone(523, { start: 0.24, dur: 0.32, type: 'triangle', gain: 0.15 }); },
 };
 export function sfx(name) { try { SOUNDS[name]?.(); } catch { /* sound is optional */ } }

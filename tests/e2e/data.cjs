@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
-const { startWorld, launch, openHQ, login, hqApi, check, finish } = require('./helpers.cjs');
+const { go, startWorld, launch, openHQ, login, hqApi, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
@@ -33,7 +33,7 @@ const SHOTS = process.argv[2] || '';
   await page.evaluate(() => window.__hq.db.flush());
   const raw = await page.evaluate(async () => { const rows = await new Promise((r) => { const q = indexedDB.open('sentinel-hq'); q.onsuccess = () => { const t = q.result.transaction('events').objectStore('events').getAll(); t.onsuccess = () => r(t.result); }; }); return JSON.stringify(rows) + localStorage.getItem('sentinel.hq.v1'); });
   check(!raw.includes('PRIVATE-MARKER-42') && !raw.includes('TESTER'), 'what HQ stores in the browser is encrypted (no readable text on disk)');
-  await page.click('.rail [data-view="data"]');
+  await go(page, 'data');
   await page.waitForSelector('.data-grid');
   check((await page.textContent('.data-grid')).includes('Encrypted at rest'), 'Data screen: “Encrypted at rest — AES-256-GCM”');
 
@@ -62,7 +62,7 @@ const SHOTS = process.argv[2] || '';
   check(await page.evaluate(() => window.__hq.db.allAudit().some((a) => a.action === 'Backup restored')), 'the restore is written in the audit log');
 
   // Retention
-  await page.click('.rail [data-view="data"]');
+  await go(page, 'data');
   await page.waitForSelector('[data-dret]');
   await page.fill('[data-dret] [name=alerts]', '60');
   await page.click('[data-dret] .btn-primary');
@@ -71,14 +71,14 @@ const SHOTS = process.argv[2] || '';
 
   // Evidence
   const inc = await api('POST', '/incidents', { title: 'Side gate open at night' });
-  await page.click('.rail [data-view="incidents"]');
+  await go(page, 'incidents');
   await page.waitForSelector('[data-ievidence]');
   await page.click('[data-ievidence]');
   await page.waitForFunction(() => document.body.textContent.includes('Evidence exported'));
   await page.waitForTimeout(400);
   const evd = downloads.find((d) => d.name === `${inc.ref}-evidence.json`);
   check(evd && downloads.some((d) => d.name === `${inc.ref}-evidence.json.sha256`), `Export evidence → ${inc.ref}-evidence.json + .sha256`);
-  await page.click('.rail [data-view="data"]');
+  await go(page, 'data');
   await page.waitForSelector('[data-dverifyfile]', { state: 'attached' });
   const tmp = path.join(require('os').tmpdir(), `ev-${Date.now()}.json`);
   fs.writeFileSync(tmp, evd.text);
@@ -93,7 +93,7 @@ const SHOTS = process.argv[2] || '';
 
   // Downtime record
   await page.evaluate(() => window.__hq.hq.resilience.watchdog({ kind: 'sleep', ms: 40 * 60000 }));
-  await page.click('.rail [data-view="ops"]'); await page.click('.rail [data-view="data"]');
+  await go(page, 'ops'); await go(page, 'data');
   await page.waitForSelector('.data-grid >> text=asleep');
   check(true, 'gaps when HQ wasn’t running are recorded (computer asleep)');
 

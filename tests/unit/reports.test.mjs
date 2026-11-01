@@ -86,7 +86,7 @@ test('report PDF: banners top and bottom on every page, reference and page numbe
   const pages = text.split('\f').filter((p) => p.trim());
   assert.ok(pages.length >= 2, `${pages.length} pages`);
   for (const pg of pages) {
-    assert.equal((pg.match(/SENTINEL \/\/ RESTRICTED – HOUSEHOLD/g) || []).length, 2, 'top and bottom banner');
+    assert.equal((pg.match(/SENTINEL \/\/ OFFICIAL – HOUSEHOLD \/\/ FIRST DESK/g) || []).length, 2, 'top and bottom banner');
     assert.match(pg, /RPT-2026-0001 · Fortnight review/);
     assert.match(pg, /Page \d+ of \d+/);
   }

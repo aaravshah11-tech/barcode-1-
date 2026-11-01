@@ -2,7 +2,7 @@
 // the tamper-evident audit log, the shift log / handover, and formal alert-state changes.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startWorld, launch, openHQ, hqApi, check, finish } = require('./helpers.cjs');
+const { go, startWorld, launch, openHQ, hqApi, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
@@ -16,20 +16,28 @@ const SHOTS = process.argv[2] || '';
   const api = hqApi(page);
   const code = (secret, ahead = 0) => page.evaluate(async ([s, k]) => { const t = await import(new URL('../shared/totp.js', location.href).href); return t.hotp(s, t.stepOf() + k); }, [secret, ahead]);
 
-  // ---- Users ----
-  await page.click('.rail [data-view="access"]');
-  await page.waitForSelector('[data-abody2] table');
-  check((await page.textContent('[data-abody2]')).includes('TESTER') && (await page.textContent('[data-abody2]')).includes('DIRECTOR'), 'Access › Users: the Director is listed');
-  for (const [u, role] of [['mum', 'OPERATOR'], ['gran', 'OBSERVER']]) {
-    await page.click('[data-auser]');
-    await page.fill('[data-userform] [name=username]', u);
-    await page.fill('[data-userform] [name=pin]', '13579');
-    await page.selectOption('[data-userform] [name=role]', role);
-    await page.click('[data-userform] .btn-primary');
-    await page.waitForSelector(`[data-user="${u.toUpperCase()}"]`);
-  }
-  check(true, 'users added: MUM (Operator), GRAN (Observer)');
-  await shot('access-users');
+  // ---- Security (single operator: account, two-step sign-in, sessions) ----
+  await go(page, 'access');
+  await page.waitForSelector('[data-abody2] [data-sess]');
+  check(await page.$$eval('.rail [data-view]', (b) => b.map((x) => x.dataset.label).join('|')).then((t) => t.includes('Administration') && t.includes('Records') && !t.includes('Security')), 'Security lives inside Administration (not a separate rail item)');
+  check(!(await page.$('[data-auser]')), 'single operator: no “add user” — one account with full rights');
+
+  // ---- My phone signing in ----
+  const { code: link } = await api('POST', '/pair', { role: 'viewer' });
+  const hqId = (await api('GET', '/state')).info.hqId;
+  const phone = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })).newPage();
+  phone.on('pageerror', (e) => errors.push(`[phone] ${e.message}`));
+  await phone.goto(`${world.remoteUrl}#hq=${hqId}&link=${link}`);
+  await phone.fill('[data-link] [name=label]', 'My phone');
+  await phone.click('[data-link] button');
+  await phone.waitForSelector('[data-login]', { timeout: 20000 });
+  await phone.fill('[name=codename]', 'tester'); await phone.fill('[name=pin]', '2468');
+  await phone.click('[data-login] button');
+  await phone.waitForSelector('[data-threat]', { timeout: 20000 });
+  check((await phone.textContent('[data-statusbar]')).includes('TESTER'), 'my phone signs in too: callsign in the status strip');
+  await phone.click('.modes-mobile [data-mode="away"]').catch(() => phone.evaluate(() => document.querySelector('[data-mode="away"]').click()));
+  await page.waitForFunction(() => window.__hq.db.events({ kind: 'system' }).some((e) => /^Alert state: AWAY \(by TESTER\)/.test(e.message)));
+  check(true, 'alert state changed from the phone; the log says who (“Alert state: AWAY (by TESTER)”)');
 
   // ---- Two-step sign-in for the Director ----
   await page.click('[data-a2fa]');
@@ -55,48 +63,26 @@ const SHOTS = process.argv[2] || '';
   await page.waitForSelector('[data-threat]');
   check(true, 'wrong code refused; a fresh code signs in');
 
-  // ---- Shift log + handover ----
-  await page.click('.rail [data-view="shift"]');
+  // ---- Operator notes (Records) ----
+  await go(page, 'shift');
   await page.fill('[data-shiftform] textarea', 'Quiet evening. Back door checked at 22:00.');
   await page.check('[data-shiftform] [name=handover]');
   await page.click('[data-shiftform] .btn-primary');
   await page.waitForSelector('.shift-list .handover >> text=Unhandled alerts');
-  check(true, 'handover note saved with an automatic summary');
-
-  // ---- A linked phone signing in as MUM (Operator) ----
-  const { code: link } = await api('POST', '/pair', { role: 'viewer' });
-  const hqId = (await api('GET', '/state')).info.hqId;
-  const phone = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })).newPage();
-  phone.on('pageerror', (e) => errors.push(`[phone] ${e.message}`));
-  await phone.goto(`${world.remoteUrl}#hq=${hqId}&link=${link}`);
-  await phone.fill('[data-link] [name=label]', 'Mum phone');
-  await phone.click('[data-link] button');
-  await phone.waitForSelector('[data-login]', { timeout: 20000 });
-  await phone.fill('[name=codename]', 'mum'); await phone.fill('[name=pin]', '13579');
-  await phone.click('[data-login] button');
-  await phone.waitForSelector('[data-threat]', { timeout: 20000 });
-  check((await phone.textContent('[data-statusbar]')).includes('OPERATOR'), 'phone signed in as MUM — status bar shows OPERATOR');
-  check(!(await phone.$('.rail [data-view="access"]')), 'Operators don’t see the Access screen');
-  await phone.waitForSelector('.sheet >> text=Handover note');
-  check((await phone.textContent('.sheet')).includes('Quiet evening'), 'the handover note greets the next person');
-  await phone.click('.sheet [data-hack]');
-  await phone.click('.modes-mobile [data-mode="away"]');
-  await page.waitForFunction(() => window.__hq.db.events({ kind: 'system' }).some((e) => /^Alert state: AWAY \(by MUM\)/.test(e.message)));
-  check(true, 'Operator changes the alert state; the log says who (formal “Alert state: AWAY (by MUM)”)');
+  check(true, 'note saved with an automatic summary of the situation');
 
   // ---- Sessions + audit ----
-  await page.click('.rail [data-view="access"]');
-  await page.click('[data-atab2="sessions"]');
-  await page.waitForSelector('[data-sess]');
+  await go(page, 'access');
+  await page.waitForSelector('[data-sess]:has-text("My phone")');
   const sess = await page.textContent('[data-abody2]');
-  check(sess.includes('MUM') && sess.includes('Phone “Mum phone”') && sess.includes('this screen'), 'Sessions: who is signed in, where from');
-  await page.click('[data-sess]:has-text("MUM") [data-aend]');
+  check(sess.includes('Phone “My phone”') && sess.includes('this screen'), 'Sessions: where you are signed in');
+  await page.click('[data-sess]:has-text("My phone") [data-aend]');
   await phone.waitForSelector('[data-login]', { timeout: 15000 });
-  check(true, 'ending Mum’s session signs the phone out');
-  await page.click('[data-atab2="audit"]');
+  check(true, 'ending the phone’s session signs it out');
+  await go(page, 'audit');
   await page.waitForSelector('.verify.ok');
   const audit = await page.textContent('[data-abody2]');
-  check(audit.includes('Chain verified') && /Sign in/.test(audit) && audit.includes('User added') && audit.includes('Two-step sign-in enable') && audit.includes('Alert state changed') && audit.includes('Session ended'), 'Audit log: sign-ins, users, 2FA, alert state, sessions — chain verified');
+  check(audit.includes('Chain verified') && /Sign in/.test(audit) && audit.includes('Two-step sign-in enable') && audit.includes('Alert state changed') && audit.includes('Session ended'), 'Records › Audit log: sign-ins, 2FA, alert state, sessions — chain verified');
   check(audit.includes('Refused'), 'refused attempts are recorded too (the wrong 2FA code)');
   await shot('access-audit');
   const files = [];
@@ -107,7 +93,7 @@ const SHOTS = process.argv[2] || '';
   check(files.some((f) => f.endsWith('.csv')) && files.some((f) => f.endsWith('.sha256')), `audit export with a checksum file (${files.join(', ')})`);
   // someone edits the stored trail → shown at once
   await page.evaluate(() => { window.__hq.db._auditRaw()[2].who = 'SOMEONE'; });
-  await page.click('[data-atab2="users"]'); await page.click('[data-atab2="audit"]');
+  await go(page, 'shift'); await go(page, 'audit');
   await page.waitForSelector('.verify.bad');
   check((await page.textContent('.verify.bad')).includes('Entry 3 has been changed'), 'tampering with the audit log is detected and pinpointed');
 

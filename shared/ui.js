@@ -79,10 +79,11 @@ export async function api(path, { method = 'GET', body } = {}) {
 }
 
 /** The SENTINEL mark: a plain hexagon with a horizontal bar (no animation). */
-export const LOGO = `<svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 28 9.5v13L16 29.5 4 22.5v-13z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 16h12" stroke="currentColor" stroke-width="2"/></svg>`;
+export { EMBLEM as LOGO } from './brand.js';
 
 /** Classification banners across the top and bottom of the screen (styled like system markings). */
-export const CLASSIFICATION = 'SENTINEL // RESTRICTED – HOUSEHOLD';
+import { CLASSIFICATION } from './brand.js';
+export { CLASSIFICATION };
 export function classificationBanners(text = CLASSIFICATION, { top = true, bottom = true } = {}) {
   document.querySelectorAll('.cbanner').forEach((b) => b.remove());
   for (const [on, pos] of [[top, 'top'], [bottom, 'bottom']]) {

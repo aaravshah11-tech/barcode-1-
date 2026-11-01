@@ -5,7 +5,8 @@ import { ACTIVITY_KINDS } from './threat.js';
 import { uptimePct } from './register.js';
 import { SEV_RANK } from './triage.js';
 
-export const CLASSIFICATION = 'SENTINEL // RESTRICTED – HOUSEHOLD';
+import { CLASSIFICATION } from './brand.js';
+export { CLASSIFICATION };
 export const SECTIONS = [
   ['summary', 'Summary and key figures'], ['activity', 'Activity by day and by room'], ['alerts', 'Alerts and triage'], ['incidents', 'Incidents'],
   ['anomalies', 'Anomalies and correlations'], ['agents', 'Agents'], ['network', 'Network'], ['states', 'Alert state changes'], ['log', 'Full event log'],

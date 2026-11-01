@@ -2,7 +2,7 @@
 // and the AGENT REGISTER.
 const { chromium } = require('playwright');
 const path = require('path');
-const { startWorld, launch, openHQ, recruit, hqApi, check, finish } = require('./helpers.cjs');
+const { go, startWorld, launch, openHQ, recruit, hqApi, check, finish } = require('./helpers.cjs');
 const SHOTS = process.argv[2] || '';
 
 (async () => {
@@ -25,7 +25,7 @@ const SHOTS = process.argv[2] || '';
   await api('PUT', `/agents/${agent.id}/place`, { floorId: f0.id, x: 1.5, y: 4.8 });
 
   // ---- Coverage ----
-  await page.keyboard.press('5');
+  await go(page, 'coverage');
   await page.waitForSelector('.cov-svg svg .cv-fov');
   check(true, 'Coverage view: the camera’s field of view is drawn on the plan');
   const side = await page.textContent('[data-cside]');
@@ -55,7 +55,7 @@ const SHOTS = process.argv[2] || '';
   check(true, 'charger pulled → “Agent unplugged” alert');
 
   // ---- Agent register ----
-  await page.keyboard.press('6');
+  await go(page, 'register');
   await page.waitForSelector('.reg-table [data-reg]');
   const row = await page.textContent('.reg-table [data-reg]');
   check(row.includes('AGENT-01') && row.includes('Chrome') && row.toUpperCase().includes('MOTION WATCH') && row.includes('Hall') && /\d+(\.\d)?%/.test(row), 'register: hardware, mission, location, uptime %');

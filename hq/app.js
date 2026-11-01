@@ -1,5 +1,6 @@
 // SENTINEL — household security operations console.
 import { esc, $, $$, toast, sheet, confirmBox, clock, dayClock, ago, qrSvg, LOGO, classificationBanners } from '../shared/ui.js';
+import { classification } from '../shared/brand.js';
 import { Radar } from '../shared/radar.js';
 import { missionById } from '../shared/missions.js';
 import { openSettings } from './settings.js';
@@ -80,8 +81,16 @@ const gateHtml = (inner) => `<div class="gate"><div class="login-panel"><div cla
 async function unlock(reason = '') {
   unlocked = false;
   radar?.destroy(); radar = null;
-  const who = await lockScreen(app, T.api, { remote: MODE === 'remote', reason });
+  const checks = () => [
+    ['Secure storage', MODE === 'hq' ? (window.__hq?.db.encryption?.atRest ? 'AES-256 · sealed' : 'not encrypted') : 'held by HQ', MODE !== 'hq' || !!window.__hq?.db.encryption?.atRest],
+    [MODE === 'hq' ? 'Agent uplink' : 'Link to HQ', net.state === 'online' ? 'online' : net.state, net.state === 'online'],
+    ['Agents registered', String(S.agents?.length ?? 0)],
+    ['Weather feed', S.weather ? 'current' : S.settings?.location ? 'waiting' : 'no location set', !!S.weather || !S.settings?.location],
+    ['System clock', new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC'],
+  ];
+  const who = await lockScreen(app, T.api, { remote: MODE === 'remote', reason, checks });
   S.operator = who?.codename || S.operator;
+  classificationBanners(classification(S.operator));
   S.role = who?.role || 'DIRECTOR';
   S.sessionStart = Date.now();
   if (MODE === 'remote') apply(await waitForState());
@@ -193,38 +202,37 @@ function apply(st) {
 }
 
 // ---------------- the console frame: app bar, navigation rail, views, status bar ----------------
-/** Views in the left rail. Later parts register more (Triage, Incidents, Agents, Network, Reports, Audit). */
+/** Screens. Top-level ones sit in the left rail (in `order`); a screen with a `parent` is a tab inside that screen
+ * (e.g. Administration › Security). Every screen keeps its own id, so links and the palette can open it directly. */
 const VIEWS = [];
-export function registerView(v) { if (!VIEWS.some((x) => x.id === v.id)) VIEWS.push(v); }
+export function registerView(v) { if (!VIEWS.some((x) => x.id === v.id)) VIEWS.push({ order: 50, ...v }); }
 const allowed = (v) => !v.roles || v.roles.includes(S.role || 'DIRECTOR');
+const topViews = () => VIEWS.filter((v) => !v.parent && allowed(v) && (!v.tabs || childrenOf(v.id).length)).sort((a, b) => a.order - b.order);
+const childrenOf = (id) => VIEWS.filter((v) => v.parent === id && allowed(v)).sort((a, b) => a.order - b.order);
 let currentView = null;
 try { S.view = localStorage.getItem('sentinel.view') || 'ops'; } catch { S.view = 'ops'; }
 
 function shell() {
   app.innerHTML = `
   <div class="frame">
-    <header class="appbar">
-      <div class="ab-brand">${LOGO}<span><b>SENTINEL</b><small>${MODE === 'hq' ? 'Headquarters' : 'Remote console'}</small></span></div>
-      <span class="ab-view" data-viewtitle></span>
-      <span class="threat" data-threat aria-live="polite"></span>
+    <nav class="rail" aria-label="Screens" data-rail></nav>
+    <header class="strip" data-strip>
+      <div class="strip-cells" data-statusbar role="status" aria-label="Status"></div>
       <span class="grow"></span>
-      <button class="ab-search" data-palette title="Command palette (Ctrl+K)" aria-label="Command palette">${icon('search')}<span class="hide-phone">Search or run a command</span><span class="hide-phone ab-keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      <span class="threat" data-threat aria-live="polite"></span>
       <div class="presence hide-phone" role="group" aria-label="Alert state">
         ${MODES.map((m) => `<button data-mode="${m}" class="${m}" title="Alert state: ${MODE_INFO[m].label}">${MODE_INFO[m].label}</button>`).join('')}
       </div>
       <span class="net hide-phone" data-net></span>
       <button class="icon-btn ptt" data-ptt hidden aria-label="Hold to give a voice command" title="Hold to talk (or hold V)">${icon('mic')}</button>
-      <button class="icon-btn" data-global aria-label="Global intel" title="Global intel (G)">${icon('globe')}</button>
+      <button class="ab-search" data-palette title="Search or run anything (Ctrl+K / ⌘K)" aria-label="Command palette">${icon('search')}<span class="ab-keys hide-phone"><kbd>⌘</kbd><kbd>K</kbd></span></button>
       <button class="icon-btn" data-terminal aria-label="Terminal" title="Terminal (\`)">${icon('terminal')}</button>
       <button class="icon-btn" data-mute aria-label="Alert sounds on/off" title="Alert sounds on/off"></button>
       <button class="icon-btn hide-phone" data-fullscreen aria-label="Full screen" title="Full screen">${icon('fullscreen')}</button>
       ${MODE === 'hq' ? `<button class="small" data-recruit title="Recruit an Agent">${icon('plus')}<span class="hide-phone">Recruit</span></button>` : ''}
-      <button class="icon-btn" data-settings aria-label="Settings" title="Settings">${icon('settings')}</button>
       <button class="icon-btn" data-lock aria-label="Lock" title="Lock (Shift+L)">${icon('lock')}</button>
     </header>
-    <nav class="rail" aria-label="Views" data-rail></nav>
     <main class="viewroot" data-viewroot></main>
-    <footer class="statusbar" data-statusbar role="status" aria-label="Status"></footer>
   </div>`;
   renderMute(); renderPtt();
   if (!VIEWS.find((v) => v.id === S.view && allowed(v))) S.view = 'ops';
@@ -234,23 +242,29 @@ function shell() {
 function renderRail() {
   const rail = $('[data-rail]');
   if (!rail) return;
-  rail.innerHTML = VIEWS.filter(allowed).map((v, i) => `<button data-view="${v.id}" aria-current="${v.id === S.view ? 'page' : 'false'}" title="${esc(v.label)} (${i + 1})">${icon(v.icon)}<span>${esc(v.label)}</span>${v.badge ? `<b class="rail-badge" data-badge="${v.id}" hidden></b>` : ''}</button>`).join('')
-    + `<span class="grow"></span><button data-global title="Global intel (G)">${icon('globe')}<span>Global</span></button><button data-settings title="Settings">${icon('settings')}<span>Settings</span></button>`;
+  const cur = VIEWS.find((v) => v.id === S.view), top = cur?.parent || S.view;
+  rail.innerHTML = `<div class="rail-logo" title="SENTINEL">${LOGO}</div>` + topViews().map((v, i) => `<button data-view="${v.tabs ? childrenOf(v.id)[0]?.id || v.id : v.id}" data-label="${esc(v.label)}" aria-label="${esc(v.label)}" aria-current="${v.id === top ? 'page' : 'false'}" title="${esc(v.label)}${i < 9 ? ` (${i + 1})` : ''}">${icon(v.icon)}<span>${esc(v.label)}</span>${v.badge ? `<b class="rail-badge" data-badge="${v.id}" hidden></b>` : ''}</button>`).join('')
+    + `<span class="grow"></span><button data-global data-label="Global intel" aria-label="Global intel" title="Global intel (G)">${icon('globe')}<span>Global</span></button><button data-settings data-label="Settings" aria-label="Settings" title="Settings">${icon('settings')}<span>Settings</span></button>`;
   for (const v of VIEWS) v.badge?.();
 }
 function showView(id, force = false) {
-  const v = VIEWS.find((x) => x.id === id && allowed(x)) || VIEWS[0];
+  let v = VIEWS.find((x) => x.id === id && allowed(x)) || VIEWS.find((x) => x.id === 'ops');
+  if (v.tabs) v = childrenOf(v.id)[0] || v;
   if (!force && currentView === v.id) return;
   if (currentView) VIEWS.find((x) => x.id === currentView)?.leave?.();
   currentView = S.view = v.id;
   try { localStorage.setItem('sentinel.view', v.id); } catch { /* ignore */ }
-  const t = $('[data-viewtitle]');
-  if (t) t.textContent = v.label;
   renderRail();
   const root = $('[data-viewroot]');
   root.dataset.view = v.id;
   root.innerHTML = '';
-  v.render(root);
+  let host = root;
+  if (v.parent) {
+    const parent = VIEWS.find((x) => x.id === v.parent);
+    root.innerHTML = `<div class="subnav" role="tablist" aria-label="${esc(parent.label)}"><span class="lbl">${esc(parent.label)}</span>${childrenOf(v.parent).map((c) => `<button role="tab" data-view="${c.id}" aria-selected="${c.id === v.id}">${esc(c.label)}</button>`).join('')}</div><div class="subroot" data-subroot></div>`;
+    host = $('[data-subroot]', root);
+  }
+  v.render(host);
   renderAll();
 }
 
@@ -293,7 +307,7 @@ const OPS_PRESETS = {
 };
 let ws = null;
 registerView({
-  id: 'ops', label: 'Operations', icon: 'grid',
+  id: 'ops', label: 'Operations Floor', icon: 'grid', order: 1,
   render(root) {
     ws = createWorkspace(root, {
       panels: [...OPS_PANELS(), ...OPS_EXTRA_PANELS.map((f) => f())], presets: OPS_PRESETS,
@@ -312,6 +326,7 @@ registerView({
   leave() { map3d?.destroy(); map3d = null; radar?.destroy?.(); radar = null; ws = null; },
 });
 window.__ws = () => ws; // for the automated tests
+window.__go = (id) => showView(id); // (tests) open any screen, including tabs inside Administration / Records
 
 // ---------------- TRIAGE + INCIDENTS (see views/) ----------------
 const triage = createTriage({ S, api: (...a) => T.api(...a), openIncident: (id) => openIncident(id) });
@@ -319,29 +334,34 @@ const incidents = createIncidents({ S, api: (...a) => T.api(...a), playback: (w)
 function openIncident(id) { incidents.preselect(id); if (S.view === 'incidents') incidents.open(id); else showView('incidents'); }
 const unhandled = () => (S.alerts || []).filter((a) => a.status === 'new');
 registerView({
-  id: 'triage', label: 'Triage', icon: 'inbox', render: (root) => triage.render(root),
+  id: 'triage', label: 'Triage', icon: 'inbox', order: 3, render: (root) => triage.render(root),
   badge() { const b = $('[data-badge="triage"]'); if (!b) return; const u = unhandled(); b.hidden = !u.length; b.textContent = u.length > 99 ? '99+' : u.length; b.classList.toggle('crit', u.some((a) => SEV_RANK[a.severity] >= 3)); b.classList.toggle('warn', !u.some((a) => SEV_RANK[a.severity] >= 3) && u.some((a) => a.severity === 'MEDIUM')); },
 });
 registerView({
-  id: 'incidents', label: 'Incidents', icon: 'case', render: (root) => incidents.render(root),
+  id: 'incidents', label: 'Casework', icon: 'case', order: 4, render: (root) => incidents.render(root),
   badge() { const b = $('[data-badge="incidents"]'); if (!b) return; const n = (S.incidents || []).filter((i) => i.status === 'open' || i.status === 'investigating').length; b.hidden = !n; b.textContent = n; },
 });
 const analysis = createAnalysis({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'analysis', label: 'Analysis', icon: 'pulse', render: (root) => analysis.render(root) });
+registerView({ id: 'analysis', label: 'Rules and patterns', icon: 'pulse', parent: 'admin', order: 2, render: (root) => analysis.render(root) });
 const coverageView = createCoverage({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'coverage', label: 'Coverage', icon: 'shield', render: (root) => coverageView.render(root) });
+registerView({ id: 'coverage', label: 'Coverage', icon: 'shield', parent: 'agents', order: 2, render: (root) => coverageView.render(root) });
 const registerViewer = createRegister({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'register', label: 'Agents', icon: 'agent', render: (root) => registerViewer.render(root) });
+registerView({ id: 'agents', label: 'Agents', icon: 'agent', order: 6, tabs: true });
+registerView({ id: 'register', label: 'Registry', icon: 'agent', parent: 'agents', order: 1, render: (root) => registerViewer.render(root) });
 const networkView = createNetwork({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'network', label: 'Network', icon: 'network', render: (root) => networkView.render(root) });
+registerView({ id: 'network', label: 'Network', icon: 'network', order: 7, render: (root) => networkView.render(root) });
 const reportsView = createReports({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'reports', label: 'Reports', icon: 'doc', render: (root) => reportsView.render(root) });
+registerView({ id: 'reports', label: 'Briefings', icon: 'doc', order: 9, render: (root) => reportsView.render(root) });
 const shiftView = createShift({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'shift', label: 'Shift log', icon: 'doc', render: (root) => shiftView.render(root) });
-const accessView = createAccess({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'access', label: 'Access', icon: 'key', roles: ['DIRECTOR'], render: (root) => accessView.render(root) });
+registerView({ id: 'records', label: 'Records', icon: 'audit', order: 10, tabs: true });
+registerView({ id: 'shift', label: 'Operator notes', icon: 'doc', parent: 'records', order: 2, render: (root) => shiftView.render(root) });
+const accessView = createAccess({ S, api: (...a) => T.api(...a), only: 'sessions' });
+registerView({ id: 'admin', label: 'Administration', icon: 'key', order: 11, tabs: true });
+registerView({ id: 'access', label: 'Security', icon: 'key', roles: ['DIRECTOR'], parent: 'admin', order: 3, render: (root) => accessView.render(root) });
+const auditView = createAccess({ S, api: (...a) => T.api(...a), only: 'audit' });
+registerView({ id: 'audit', label: 'Audit log', icon: 'audit', roles: ['DIRECTOR'], parent: 'records', order: 3, render: (root) => auditView.render(root) });
 const dataView = createData({ S, api: (...a) => T.api(...a) });
-registerView({ id: 'data', label: 'Data', icon: 'database', roles: ['DIRECTOR'], render: (root) => dataView.render(root) });
+registerView({ id: 'data', label: 'Data and backups', icon: 'database', roles: ['DIRECTOR'], parent: 'admin', order: 4, render: (root) => dataView.render(root) });
 let viewRefresh = null;
 /** Coverage and the Agent register follow Agent changes (debounced). */
 function refreshAgentViews() { clearTimeout(viewRefresh); viewRefresh = setTimeout(() => { if (S.view === 'coverage') coverageView.refresh(); else if (S.view === 'register') registerViewer.refresh(); }, 400); }
@@ -369,34 +389,36 @@ function renderStatus() {
   if (!sb) return;
   if (!sb.firstChild) {
     sb.innerHTML = `
-      <span class="sb"><i>Operator</i><b data-sbop></b></span>
-      <span class="sb"><i>Role</i><b data-sbrole></b></span>
-      <span class="sb"><i>Session</i><b class="mono" data-sbsess></b></span>
+      <span class="sb"><i>Callsign</i><b data-sbop></b></span>
       <span class="sb"><i>Alert state</i><b data-sbstate></b></span>
-      <span class="sb hide-phone"><i>UTC</i><b class="mono" data-sbutc></b></span>
-      <span class="sb"><i>Local</i><b class="mono" data-sblocal></b></span>
       <span class="sb"><i>HQ</i><b data-sbhealth></b></span>
       <span class="sb"><i>Agents</i><b class="mono" data-sbagents></b></span>
-      <span class="grow"></span>
-      <span class="sb hide-phone sb-keys"><kbd>Ctrl</kbd><kbd>K</kbd> commands · <kbd>?</kbd> shortcuts</span>`;
+      <span class="sb"><i>Unread</i><b class="mono" data-sbunread></b></span>
+      <span class="sb"><i>Local</i><b class="mono" data-sblocal></b></span>
+      <span class="sb hide-phone"><i>UTC</i><b class="mono" data-sbutc></b></span>
+      <span class="sb hide-phone"><i>Session</i><b class="mono" data-sbsess></b></span>
+      <span class="sb sr-only"><i>Role</i><b data-sbrole></b></span>`;
   }
   const set = (k, v) => { const el = sb.querySelector(`[data-${k}]`); if (el && el.innerHTML !== v) el.innerHTML = v; };
   const now = Date.now(), h = hqHealth(), mode = S.settings.mode || 'home';
   set('sbop', esc(S.operator || '—'));
-  set('sbrole', `${esc(S.role || 'DIRECTOR')}${S.role === 'OBSERVER' ? ' <span class="tag">read-only</span>' : ''}`);
+  set('sbrole', esc(S.role || 'DIRECTOR'));
   set('sbsess', hms(now - (S.sessionStart || now)));
   set('sbstate', `<span class="state-chip m-${mode}">${MODE_INFO[mode].label.toUpperCase()}</span>`);
   set('sbutc', new Date(now).toISOString().slice(11, 19));
-  set('sblocal', clock(now));
-  set('sbhealth', `<span class="dot ${h.ok ? 'on' : 'warn'}"></span> ${h.ok ? 'Nominal' : 'Degraded'}`);
+  set('sblocal', new Date(now).toLocaleTimeString('en-GB', { hour12: false }));
+  set('sbhealth', `<span class="dot ${h.ok ? 'on' : 'warn'}"></span> ${h.ok ? 'Nominal' : 'Degraded'}${S.onWatch ? ' · <b class="onwatch">ON WATCH</b>' : ''}`);
   sb.querySelector('[data-sbhealth]').title = h.ok ? 'All HQ services running' : h.issues.join(' · ');
   set('sbagents', `${S.agents.filter((a) => a.online).length}/${S.agents.length}`);
+  set('sbunread', String((S.alerts || []).filter((a) => a.status === 'new').length));
+  if (document.body.dataset.state !== mode) document.body.dataset.state = mode;
 }
 
 // ---------------- command palette + keyboard shortcuts ----------------
 function paletteActions() {
   const A = [];
-  VIEWS.filter(allowed).forEach((v, i) => A.push({ group: 'Go to', label: v.label, keys: String(i + 1), run: () => showView(v.id) }));
+  topViews().forEach((v, i) => A.push({ group: 'Go to', label: v.label, keys: i < 9 ? String(i + 1) : undefined, run: () => showView(v.id) }));
+  VIEWS.filter((v) => v.parent && allowed(v)).forEach((v) => A.push({ group: 'Go to', label: `${VIEWS.find((x) => x.id === v.parent).label} › ${v.label}`, run: () => showView(v.id) }));
   A.push({ group: 'Go to', label: 'Global intel', keys: 'G', keywords: ['iss', 'aircraft', 'earthquakes', 'ships', 'globe'], run: () => openGlobal() });
   A.push({ group: 'Go to', label: 'Settings', keywords: ['preferences', 'location', 'theme'], run: () => openSettings(S, { onChange: (x) => { S.settings = x; settingsChanged(); } }) });
   A.push({ group: 'Go to', label: 'Terminal', keys: '`', run: () => term.open() });
@@ -450,7 +472,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'E' && e.shiftKey) { e.preventDefault(); if (S.view !== 'ops') showView('ops'); ws?.setEdit(!ws.edit); }
   else if (e.key === 'g' || e.key === 'G') { e.preventDefault(); openGlobal(); }
   else if (e.key === 'm' || e.key === 'M') { if (S.view === 'ops') { S.mapView = S.mapView === '3d' ? 'plan' : HAS_GL ? '3d' : 'plan'; launchMapView(); } }
-  else if (/^[1-9]$/.test(e.key)) { const v = VIEWS.filter(allowed)[Number(e.key) - 1]; if (v) showView(v.id); }
+  else if (/^[1-9]$/.test(e.key)) { const v = topViews()[Number(e.key) - 1]; if (v) showView(v.id); }
 });
 let shellWired = false;
 let watchdogOn = false;
