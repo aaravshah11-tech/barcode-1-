@@ -52,7 +52,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
 
   function handle(conn) {
     conns.add(conn);
-    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, frame = null, session = null, rttTimer = null;
+    let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, session = null, rttTimer = null;
     const unlockDash = () => { hq.dashboards.add(dash); send(hq.snapshot()); };
     const send = (obj) => { if (conn.open) try { conn.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
     const close = () => { try { conn.close(); } catch { /* ignore */ } };
@@ -116,18 +116,11 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
       if (role === 'agent') {
         if (msg.t === 'status') hq.agentStatus(me.id, msg);
         else if (msg.t === 'event') hq.agentEvent(me.id, msg);
-        else if (msg.t === 'grid') hq.agentSetGrid(me.id, String(msg.key || ''), msg.cells);
+        else if (msg.t === 'grid' && msg.key !== 'mask') hq.agentSetGrid(me.id, String(msg.key || ''), msg.cells);
+        else if (msg.t === 'setup') hq.agentSetup(me.id, { mask: msg.mask, ignore: msg.ignore, watch: String(msg.watch || ''), confirmed: msg.confirmed === true });
         else if (msg.t === 'ack') hq.agentAck(me.id, String(msg.id || ''));
         else if (msg.t === 'hqpong' && typeof msg.ts === 'number') hq.agentStatus(me.id, { rtt: Date.now() - msg.ts });
-        else if (msg.t === 'frame') {
-          // Live view pictures arrive in pieces; put them back together (never stored).
-          if (typeof msg.error === 'string') return hq.agentFrame(me.id, { error: msg.error });
-          const n = Math.min(8, Number(msg.n) || 0), i = Number(msg.i);
-          if (!n || !(i >= 0 && i < n) || typeof msg.part !== 'string') return;
-          if (!frame || frame.id !== msg.id) frame = { id: msg.id, parts: new Array(n), got: 0 };
-          if (frame.parts[i] == null) { frame.parts[i] = msg.part; frame.got++; }
-          if (frame.got === n) { hq.agentFrame(me.id, { data: frame.parts.join('') }); frame = null; }
-        }
+        // (camera pictures are never accepted: there is no live view)
       } else if (role === 'viewer' && msg.t === 'api') {
         const path = String(msg.path || '');
         try {

@@ -36,9 +36,28 @@ body { overflow-x: hidden; }
 .privacy { font: .74rem var(--mono); color: var(--muted); border-left: 3px solid var(--green); padding-left: 10px; }
 .knock { width: min(80vw, 420px); aspect-ratio: 1; border-radius: 50%; font-size: clamp(1.1rem, 5vw, 1.6rem); margin: 10px auto; display: grid; place-items: center; border: 2px solid var(--green); color: var(--text); background: var(--panel-2); letter-spacing: .1em; }
 .knock:active { background: var(--green-dim); }
-/* dimmer + find-me flash */
-.dim { position: fixed; inset: 0; z-index: 2400; background: rgba(0, 0, 0, .9); display: grid; place-content: center; text-align: center; gap: 8px; cursor: pointer; }
-.dim-clock { font-size: 2.2rem; color: rgba(var(--accent-rgb), .35); letter-spacing: .1em; }
+/* OLED standby: near-black, low-luminance text, moved every few minutes (burn-in) */
+.dim { position: fixed; inset: 0; z-index: 2400; background: #000; cursor: pointer; display: grid; place-items: center; }
+.oled-box { display: grid; gap: 6px; justify-items: center; text-align: center; transition: transform 1.2s ease-out; color: #59636f; }
+.oled-top { display: flex; gap: 10px; align-items: center; font: 500 1.05rem var(--sans); letter-spacing: .16em; color: #7d8794; }
+.oled-emblem { color: #4b5562; display: inline-grid; }
+.oled-mission { font-size: .72rem; letter-spacing: .18em; color: #6f86a0; }
+.oled-state { display: flex; gap: 8px; align-items: center; font-size: .72rem; letter-spacing: .06em; }
+.oled-dot { width: 7px; height: 7px; border-radius: 50%; background: #2f6b4f; }
+.dim[data-state="down"] .oled-dot { background: #6b5a1d; }
+.dim[data-state="standby"] .oled-dot { background: #6b5a1d; }
+.dim[data-state="standby"] .oled-mission { color: #8a7a3a; }
+.oled-clock { font-size: 2.6rem; font-weight: 300; color: #5d6875; letter-spacing: .06em; margin-top: 6px; }
+.oled-meta { display: flex; gap: 16px; font-size: .66rem; letter-spacing: .12em; }
+.oled-meta b { font-weight: 500; color: #6d7783; }
+.oled-hint { font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; color: #39414b; margin-top: 10px; }
+/* the banner stays on top while in standby, dimmed so it doesn't burn in */
+.banner-active.oled { background: #0b0f15 !important; color: #6d7783 !important; border-bottom: 1px solid #161d27; transition: transform 1.2s; }
+.banner-active.oled.watching { color: #a0605e !important; }
+.banner-active.oled.offline { color: #9a8a4a !important; }
+body.oled-on .cbanner { opacity: .15; }
+.find.calm { animation: none; background: var(--bg); }
+.find.calm .find-text { color: var(--text); font-size: clamp(1.6rem, 9vw, 4rem); letter-spacing: .08em; }
 .find { position: fixed; inset: 0; z-index: 2700; display: grid; place-items: center; animation: findflash .5s steps(1) infinite; }
 .find-text { font-size: clamp(2rem, 14vw, 6rem); font-weight: 900; text-align: center; color: #000; }
 @keyframes findflash { 0% { background: var(--green); } 50% { background: #ffffff; } }
@@ -99,3 +118,37 @@ body[data-hqlink="down"] .ag-state .dot { background: var(--amber); }
 .standby { display: grid; justify-items: center; text-align: center; gap: 10px; padding: 8px 0 14px; }
 .standby-title { font: 600 .78rem var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text); margin: 4px 0 0; }
 @media (max-width: 360px) { .ag-strip { grid-template-columns: repeat(2, 1fr); } .ag-strip span:nth-child(3) { border-left: 0; } }
+
+/* ---------- v3 agent screen ---------- */
+.ag-emblem { width: 44px; height: 44px; flex: none; color: var(--green); display: grid; place-items: center; }
+.ag-emblem .logo { width: 40px; height: 40px; }
+.ag-state { width: auto; height: auto; padding: 6px 10px; gap: 6px; display: flex; align-items: center; }
+.ag-state small { font: 600 .6rem var(--sans); letter-spacing: .14em; color: var(--muted); }
+.ag-state .dot { border-radius: 50%; }
+.ag-recent { padding: 10px 12px; }
+.ag-recent ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.ag-recent time { color: var(--muted); margin-right: 6px; }
+.agent-main { grid-template-rows: auto auto auto 1fr auto auto; }
+.standing-by { border-left: 3px solid var(--amber); padding: 10px 12px; display: grid; gap: 6px; }
+.standing-by .lbl { color: var(--amber); }
+/* PERIMETER WATCH: privacy masks are solid black, ignored squares hatched */
+.mask-grid button.masked { background: #000 !important; border-color: #000 !important; opacity: 1; }
+.mask-grid button.ignored { background: repeating-linear-gradient(45deg, rgba(201, 162, 39, .35) 0 4px, transparent 4px 9px); border-color: rgba(201, 162, 39, .5); }
+.mask-grid.view button { pointer-events: none; }
+.mask-grid.view button:not(.masked):not(.ignored) { border-color: transparent; }
+.mask-grid.edit button { border: 1px solid rgba(230, 236, 243, .25); }
+.det-box { position: absolute; border: 2px solid var(--amber); pointer-events: none; }
+.det-box::after { content: attr(data-label); position: absolute; left: -2px; top: -20px; background: var(--amber); color: #000; font: 600 .66rem var(--mono); padding: 1px 5px; white-space: nowrap; }
+.wiz { display: grid; gap: 12px; }
+.wiz-head { display: flex; gap: 12px; align-items: baseline; }
+.wiz-head b { font: 600 .9rem var(--sans); letter-spacing: .1em; text-transform: uppercase; }
+.wiz-tips { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: .9rem; }
+.wiz-choices { display: grid; gap: 8px; }
+.wiz-choices button { text-align: left; min-height: 48px; }
+.wiz-choices button[aria-pressed="true"] { border-color: var(--green); background: rgba(111, 168, 220, .12); }
+.wiz-mode { gap: 14px; flex-wrap: wrap; }
+.wiz-agree { display: flex; gap: 10px; align-items: flex-start; font-weight: 500; padding: 10px; border: 1px solid var(--line-2); }
+.wiz-agree input { width: 22px; height: 22px; flex: none; }
+.wiz-walk { list-style: none; padding: 0; margin: 0; max-height: 120px; overflow: auto; }
+.wiz-nav { gap: 10px; }
+.wiz-mode label { display: flex; gap: 6px; align-items: center; } .wiz-mode input { appearance: auto; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; border-radius: 50%; }

@@ -19,7 +19,14 @@
 <body>
 <div class="banner-active" data-banner role="status" aria-live="polite" hidden></div>
 <main class="agent-main" id="main"></main>
-<div class="dim" data-dim hidden><div class="dim-clock mono" data-dimclock></div><div class="small muted">Tap to wake</div></div>
+<div class="dim oled" data-dim hidden aria-label="Standby screen. Tap to wake."><div class="oled-box">
+  <div class="oled-top"><span class="oled-emblem" aria-hidden="true"><svg viewBox="0 0 64 64" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="32" cy="32" r="22"/><circle cx="32" cy="32" r="4"/><path d="M32 4v14M32 46v14M4 32h14M46 32h14"/></svg></span><b data-ocode></b></div>
+  <div class="oled-mission mono" data-omission></div>
+  <div class="oled-state"><span class="oled-dot"></span><span data-ostate></span></div>
+  <div class="oled-clock mono" data-oclock></div>
+  <div class="oled-meta mono"><span>BATT <b data-obatt></b></span><span>SIG <b data-osignal></b></span></div>
+  <div class="oled-meta mono" data-olast></div>
+  <div class="oled-hint">Tap to wake</div></div></div>
 <div class="find" data-find hidden><div class="find-text mono">HERE<br><span data-findname></span></div></div>
 <script type="module" src="./agent.js"></script>
 </body>

@@ -30,7 +30,6 @@ export const COMMANDS = [
   ['standdown', 'standdown', 'Silence the alarm on every Agent'],
   ['panic', 'panic', 'Raise PANIC (asks first)'],
   ['map', 'map <3d|plan|radar>', 'Switch the map view'],
-  ['live', 'live <agent>', 'Open Live view of an Agent’s camera'],
   ['theme', 'theme <mi6|classic|redops>', 'Change the look'],
   ['time', 'time', 'Local time and date'],
   ['whoami', 'whoami', 'Who is logged in here'],
@@ -140,7 +139,7 @@ export function parseCommand(input, ctx = {}) {
   if (findM) { const a = findAgent(findM[1], ctx); return a ? { cmd: 'find', agentId: a.id } : { cmd: 'error', error: `No Agent called “${findM[1]}”. Type agents to list them.` }; }
 
   const liveM = t.match(/^(?:live|live view|show (?:the )?camera(?: (?:in|of|on))?|camera) (.+)$/);
-  if (liveM) { const a = findAgent(liveM[1], ctx); return a ? { cmd: 'live', agentId: a.id } : { cmd: 'error', error: `No Agent called “${liveM[1]}”.` }; }
+  if (liveM) return { cmd: 'error', error: 'There is no live view: camera pictures never leave the Agent. Only events like “Person detected” reach HQ.' };
 
   // messages
   if (/^(broadcast|announce|say)$/.test(w)) return rest ? { cmd: 'send', target: 'all', text: original(rest) } : { cmd: 'error', error: 'Broadcast what? e.g. broadcast Dinner is ready' };

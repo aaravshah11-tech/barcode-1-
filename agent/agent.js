@@ -5,14 +5,14 @@ import { esc, LOGO, toast, classificationBanners } from '../shared/ui.js';
 import { canonical } from '../shared/canonical.js';
 import { missionById, cleanSettings } from '../shared/missions.js';
 import { dial } from '../shared/link.js';
-import { openCamera, activeCamera } from './lib/camera.js';
 import { applyTheme } from '../shared/themes.js';
 import { makeMoveWatch } from './lib/tamper-core.js';
+import { VERSION } from '../shared/changelog.js';
 
 const KEY = 'sentinel.agent';
 const main = document.getElementById('main');
 const banner = document.querySelector('[data-banner]');
-const dimEl = document.querySelector('[data-dim]');
+const dimEl = document.querySelector('[data-dim]'); // the OLED standby screen
 const findEl = document.querySelector('[data-find]');
 const enc = new TextEncoder();
 
@@ -32,6 +32,10 @@ let lastState = null;
 let lastCmd = null;
 const startedAt = Date.now(); // "on duty" since
 let linkMs = null; // round-trip time to HQ, as HQ measured it
+const recent = []; // this Agent's last reports (shown on its own screen only)
+let lostAt = null; // when the link to HQ dropped
+let standingBy = false; // HQ has been unreachable for a minute: mission paused until it's back
+let OFFLINE_PAUSE = 60000, OFFLINE_RETRY = 30000;
 
 function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
 function save(c) { creds = c; try { if (c) localStorage.setItem(KEY, JSON.stringify(c)); else localStorage.removeItem(KEY); } catch { /* private mode */ } }
@@ -100,35 +104,50 @@ function notRecruited(error = '') {
 function shell() {
   main.innerHTML = `
     <header class="ag-head">
-      <div class="ag-state" data-agstate aria-hidden="true"><span class="dot"></span></div>
-      <div class="grow"><small class="ag-label" data-label>${esc(creds.label)}</small><div class="ag-code" data-codename>${esc(creds.codename)}</div>
+      <div class="ag-emblem" aria-hidden="true">${LOGO}</div>
+      <div class="grow"><small class="ag-label mono" data-label>${esc(creds.label)}</small><div class="ag-code" data-codename>${esc(creds.codename)}</div>
         <div class="ag-mission mono" data-mname></div></div>
+      <div class="ag-state" data-agstate><span class="dot"></span><small data-stateword>LINKING</small></div>
     </header>
     <div class="ag-strip mono" role="group" aria-label="Agent status">
       <span><small>Link</small><b data-linkms>—</b></span><span><small>Battery</small><b data-batt>—</b></span>
-      <span><small>On duty</small><b data-duty>0 min</b></span><span><small>Time</small><b data-aclock></b></span>
+      <span><small>Signal</small><b data-signal>—</b></span><span><small>Time</small><b data-aclock></b></span>
     </div>
     <div class="link-state" data-link>Contacting HQ…</div>
     <section class="mission-area panel" data-area aria-live="polite"></section>
-    <div class="foot"><span data-wake></span><span class="grow"></span><button class="btn-ghost small" data-leave>Leave HQ</button></div>`;
+    <section class="ag-recent panel"><div class="lbl">Last reports to HQ</div><ol class="mono small" data-recent><li class="muted">Nothing reported yet.</li></ol></section>
+    <div class="foot"><span data-wake></span><span class="mono" data-duty></span><span class="grow"></span><button class="small" data-identify title="Show this Agent’s reference big on screen">Identify</button><button class="btn-ghost small" data-sleep>Standby screen</button><button class="btn-ghost small" data-leave>Leave HQ</button></div>`;
   main.querySelector('[data-leave]').addEventListener('click', () => {
     if (!confirm('Stop being an Agent? This device forgets HQ. (Remove it on HQ too.)')) return;
     stopped = true; link?.close(); stopMission(); save(null); banner.hidden = true; notRecruited();
   });
+  main.querySelector('[data-identify]').addEventListener('click', () => identify());
+  main.querySelector('[data-sleep]').addEventListener('click', () => sleep());
   setBanner();
   keepAwake();
   watchBattery();
   watchTamper();
   armDimmer();
   tickStrip();
+  drawRecent();
 }
+function drawRecent() {
+  const el = document.querySelector('[data-recent]');
+  if (!el) return;
+  el.innerHTML = recent.length ? recent.map((r) => `<li><time>${new Date(r.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</time> ${esc(r.message)}${r.queued ? ' <span class="muted">(queued)</span>' : ''}</li>`).join('') : '<li class="muted">Nothing reported yet.</li>';
+}
+function remember(message, queued) { recent.unshift({ ts: Date.now(), message, queued }); recent.length = Math.min(recent.length, 5); drawRecent(); drawStandby(); }
+const signalText = () => { const c = navigator.connection; const t = c?.type && c.type !== 'unknown' ? c.type : c?.effectiveType; return t ? String(t).toUpperCase() : connected ? 'OK' : '—'; };
 /** The status strip: link time, on-duty time and the clock (updated every 15 s — cheap on old phones). */
 function tickStrip() {
   const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.textContent = v; };
   set('[data-linkms]', !connected ? 'LOST' : linkMs == null ? '…' : `${linkMs} ms`);
   const m = Math.floor((Date.now() - startedAt) / 60000);
-  set('[data-duty]', m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`);
+  set('[data-duty]', `On duty ${m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`}`);
   set('[data-aclock]', new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+  set('[data-signal]', signalText());
+  set('[data-stateword]', standingBy ? 'STANDING BY' : connected ? 'ACTIVE' : 'LINKING');
+  drawStandby();
 }
 setInterval(tickStrip, 15000);
 
@@ -136,15 +155,15 @@ function setBanner() {
   if (!creds) { banner.hidden = true; return; }
   const def = missionById(mission.id || 'standby');
   banner.hidden = false;
-  if (live && connected) { banner.textContent = 'LIVE VIEW – HQ IS WATCHING THIS CAMERA'; banner.className = 'banner-active watching live'; return; }
-  banner.textContent = connected ? `SENTINEL AGENT ACTIVE – ${def.name}` : `SENTINEL AGENT – ${def.name} – RECONNECTING TO HQ`;
+  // The banner never goes away and never hides what this device is doing (non-negotiable).
+  banner.textContent = standingBy ? 'SENTINEL AGENT ACTIVE – HQ OFFLINE – STANDING BY' : connected ? `SENTINEL AGENT ACTIVE – ${def.name}` : `SENTINEL AGENT ACTIVE – ${def.name} – RECONNECTING TO HQ`;
   const mn = document.querySelector('[data-mname]');
-  if (mn) mn.textContent = `Mission: ${def.name}${connected ? '' : ' · offline'}`;
+  if (mn) mn.textContent = `Mission: ${standingBy ? `${pausedMission ? missionById(pausedMission.id)?.name : def.name} · paused` : def.name}${connected || standingBy ? '' : ' · offline'}`;
   document.body.dataset.hqlink = connected ? 'up' : 'down';
   tickStrip();
-  banner.className = `banner-active ${!connected ? 'offline' : def.needs.some((n) => n === 'camera' || n === 'microphone') ? 'watching' : ''}`;
+  banner.className = `banner-active ${standingBy || !connected ? 'offline' : def.needs.some((n) => n === 'camera' || n === 'microphone') ? 'watching' : ''}${dimEl.hidden ? '' : ' oled'}`;
   const linkEl = document.querySelector('[data-link]');
-  if (linkEl) linkEl.textContent = connected ? 'Linked to HQ · encrypted' : stopped ? 'Disconnected' : `Lost contact with HQ — reconnecting…${lastWhy ? ` (${lastWhy})` : ''}`;
+  if (linkEl) linkEl.textContent = connected ? 'Linked to HQ · encrypted' : stopped ? 'Disconnected' : standingBy ? 'HQ offline — mission paused, camera and microphone off. Trying again every 30 seconds.' : `Lost contact with HQ — reconnecting…${lastWhy ? ` (${lastWhy})` : ''}`;
 }
 
 // ---------------- link to HQ ----------------
@@ -153,7 +172,7 @@ async function connect() {
   if (stopped || !creds || dialing) return;
   dialing = true;
   const l = await dial(creds.hqId, {
-    onOpen: () => { retry = 1000; lastWhy = ''; l.send({ t: 'hello', token: creds.token, status: statusNow() }); },
+    onOpen: () => { retry = 1000; lastWhy = ''; l.send({ t: 'hello', token: creds.token, status: statusNow(), version: VERSION }); },
     onMessage: (m) => { lastMsg = Date.now(); onMessage(m); },
     onClose: (why) => {
       dialing = false;
@@ -163,11 +182,12 @@ async function connect() {
       lastWhy = why;
       setBanner();
       if (stopped) return;
-      if (was) mission.inst?.onLink?.(false);
-      setTimeout(connect, retry);
+      if (was) { mission.inst?.onLink?.(false); lostAt = Date.now(); }
+      lostAt ??= Date.now();
+      setTimeout(connect, standingBy ? OFFLINE_RETRY : retry);
       retry = Math.min(15000, retry * 2);
     },
-  }).catch((e) => { dialing = false; lastWhy = e.message; setBanner(); setTimeout(connect, 5000); return null; });
+  }).catch((e) => { dialing = false; lastWhy = e.message; lostAt ??= Date.now(); setBanner(); setTimeout(connect, standingBy ? OFFLINE_RETRY : 5000); return null; });
   if (!l) return;
   link = l;
   lastMsg = Date.now();
@@ -187,6 +207,8 @@ function send(obj) {
 async function onMessage(msg) {
   if (msg.t === 'welcome') {
     connected = true;
+    lostAt = null;
+    if (standingBy) { standingBy = false; mission = { id: null, settings: null, inst: null }; pausedMission = null; } // HQ is back: the mission restarts below
     creds = { ...creds, codename: msg.codename, label: msg.label, name: msg.name || '' };
     save(creds);
     hmacKey = await crypto.subtle.importKey('raw', enc.encode(creds.token), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
@@ -228,7 +250,6 @@ function command(cmd) {
   else if (cmd.action === 'find') findMe();
   else if (cmd.action === 'wake') wake();
   else if (cmd.action === 'reload') location.reload();
-  else if (cmd.action === 'live') { if (p.on) startLive(); else stopLive(); }
   else if (cmd.action === 'alarm') { if (p.on) alarmOn(p); else alarmOff(); }
   else if (cmd.action === 'message') showMessage(p);
   else if (cmd.action === 'disconnect') {
@@ -284,8 +305,12 @@ function makeCtx(def, settings, root) {
     /** Tell HQ something happened. Text and numbers only — never images or audio. */
     report(kind, message, data = {}, level = 'info') {
       const msg = { t: 'event', kind, message: String(message).slice(0, 140), data, level };
-      if (!send(msg)) { outbox.push(msg); if (outbox.length > 50) outbox.shift(); }
+      const ok = send(msg);
+      if (!ok) { outbox.push(msg); if (outbox.length > 50) outbox.shift(); }
+      remember(msg.message, !ok);
     },
+    /** PERIMETER WATCH setup result: privacy-mask squares, area, and the operator's confirmation. Numbers only. */
+    setup(b) { send({ t: 'setup', mask: b.mask, ignore: b.ignore, watch: b.watch, confirmed: b.confirmed === true }); },
     /** Live reading for the dashboard (throttled). */
     status(s) {
       pending = { ...pending, ...s };
@@ -313,45 +338,11 @@ function makeCtx(def, settings, root) {
   };
 }
 
-// ---------------- LIVE VIEW: HQ asked to see the camera ----------------
-// Only while HQ keeps asking (it renews every 20 s); small JPEGs, shown at HQ and never saved.
-// The red banner above says so the whole time.
-let live = null; // { until, own, timer, opening }
-let frameNo = 0;
-async function startLive() {
-  if (live) { live.until = Date.now() + 30000; return; }
-  live = { until: Date.now() + 30000, own: null, timer: null, opening: false };
-  wake();
-  setBanner();
-  live.timer = setInterval(async () => {
-    if (!live) return;
-    if (Date.now() > live.until || !connected) return stopLive();
-    let cam = activeCamera() || live.own;
-    if (!cam && !live.opening) {
-      live.opening = true;
-      try { live.own = await openCamera(mission.settings?.camera || 'environment'); } catch (e) { send({ t: 'frame', error: e.message }); stopLive(); return; } finally { if (live) live.opening = false; }
-      cam = live.own;
-    }
-    const data = cam?.snapshot();
-    if (!data) return;
-    // The link only carries small messages, so send the picture in pieces.
-    const id = ++frameNo, size = 12000, n = Math.ceil(data.length / size);
-    for (let i = 0; i < n; i++) send({ t: 'frame', id, i, n, part: data.slice(i * size, (i + 1) * size) });
-  }, 700);
-}
-function stopLive() {
-  if (!live) return;
-  clearInterval(live.timer);
-  live.own?.stop();
-  live = null;
-  setBanner();
-}
-
 // ---------------- status, battery, wake lock, dimming ----------------
 let battery = null;
 function statusNow() {
   const c = navigator.connection;
-  return { battery: battery ? battery.level : undefined, charging: battery ? battery.charging : undefined, visible: document.visibilityState === 'visible', since: startedAt,
+  return { battery: battery ? battery.level : undefined, charging: battery ? battery.charging : undefined, visible: document.visibilityState === 'visible', since: startedAt, version: VERSION,
     net: c?.type && c.type !== 'unknown' ? c.type : c?.effectiveType, downlink: typeof c?.downlink === 'number' ? c.downlink : undefined };
 }
 function sendStatus(extra = {}) { send({ t: 'status', ...statusNow(), ...extra }); }
@@ -413,17 +404,78 @@ async function keepAwake() {
   } catch { if (el) el.textContent = 'Tap the screen once to keep it awake'; addEventListener('pointerdown', keepAwake, { once: true }); }
 }
 
-let dimTimer = null, noDim = false;
+// ---------------- OLED standby ----------------
+// After a minute untouched the screen goes near-black (saves power, no burn-in): a small block with the
+// emblem, codename, mission, status, battery, signal and clock, moved to a new spot every few minutes.
+// The SENTINEL AGENT ACTIVE banner stays on top, dimmed. Tap anywhere to wake.
+let dimTimer = null, noDim = false, shiftTimer = null, pausedMission = null;
 const NO_DIM = new Set(['panel', 'intel']);
 function armDimmer() {
   clearTimeout(dimTimer);
-  if (!creds || noDim || NO_DIM.has(mission.id)) { dimEl.hidden = true; return; }
-  dimTimer = setTimeout(() => { dimEl.hidden = false; tickDim(); }, 60000);
+  if (!creds || noDim || NO_DIM.has(mission.id)) { if (!dimEl.hidden) { dimEl.hidden = true; setBanner(); } return; }
+  dimTimer = setTimeout(sleep, 60000);
 }
-function tickDim() { if (dimEl.hidden) return; dimEl.querySelector('[data-dimclock]').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); setTimeout(tickDim, 15000); }
-function wake() { dimEl.hidden = true; armDimmer(); }
+function sleep() {
+  if (!creds || noDim || NO_DIM.has(mission.id)) return;
+  dimEl.hidden = false;
+  document.body.classList.add('oled-on');
+  drawStandby();
+  shiftStandby();
+  setBanner();
+}
+function shiftStandby() {
+  clearTimeout(shiftTimer);
+  if (dimEl.hidden) return;
+  const box = dimEl.querySelector('.oled-box');
+  // burn-in protection: a new spot (and a slightly different banner position) every 3 minutes
+  const x = Math.round((Math.random() - 0.5) * 50), y = Math.round((Math.random() - 0.5) * 60);
+  if (box) box.style.transform = `translate(${x}vw, ${y}vh) translate(${x > 0 ? -50 : 0}%, 0)`;
+  banner.style.transform = `translateX(${Math.round((Math.random() - 0.5) * 16)}px)`;
+  shiftTimer = setTimeout(shiftStandby, 180000);
+}
+function drawStandby() {
+  if (!dimEl || dimEl.hidden) return;
+  const def = missionById((standingBy ? pausedMission?.id : mission.id) || 'standby');
+  const set = (k, v) => { const el = dimEl.querySelector(`[data-o${k}]`); if (el) el.textContent = v; };
+  set('code', creds?.codename || '');
+  set('mission', standingBy ? 'HQ OFFLINE – STANDING BY' : def?.name || '');
+  set('state', standingBy ? 'Paused · retrying every 30 s' : connected ? 'Active · linked to HQ' : 'Reconnecting to HQ');
+  set('batt', battery ? `${Math.round(battery.level * 100)}%${battery.charging ? ' +' : ''}` : '—');
+  set('signal', signalText());
+  set('clock', new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+  set('last', recent[0] ? `Last report ${new Date(recent[0].ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : '');
+  dimEl.dataset.state = standingBy ? 'standby' : connected ? 'up' : 'down';
+}
+function wake() { const was = !dimEl.hidden; dimEl.hidden = true; document.body.classList.remove('oled-on'); banner.style.transform = ''; clearTimeout(shiftTimer); if (was) setBanner(); armDimmer(); }
 dimEl.addEventListener('click', wake);
 addEventListener('pointerdown', () => { if (dimEl.hidden) armDimmer(); }, true);
+
+/** Identify: this Agent's reference big on its own screen for 6 s (to tell look-alike phones apart). */
+function identify() {
+  wake();
+  findEl.hidden = false;
+  findEl.classList.add('calm');
+  findEl.querySelector('[data-findname]').textContent = `${creds?.label || ''} · ${creds?.codename || ''}`;
+  const stop = () => { findEl.hidden = true; findEl.classList.remove('calm'); };
+  findEl.addEventListener('click', stop, { once: true });
+  setTimeout(stop, 6000);
+}
+
+// ---------------- HQ offline: stand by ----------------
+// If HQ can't be reached for a minute the mission stops (camera and microphone released), the screen says
+// HQ OFFLINE – STANDING BY, and the Agent tries again every 30 seconds. When HQ answers, the mission resumes.
+setInterval(() => {
+  if (!creds || stopped || connected || standingBy || !lostAt) return;
+  if (Date.now() - lostAt < OFFLINE_PAUSE) return;
+  standingBy = true;
+  pausedMission = mission.id ? { id: mission.id, settings: mission.settings } : null;
+  stopMission();
+  mission = { id: null, settings: null, inst: null };
+  const area = document.querySelector('[data-area]');
+  if (area) area.innerHTML = `<div class="standing-by"><div class="lbl">HQ OFFLINE – STANDING BY</div><p class="small">The mission is paused and the camera and microphone are off. This Agent tries HQ again every 30 seconds and carries on by itself when HQ is back.</p></div>`;
+  setBanner();
+  drawStandby();
+}, 5000);
 
 // ---------------- COMMS: a message from HQ, full screen (read aloud if asked) ----------------
 const shownMsgs = new Set();
@@ -499,6 +551,7 @@ function findMe() {
   setTimeout(stop, 12000);
 }
 
-window.__agent = { get mission() { return mission; }, get connected() { return connected; }, get lastCmd() { return lastCmd; }, verify, sent: sentLog }; // for the automated tests
+window.__agent = { get mission() { return mission; }, get connected() { return connected; }, get standingBy() { return standingBy; }, get lastCmd() { return lastCmd; }, verify, sent: sentLog,
+  testTimes(pause, retry) { OFFLINE_PAUSE = pause; OFFLINE_RETRY = retry; }, sleep }; // for the automated tests
 classificationBanners(undefined, { top: false }); // the privacy banner owns the top edge
 init();

@@ -1,8 +1,7 @@
-// Camera helper for missions. Missions only read tiny greyscale grids here, on the Agent.
-// The one exception is LIVE VIEW: while HQ has it open, small JPEG snapshots go to HQ to be
-// shown on screen (never saved), and the Agent shows a red "LIVE VIEW" banner the whole time.
+// Camera helper for missions. Missions only read tiny greyscale grids (or, for PERIMETER WATCH, a small
+// masked picture for on-device object recognition) here, on the Agent. No picture ever leaves this device.
 let active = null;
-/** The camera a mission currently has open (Live view reuses it instead of opening a second one). */
+/** The camera a mission currently has open. */
 export const activeCamera = () => (active?.alive() ? active : null);
 
 export async function openCamera(facing = 'environment') {
@@ -21,17 +20,8 @@ export async function openCamera(facing = 'environment') {
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d', { willReadFrequently: true });
-  const snap = document.createElement('canvas');
   const cam = {
     video, stream, W, H,
-    /** A small JPEG of what the camera sees right now (for LIVE VIEW only). */
-    snapshot(maxW = 320, quality = 0.55) {
-      if (video.readyState < 2 || !video.videoWidth) return null;
-      const scale = Math.min(1, maxW / video.videoWidth);
-      snap.width = Math.round(video.videoWidth * scale); snap.height = Math.round(video.videoHeight * scale);
-      snap.getContext('2d').drawImage(video, 0, 0, snap.width, snap.height);
-      return snap.toDataURL('image/jpeg', quality);
-    },
     /** Current frame as W×H brightness values (0–255). */
     grey() {
       if (video.readyState < 2) return null;

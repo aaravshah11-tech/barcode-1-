@@ -28,7 +28,7 @@ const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.
   const phone = await phoneCtx.newPage();
   watch(phone, 'phone');
   await phone.goto(joinUrl);
-  await phone.waitForFunction(() => document.querySelector('[data-banner]')?.textContent.includes('SENTINEL AGENT ACTIVE – STANDBY'), null, { timeout: 20000 });
+  await phone.waitForFunction(() => window.__agent?.connected && document.querySelector('[data-banner]')?.textContent === 'SENTINEL AGENT ACTIVE – STANDBY', null, { timeout: 20000 });
   const secs = (Date.now() - t0) / 1000;
   check(secs < 15, `scan → recruited and connected in ${secs.toFixed(1)} s (no certificate steps)`);
   check(new URL(phone.url()).hash === '', 'the one-time code is removed from the address bar');
@@ -75,7 +75,7 @@ const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.
   await login(dash);
   await phone.waitForFunction(() => document.querySelector('[data-banner]').textContent.includes('RECONNECTING'), null, { timeout: 30000 }).catch(() => {});
   await dash.waitForSelector('[data-threat]', { timeout: 15000 });
-  await phone.waitForFunction(() => document.querySelector('[data-banner]').textContent.includes('SENTINEL AGENT ACTIVE'), null, { timeout: 60000 });
+  await phone.waitForFunction(() => window.__agent.connected && !document.querySelector('[data-banner]').textContent.includes('RECONNECTING'), null, { timeout: 60000 });
   await dash.waitForSelector('[data-agents] >> text=ONLINE', { timeout: 30000 });
   check(true, 'HQ page reloaded: the Agent reconnects by itself (same recruitment)');
 
@@ -107,7 +107,7 @@ const banner = (p) => p.evaluate(() => document.querySelector('[data-banner]')?.
   await phone.fill('[data-code] [name=hq]', hqCode.toLowerCase());
   await phone.fill('[data-code] [name=code]', code2.toLowerCase());
   await phone.click('[data-code] button');
-  await phone.waitForFunction(() => document.querySelector('[data-banner]')?.textContent.includes('SENTINEL AGENT ACTIVE'), null, { timeout: 20000 });
+  await phone.waitForFunction(() => window.__agent?.connected, null, { timeout: 20000 });
   await dash.waitForSelector('.toast >> text=AGENT-02');
   check(true, 'typing the HQ code and recruit code by hand also recruits (AGENT-02)');
   await shot(dash, 'hq-with-agent');

@@ -23,5 +23,5 @@ export async function start(ctx) {
 }
 ```
 
-**The privacy rule:** never put images, video or audio into `report` or `status`. HQ also drops any long
+**The privacy rule:** never put images, video or audio into `report`, `status` or `setup`. There is no live view: pictures never leave the Agent. HQ also drops any long
 strings it receives, so a mission can't send a picture even by mistake.

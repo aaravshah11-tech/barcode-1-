@@ -1,9 +1,8 @@
 // HQ's "API": every action the Command Centre can take, in one place. The dashboard on the HQ
 // computer calls it directly; linked phones call it over their encrypted link.
 import { toCsv } from '../../shared/export.js';
-import { missionById, MISSIONS } from '../../shared/missions.js';
+import { missionById } from '../../shared/missions.js';
 import { coverage } from '../../shared/coverage.js';
-import { hardwareFromUA, uptimePct } from '../../shared/register.js';
 import { denied } from '../../shared/roles.js';
 import { describe } from './auditlog.js';
 import { sha256 } from '../../shared/crypto.js';
@@ -17,7 +16,7 @@ export function makeApi({ hq, db, auth }) {
    * and can't make backups/restores or set up the Director.
    */
   /** What isn't worth an audit entry: ordinary reading, and very frequent small updates. */
-  const quiet = (m, p, url, body) => (m === 'GET' ? !/^\/(export|backup|audit|audit\/export)$/.test(p) : p === '/auth/status' || (p === '/house' && !url.searchParams.get('final')) || (/\/live$/.test(p) && body?.renew));
+  const quiet = (m, p, url, body) => (m === 'GET' ? !/^\/(export|backup|audit|audit\/export)$/.test(p) : p === '/auth/status' || (p === '/house' && !url.searchParams.get('final')));
   function record(m, path, body, who, actor, ok, out) {
     const url = new URL(path, 'https://hq'), p = url.pathname;
     if (quiet(m, p, url, body) || !hq.audit) return;
@@ -244,30 +243,13 @@ export function makeApi({ hq, db, auth }) {
       if (!a) throw fail(400, 'Couldn’t place the Agent there.');
       return a;
     }
-    mm = p.match(/^\/agents\/([\w-]{1,64})\/live$/);
-    if (mm && m === 'POST') {
-      if (!hq.db.agent(mm[1])) throw fail(404, 'No such Agent.');
-      if (!hq.command(mm[1], 'live', { on: !!body.on })) throw fail(409, 'That Agent is offline.');
-      if (body.on && !body.renew) { const a = hq.db.agent(mm[1]); hq.logEvent({ kind: 'agent', agentId: a.id, message: `Live view opened on ${a.codename}` }); }
-      return { ok: true };
-    }
+    if (/^\/agents\/[\w-]{1,64}\/live$/.test(p)) throw fail(410, 'There is no live view: camera pictures never leave the Agent.');
     mm = p.match(/^\/agents\/([\w-]{1,64})\/facing$/);
     if (mm && m === 'PUT') { const a = hq.setFacing(mm[1], body.dir); if (!a) throw fail(400, 'Place the Agent on the floor plan first.'); return a; }
     if (p === '/coverage' && m === 'GET') return coverage(hq.house(), hq.snapshot().agents);
-    if (p === '/register' && m === 'GET') {
-      const now = hq.now(), week = now - 7 * 86400000, events = db.events({ since: now - 30 * 86400000, limit: 50000, kind: null });
-      return hq.snapshot().agents.map((a) => {
-        const mlog = a.missionLog || [{ mission: a.mission, at: a.recruitedAt || a.createdAt || null }];
-        return {
-          id: a.id, label: a.label, codename: a.codename, name: a.name, mission: a.mission, missionName: missionById(a.mission)?.name || a.mission, online: a.online,
-          hardware: hardwareFromUA(a.ua), recruitedAt: a.recruitedAt || a.createdAt || null, lastSeen: a.lastSeen, battery: a.battery, charging: a.charging,
-          uptime7d: uptimePct(events, a.id, week, now, a.online), uptime30d: uptimePct(events, a.id, now - 30 * 86400000, now, a.online),
-          calibratedAt: a.calibratedAt || null, notes: a.notes || '', lastTamper: a.lastTamper || null, place: a.place || null,
-          missionLog: mlog.map((x) => ({ ...x, name: MISSIONS.find((mi) => mi.id === x.mission)?.name || x.mission })),
-          tampers: events.filter((e) => e.agentId === a.id && e.kind === 'tamper').slice(0, 10),
-        };
-      });
-    }
+    if (p === '/register' && m === 'GET') return hq.fleet.rows();
+    if (p === '/fleet/summary' && m === 'GET') return hq.fleet.summary();
+    if (p === '/agents/bulk' && m === 'POST') return hq.fleet.bulk(body);
     mm = p.match(/^\/agents\/([\w-]{1,64})\/diag$/);
     if (mm && m === 'GET') { const d = hq.agentDiag(mm[1]); if (!d) throw fail(404, 'No such Agent.'); return d; }
     if (p === '/briefing' && m === 'GET') return hq.briefing(Math.min(30, Math.max(0, Math.round(Number(url.searchParams.get('daysAgo') ?? 1)) || 0)));

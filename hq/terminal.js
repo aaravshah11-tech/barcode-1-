@@ -9,7 +9,7 @@ import { icon } from '../shared/icons.js';
 import { sfx } from '../shared/sfx.js';
 
 /**
- * env = { S, api, lock(), setMapView(view), flyTo(agentId), openLive(agent), onSettings(settings) }
+ * env = { S, api, lock(), setMapView(view), flyTo(agentId), onSettings(settings) }
  * Returns { open, close, toggle, run(text, { voice }) → Promise<{ ok, reply }> }.
  */
 const waitFor = (fn, ms = 20000) => new Promise((res) => { const t0 = Date.now(); const tick = () => (fn() || Date.now() - t0 > ms ? res() : setTimeout(tick, 250)); tick(); });
@@ -133,12 +133,6 @@ export function createTerminal(env) {
         return ok(`${MODE_INFO[c.mode].label} mode. ${MODE_INFO[c.mode].summary}`);
       }
       case 'map': env.setMapView(c.view); return ok(`Map: ${c.view === '3d' ? '3D' : c.view}.`);
-      case 'live': {
-        const a = S.agents.find((x) => x.id === c.agentId);
-        if (!a.online) return no(`${a.codename} is offline.`);
-        env.openLive(a);
-        return ok(`Opening live view on ${a.codename}. It shows a red banner while you watch.`);
-      }
       case 'theme': env.onSettings(await env.api('/settings', { method: 'PATCH', body: { theme: c.theme } })); return ok(`Theme: ${c.theme}.`);
       case 'time': { const d = new Date(); return ok(`${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}, ${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}.`); }
       case 'whoami': return ok(`${S.operator || 'Director'} on ${S.mode === 'hq' ? 'the HQ computer' : 'a linked phone'}.`);

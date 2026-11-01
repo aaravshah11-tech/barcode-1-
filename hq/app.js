@@ -2,7 +2,7 @@
 import { esc, $, $$, toast, sheet, confirmBox, clock, dayClock, ago, qrSvg, LOGO, classificationBanners } from '../shared/ui.js';
 import { classification } from '../shared/brand.js';
 import { Radar } from '../shared/radar.js';
-import { missionById } from '../shared/missions.js';
+import { missionById, hqEditable } from '../shared/missions.js';
 import { openSettings } from './settings.js';
 import { startLocal, startRemote, linkPhone, viewerCreds } from './transport.js';
 import { notifyEvent } from './alerts.js';
@@ -109,7 +109,7 @@ async function lockNow(reason = 'Locked.') {
   await unlock(reason);
   launch();
 }
-function closeAllSheets() { $$('.sheet-backdrop').forEach((b) => b.remove()); drawer = null; S.open = null; liveView = null; }
+function closeAllSheets() { $$('.sheet-backdrop').forEach((b) => b.remove()); drawer = null; S.open = null; }
 
 // Auto-lock after the chosen minutes without a tap, click or key.
 let lastActive = Date.now();
@@ -639,7 +639,6 @@ const term = createTerminal({
   lock: () => lockNow('Locked. HQ is still guarding the house.'),
   setMapView: (v) => { S.mapView = v; launchMapView(); },
   flyTo: (id) => { const a = S.agents.find((x) => x.id === id); if (a?.place && houseHasRooms() && HAS_GL) flyToAgent(id); },
-  openLive: (a) => openLive(a),
   onSettings: (s) => { S.settings = s; settingsChanged(); },
   replay: (daysAgo) => timeline.startReplay(daysAgo),
   stopReplay: () => timeline.stopReplay(),
@@ -694,7 +693,6 @@ function onMsg(msg) {
   else if (msg.t === 'incident') { upsertBy(S.incidents, msg.incident); incidents.changed(msg.incident); renderQueue(); for (const v of VIEWS) v.badge?.(); }
   else if (msg.t === 'settings') { S.settings = msg.settings; settingsChanged(); }
   else if (msg.t === 'viewers') S.onViewers?.(msg.viewers);
-  else if (msg.t === 'frame') liveFrame(msg);
   else if (msg.t === 'net') { S.net = msg.net; renderNetwork(); }
   else if (msg.t === 'netTesting') { S.netTesting = msg.on; renderNetwork(); }
   else if (msg.t === 'assets') networkView.refresh();
@@ -1038,7 +1036,7 @@ function refreshDrawer() {
   if (s) s.innerHTML = liveHtml(a);
   drawer.el.querySelector('.sheet-head h2').textContent = `${a.label} // ${a.codename}`;
   drawer.body.querySelectorAll('[data-mission]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mission === a.mission)));
-  drawer.body.querySelectorAll('[data-cmd], [data-liveview]').forEach((b) => { b.disabled = !a.online; });
+  drawer.body.querySelectorAll('[data-cmd]').forEach((b) => { b.disabled = !a.online; });
   const dg = drawer.body.querySelector('[data-diag]');
   if (dg && Date.now() - diagAt > 30000 && !dg.matches(':hover')) { diagAt = Date.now(); renderDiagnostics(dg, a, T.api); }
   if (drawer.body.dataset.mission !== a.mission) drawAgent(a);
@@ -1065,6 +1063,7 @@ const shortUa = (ua) => (/iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad'
 function settingField(s, v) {
   const id = `set-${s.key}`;
   if (s.type === 'number') return `<label class="field"><span>${esc(s.label)}: <b class="c-green" data-out="${s.key}">${esc(v)}${esc(s.unit || '')}</b></span><input id="${id}" type="range" name="${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" value="${esc(v)}">${s.help ? `<div class="help">${esc(s.help)}</div>` : ''}</label>`;
+  if (s.agentOnly) return `<div class="field"><span class="small ${v ? '' : 'c-amber'}" data-maskstate>${v ? 'Privacy masks confirmed on the Agent — it can be armed.' : 'Privacy masks NOT confirmed — this Agent can’t raise alerts until you finish the setup wizard on its screen.'}</span></div>`;
   if (s.type === 'toggle') return `<label class="field row"><input type="checkbox" name="${s.key}" ${v ? 'checked' : ''}><span style="margin:0">${esc(s.label)}</span></label>`;
   if (s.type === 'select') return `<label class="field"><span>${esc(s.label)}</span><select name="${s.key}">${s.options.map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
   if (s.type === 'text') return `<label class="field"><span>${esc(s.label)}</span><input name="${s.key}" value="${esc(v)}" maxlength="${s.max || 60}"></label>`;
@@ -1085,7 +1084,7 @@ function drawAgent(a) {
     <label class="row small" style="gap:8px"><input type="checkbox" data-nightarmed ${a.nightArmed !== false ? 'checked' : ''}> Armed in NIGHT mode <span class="muted">(untick for bedrooms and other rooms in use at night)</span></label>
     <div><h2 style="margin-bottom:8px">Mission</h2><div class="missions">${S.missions.map((x) => `<button class="mission" data-mission="${x.id}" aria-pressed="${x.id === a.mission}"><b>${esc(x.name)}</b><span>${esc(x.summary)}</span></button>`).join('')}</div></div>
     ${m?.settings.length ? `<form data-msettings><h2 style="margin-bottom:8px">${esc(m.name)} settings</h2>${m.settings.map((s) => settingField(s, a.settings?.[s.key] ?? s.default)).join('')}<button class="btn-primary">Send to Agent</button></form>` : ''}
-    <div class="row"><button class="btn-primary" data-liveview ${a.online ? '' : 'disabled'}>${icon('camera')}Live view</button><button data-place>${icon('pin')}${a.place ? 'Move on map' : 'Place on map'}</button><button data-cmd="find" ${a.online ? '' : 'disabled'}>${icon('target')}Locate</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>${icon('refresh')}Restart</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
+    <div class="row"><button data-place>${icon('pin')}${a.place ? 'Move on map' : 'Place on map'}</button><button class="btn-primary" data-cmd="find" ${a.online ? '' : 'disabled'}>${icon('target')}Identify</button><button data-cmd="reload" ${a.online ? '' : 'disabled'}>${icon('refresh')}Restart</button><span class="grow"></span><button class="btn-danger" data-remove>Disconnect</button></div>
   </div>`;
   diagAt = Date.now(); renderDiagnostics(box.querySelector('[data-diag]'), a, T.api);
   box.querySelectorAll('input[type=range]').forEach((r) => r.addEventListener('input', () => {
@@ -1104,7 +1103,7 @@ function drawAgent(a) {
     const f = e.target;
     const settings = {};
     for (const s of m.settings) {
-      if (s.type === 'grid') continue;
+      if (!hqEditable(s)) continue;
       const inp = f.elements[s.key];
       settings[s.key] = s.type === 'toggle' ? inp.checked : s.type === 'number' ? Number(inp.value) : inp.value;
     }
@@ -1119,8 +1118,6 @@ function drawAgent(a) {
       upsert(na); renderAgents(); drawAgent(na); toast(`${na.codename}: ${missionById(na.mission).name}`);
     } else if ('place' in b.dataset) {
       startPlacing(a);
-    } else if ('liveview' in b.dataset) {
-      openLive(a);
     } else if (b.dataset.cmd) {
       try { await T.api(`/agents/${a.id}/command`, { method: 'POST', body: { action: b.dataset.cmd } }); toast(b.dataset.cmd === 'find' ? `${a.codename} is flashing and beeping` : 'Restarting the Agent page'); } catch (x) { toast(x.message, { kind: 'err' }); }
     } else if ('remove' in b.dataset) {
@@ -1128,35 +1125,6 @@ function drawAgent(a) {
       try { await T.api(`/agents/${a.id}`, { method: 'DELETE' }); drawer?.close(); toast(`${a.codename} disconnected`); } catch (x) { toast(x.message, { kind: 'err' }); }
     }
   });
-}
-
-// ---------------- LIVE VIEW ----------------
-// Shows what an Agent's camera sees, only while this window is open. Nothing is recorded or saved,
-// and the Agent shows a red “LIVE VIEW” banner the whole time.
-let liveView = null;
-async function openLive(a) {
-  liveView?.close();
-  const s = sheet(`<div class="live">
-      <div class="live-frame"><img data-liveimg alt="Live camera view from ${esc(a.codename)}"><div class="live-wait mono" data-livewait>CONNECTING TO CAMERA…</div><span class="live-tag mono">● LIVE</span></div>
-      <p class="small muted">Live view is not recorded or saved. ${esc(a.codename)} shows a red “LIVE VIEW” banner while you watch. Closing this window stops it.</p>
-    </div>`, { title: `LIVE // ${a.codename}`, wide: true, onClose: () => { clearInterval(renew); liveView = null; T.api(`/agents/${a.id}/live`, { method: 'POST', body: { on: false } }).catch(() => {}); } });
-  liveView = { id: a.id, sheet: s, close: () => s.close(), last: Date.now() };
-  const go = (renewing) => T.api(`/agents/${a.id}/live`, { method: 'POST', body: { on: true, renew: renewing } }).catch((x) => { const w = s.body.querySelector('[data-livewait]'); if (w) { w.textContent = x.message; w.hidden = false; } });
-  go(false);
-  const renew = setInterval(() => {
-    go(true);
-    const w = s.body.querySelector('[data-livewait]');
-    if (w && Date.now() - liveView.last > 8000) { w.textContent = 'NO PICTURE — is the Agent’s screen on?'; w.hidden = false; }
-  }, 10000);
-}
-function liveFrame(m) {
-  if (!liveView || liveView.id !== m.agentId) return;
-  const img = liveView.sheet.body.querySelector('[data-liveimg]');
-  const w = liveView.sheet.body.querySelector('[data-livewait]');
-  if (m.error) { if (w) { w.textContent = m.error; w.hidden = false; } return; }
-  liveView.last = Date.now();
-  if (img) img.src = m.data;
-  if (w) w.hidden = true;
 }
 
 // ---------------- recruiting ----------------

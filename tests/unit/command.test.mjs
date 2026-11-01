@@ -23,7 +23,7 @@ test('terminal commands', () => {
   assert.deepEqual(p('find nightjar', ctx), { cmd: 'find', agentId: 'a1' });
   assert.deepEqual(p('find agent-02', ctx), { cmd: 'find', agentId: 'a2' });
   assert.deepEqual(p('find 1', ctx), { cmd: 'find', agentId: 'a1' });
-  assert.deepEqual(p('live kitchen', ctx), { cmd: 'live', agentId: 'a1' }, 'an Agent can be named by its room');
+  assert.equal(p('live kitchen', ctx).cmd, 'error', 'there is no live view (pictures never leave an Agent)');
   assert.equal(p('find bob', ctx).cmd, 'error');
   assert.deepEqual(p('speedtest'), { cmd: 'speedtest' });
   assert.deepEqual(p('standdown'), { cmd: 'standdown' });
@@ -54,7 +54,7 @@ test('voice phrasing', () => {
   assert.deepEqual(p('Stop the alarm'), { cmd: 'standdown' });
   assert.deepEqual(p('run a speed test'), { cmd: 'speedtest' });
   assert.deepEqual(p('where is kestrel', ctx), { cmd: 'find', agentId: 'a2' });
-  assert.deepEqual(p('show the camera in the kitchen', ctx), { cmd: 'live', agentId: 'a1' });
+  assert.match(p('show the camera in the kitchen', ctx).error, /never leave the Agent/);
   assert.deepEqual(p('show plan'), { cmd: 'map', view: 'plan' });
   assert.deepEqual(p('Tell everyone dinner is ready', ctx), { cmd: 'send', target: 'all', text: 'dinner is ready' });
   assert.deepEqual(p('what time is it'), { cmd: 'time' });

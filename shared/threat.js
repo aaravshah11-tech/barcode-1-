@@ -8,7 +8,7 @@
 //
 // Threat level:  GREEN all quiet · AMBER recent activity · RED an armed sensor went off
 
-export const ACTIVITY_KINDS = new Set(['motion', 'door', 'sound', 'light', 'knock']);
+export const ACTIVITY_KINDS = new Set(['motion', 'door', 'sound', 'light', 'knock', 'perimeter']);
 export const MODES = ['home', 'away', 'night', 'lockdown'];
 export const MODE_INFO = {
   home: { label: 'Home', summary: 'Occupied. Activity is logged; nothing raises an alarm.' },

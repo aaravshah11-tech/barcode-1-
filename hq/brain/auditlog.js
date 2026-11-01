@@ -32,9 +32,9 @@ export function describe(m, p, body = {}, result = null) {
   if (/^\/incidents\//.test(p)) return R('Incident updated', result?.ref || id(/\/incidents\/([^/]+)/), keys(body));
   if (p === '/users') return R('User added', String(body.username || '').toUpperCase(), body.role || '');
   if (/^\/users\//.test(p)) return R(m === 'DELETE' ? 'User removed' : 'User changed', decodeURIComponent(id(/\/users\/([^/]+)/)), keys(body));
-  if (/^\/agents\/[^/]+\/live$/.test(p)) return R(body.on ? 'Live view opened' : 'Live view closed', id(/\/agents\/([^/]+)/));
   if (/^\/agents\/[^/]+\/command$/.test(p)) return R('Agent command', id(/\/agents\/([^/]+)/), body.action || '');
   if (/^\/agents\/[^/]+\/(place|facing)$/.test(p)) return R('Agent position changed', id(/\/agents\/([^/]+)/));
+  if (p === '/agents/bulk') return R('Agents bulk action', '', `${body.action || ''} ${(body.ids || []).length} Agent(s)`);
   if (/^\/agents\//.test(p)) return R(m === 'DELETE' ? 'Agent removed' : 'Agent changed', id(/\/agents\/([^/]+)/), keys(body));
   if (p === '/pair') return R(body.role === 'viewer' ? 'Phone link code created' : 'Recruit code created');
   if (/^\/viewers\//.test(p)) return R('Linked phone removed', id(/\/viewers\/([^/]+)/));

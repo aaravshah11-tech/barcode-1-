@@ -3,7 +3,8 @@
 import { computeThreat, ACTIVITY_KINDS, MODES, MODE_INFO, validMode, isArmed } from '../../shared/threat.js';
 import { inQuietHours } from '../../shared/alert-rules.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
-import { MISSIONS, missionById, cleanSettings } from '../../shared/missions.js';
+import { MISSIONS, missionById, cleanSettings, armable } from '../../shared/missions.js';
+import { Fleet } from './fleet.js';
 import { sanitizeHouse, emptyHouse, pointInPolygon, siteZoneAt } from '../../shared/house.js';
 import { addDiagSample, batteryAlert } from '../../shared/diag.js';
 import { buildBriefing, dayStart } from '../../shared/briefing.js';
@@ -55,6 +56,7 @@ export class HQ extends Emitter {
     this.net = new NetSecurity({ hq: this, db }); // asset register, network alerts, health check
     this.reports = new Reports({ hq: this, db }); // SITREP, weekly and custom reports
     this.resilience = new Resilience({ hq: this, db }); // retention, backups, evidence, downtime
+    this.fleet = new Fleet({ hq: this, db }); // registry health, bulk actions, day/night profiles
     this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
@@ -66,9 +68,10 @@ export class HQ extends Emitter {
     this.analytics.start();
     this.reports.start();
     this.resilience.start();
+    this.fleet.start();
     return this;
   }
-  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); this.resilience.stop(); }
+  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); this.resilience.stop(); this.fleet.stop(); }
 
   /** A known phone or device appeared (a linked phone connected, or the network register saw it). */
   deviceSeen({ id, label, type = 'phone', owner = '' }) {
@@ -276,12 +279,14 @@ export class HQ extends Emitter {
     if (typeof status.rtt === 'number') clean.rtt = Math.max(0, Math.min(60000, Math.round(status.rtt))); // link round-trip time (ms)
     if (typeof status.since === 'number' && status.since <= this.now() + 60000) clean.since = status.since; // when the Agent page started
     if (typeof status.net === 'string') clean.net = status.net.slice(0, 12); // e.g. "4g", "wifi"
+    if (typeof status.version === 'string') clean.version = status.version.replace(/[^\w.-]/g, '').slice(0, 16); // the Agent page's SENTINEL version
     if (typeof status.downlink === 'number') clean.downlink = Math.max(0, Math.min(10000, Math.round(status.downlink * 10) / 10));
     const prevCharging = o.status?.charging, prevNet = o.status?.net;
     o.status = { ...o.status, ...clean, at: this.now() };
     const patch = { lastSeen: this.now() };
     if ('battery' in clean) patch.battery = clean.battery;
     if ('charging' in clean) patch.charging = clean.charging;
+    if (clean.version) patch.version = clean.version;
     // diagnostics history + low-battery alerts
     if ('battery' in clean || 'rtt' in clean || 'charging' in clean) {
       const all = this.diagAll();
@@ -328,10 +333,27 @@ export class HQ extends Emitter {
     for (const [k, v] of Object.entries(e.data || {})) if (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 60)) data[k] = v;
     // Whether this counts as an intrusion depends on the security mode (and, at night, on the Agent).
     const mode = this.settings().mode;
+    // Outside Agents can't raise anything until their privacy masks are confirmed on the Agent itself.
+    if (!armable(a) && kind !== 'tamper' && kind !== 'agent') return null;
     const armed = isArmed(mode, a, kind);
     const ev = this.logEvent({ kind, agentId, level: armed ? 'alert' : e.level === 'warn' ? 'warn' : 'info', message: `${agentLabel(a)} ${a.codename}: ${String(e.message || kind).slice(0, 140)}`, data: { ...data, ...(armed ? { armed: mode } : {}) } });
     if (armed && mode === 'lockdown') this.alarm({ reason: `INTRUSION — ${a.name || a.codename}` });
     return ev;
+  }
+  /**
+   * PERIMETER WATCH setup finished on the Agent: its privacy masks, ignore zones and area, and the operator's
+   * confirmation that nothing outside the masks is beyond the property. Only cell numbers arrive — never a picture.
+   */
+  agentSetup(agentId, b = {}) {
+    const a = this.db.agent(agentId);
+    if (!a || !missionById(a.mission)?.outside) return;
+    const settings = cleanSettings(a.mission, { ...a.settings, mask: b.mask, ignore: b.ignore ?? a.settings?.ignore, watch: b.watch ?? a.settings?.watch, masksConfirmed: b.confirmed === true });
+    this.db.updateAgent(agentId, { settings: { ...a.settings, ...settings }, calibratedAt: this.now() });
+    this.logEvent({ kind: 'agent', agentId, message: settings.masksConfirmed
+      ? `${agentLabel(a)} ${a.codename}: privacy masks confirmed (${settings.mask.length} of 48 squares masked) — PERIMETER WATCH armed`
+      : `${agentLabel(a)} ${a.codename}: privacy masks not confirmed — PERIMETER WATCH not armed` });
+    this.command(agentId, 'configure', { mission: a.mission, settings: cleanSettings(a.mission, { ...a.settings, ...settings }) });
+    this.pushAgent(agentId);
   }
   /** Agents can only change their own on-screen zone choices (no images involved). */
   agentSetGrid(agentId, key, cells) {
@@ -341,15 +363,6 @@ export class HQ extends Emitter {
     const settings = cleanSettings(a.mission, { ...a.settings, [key]: cells });
     this.db.updateAgent(agentId, { settings: { ...a.settings, ...settings }, calibratedAt: this.now() });
     this.pushAgent(agentId);
-  }
-
-  /** LIVE VIEW: a camera picture goes straight to the open dashboards. It is never stored or logged. */
-  agentFrame(agentId, f) {
-    const msg = typeof f.data === 'string' && f.data.startsWith('data:image/jpeg;base64,') && f.data.length < 96000 ? { t: 'frame', agentId, data: f.data }
-      : typeof f.error === 'string' ? { t: 'frame', agentId, error: f.error.slice(0, 200) } : null;
-    if (!msg) return;
-    const text = JSON.stringify(msg);
-    for (const d of this.dashboards) d.send(text); // dashboards only — not INTEL SCREEN Agents
   }
 
   // ---------- comms: messages to Agents ----------
@@ -430,9 +443,20 @@ export class HQ extends Emitter {
     if (typeof patch.nightArmed === 'boolean') changes.nightArmed = patch.nightArmed;
     const mission = patch.mission && missionById(patch.mission) ? patch.mission : a.mission;
     if (mission !== a.mission) changes.mission = mission;
-    if (patch.settings || mission !== a.mission) changes.settings = { ...a.settings, ...cleanSettings(mission, { ...a.settings, ...(patch.settings || {}) }) };
+    if (patch.settings || mission !== a.mission) {
+      // privacy masks and their confirmation can only be set on the Agent (it sees the picture; HQ never does)
+      const asked = { ...(patch.settings || {}) };
+      for (const d of missionById(mission)?.settings || []) if (d.type === 'grid' && d.key === 'mask' || d.agentOnly) delete asked[d.key];
+      changes.settings = { ...a.settings, ...cleanSettings(mission, { ...a.settings, ...asked }) };
+      if (missionById(mission)?.outside && asked.camera && asked.camera !== (a.settings?.camera || 'environment')) { changes.settings.mask = []; changes.settings.masksConfirmed = false; }
+    }
     if (changes.mission) changes.missionLog = [...(a.missionLog || [{ mission: a.mission, at: a.recruitedAt || a.createdAt || this.now() }]), { mission, at: this.now() }].slice(-50);
     if (patch.settings && JSON.stringify(changes.settings) !== JSON.stringify(a.settings)) changes.calibratedAt = this.now(); // sensitivity / zones adjusted
+    if (patch.profiles && typeof patch.profiles === 'object') {
+      const pick = (m) => (missionById(m) ? m : a.mission);
+      changes.profiles = { on: !!patch.profiles.on, day: pick(patch.profiles.day), night: pick(patch.profiles.night) };
+      changes.profileApplied = null;
+    }
     if (typeof patch.notes === 'string') changes.notes = patch.notes.replace(/[<>]/g, '').slice(0, 2000);
     if (patch.calibrated === true) changes.calibratedAt = this.now();
     const b = this.db.updateAgent(id, changes);

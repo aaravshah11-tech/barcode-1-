@@ -182,11 +182,6 @@ h3.sub { font: 600 .6rem var(--sans); letter-spacing: .1em; text-transform: uppe
 .keys-table td:first-child { width: 120px; white-space: nowrap; }
 
 /* Live view */
-.live-frame { position: relative; background: #000; border: 1px solid var(--line-2); border-radius: var(--radius); overflow: hidden; aspect-ratio: 4 / 3; display: grid; place-items: center; }
-.live-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.live-frame img:not([src]) { display: none; }
-.live-wait { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); letter-spacing: .1em; }
-.live-tag { position: absolute; top: 8px; left: 10px; color: #fff; background: var(--red); padding: 1px 6px; font-weight: 600; letter-spacing: .12em; font-size: .7rem; }
 
 /* command palette */
 .palette-backdrop { position: fixed; inset: 0; z-index: 3200; background: rgba(5, 8, 12, .55); display: grid; justify-items: center; align-items: start; padding-top: calc(var(--cb) + 12vh); }
@@ -823,3 +818,20 @@ input.otp { letter-spacing: .4em; font-size: 1.2rem; }
 .builder .b-outside { margin-left: 10px; border-color: rgba(79, 163, 122, .45) !important; }
 .hist-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .hist-list li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+
+/* ---------- v3 phase 4: fleet registry ---------- */
+.fleet-sum { padding: 12px 14px; display: grid; gap: 6px; margin-bottom: 12px; }
+.fsum-row { display: flex; gap: 16px; align-items: center; }
+.fsum-row .kfig small { font-size: .4em; color: var(--muted); }
+.fsum-lines { margin: 0; padding-left: 18px; color: var(--amber); }
+.bulk { gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--line); background: var(--bg-2); }
+.bulk label { display: flex; gap: 6px; align-items: center; }
+.reg-table td.nowrap { white-space: nowrap; }
+.batbar.low i { background: var(--red); }
+.batbar { display: inline-block; vertical-align: middle; }
+.health { font: 500 .82rem var(--mono); }
+.health small { font: 600 .58rem var(--sans); letter-spacing: .12em; margin-left: 4px; }
+.health.good { color: var(--ok); } .health.fair { color: var(--amber); } .health.poor { color: var(--red); }
+.tag-warn { font: 600 .58rem var(--sans); letter-spacing: .1em; color: var(--amber); border: 1px solid rgba(201, 162, 39, .5); padding: 0 4px; margin-left: 4px; }
+.profile-form { gap: 12px; flex-wrap: wrap; align-items: center; }
+.profile-form label { display: flex; gap: 6px; align-items: center; }
