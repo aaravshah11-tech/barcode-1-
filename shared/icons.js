@@ -23,6 +23,7 @@ const P = {
   door: '<path d="M6 21V3h10v18"/><path d="M3 21h18"/><circle cx="13" cy="12" r=".8"/>',
   window: '<rect x="4" y="4" width="16" height="16"/><path d="M12 4v16M4 12h16"/>',
   image: '<rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/>',
+  fence: '<path d="M5 21V8l2-3 2 3v13M15 21V8l2-3 2 3v13M3 11h18M3 17h18"/>',
   cube: '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
   ruler: '<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',

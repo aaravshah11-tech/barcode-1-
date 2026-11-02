@@ -28,6 +28,7 @@ import { createIncidents } from './views/incidents.js';
 import { createAnalysis } from './views/analysis.js';
 import { createCoverage } from './views/coverage.js';
 import { createRegister } from './views/register.js';
+import { createPerimeter } from './views/perimeter.js';
 import { createNetwork } from './views/network.js';
 import { createReports } from './views/reports.js';
 import { createAccess, twoStepSheet } from './views/access.js';
@@ -378,6 +379,8 @@ registerView({ id: 'analysis', label: 'Rules and patterns', icon: 'pulse', paren
 const coverageView = createCoverage({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'coverage', label: 'Coverage', icon: 'shield', parent: 'agents', order: 2, render: (root) => coverageView.render(root) });
 const registerViewer = createRegister({ S, api: (...a) => T.api(...a) });
+const perimeterView = createPerimeter({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'perimeter', label: 'Perimeter', icon: 'fence', order: 5, render: (root) => perimeterView.render(root) });
 registerView({ id: 'agents', label: 'Agents', icon: 'agent', order: 6, tabs: true });
 registerView({ id: 'register', label: 'Registry', icon: 'agent', parent: 'agents', order: 1, render: (root) => registerViewer.render(root) });
 const networkView = createNetwork({ S, api: (...a) => T.api(...a) });
@@ -449,8 +452,8 @@ function renderStatus() {
       <span class="sb"><i>Agents</i><b class="mono" data-sbagents></b></span>
       <span class="sb"><i>Unread</i><b class="mono" data-sbunread></b></span>
       <span class="sb"><i>Local</i><b class="mono" data-sblocal></b></span>
-      <span class="sb hide-phone"><i>UTC</i><b class="mono" data-sbutc></b></span>
-      <span class="sb hide-phone"><i>Session</i><b class="mono" data-sbsess></b></span>
+      <span class="sb hide-phone sb-utc"><i>UTC</i><b class="mono" data-sbutc></b></span>
+      <span class="sb hide-phone sb-sess"><i>Session</i><b class="mono" data-sbsess></b></span>
       <span class="sb sr-only"><i>Role</i><b data-sbrole></b></span>`;
   }
   const set = (k, v) => { const el = sb.querySelector(`[data-${k}]`); if (el && el.innerHTML !== v) el.innerHTML = v; };
@@ -688,6 +691,7 @@ function onMsg(msg) {
     addEvent(msg.event); renderStats();
     if (!timeline.replaying) { map3d?.event(msg.event); const a = S.agents.find((x) => x.id === msg.event.agentId); if (a?.place?.roomId && ACTIVITY_KINDS.has(msg.event.kind)) planFlash(a.place.roomId, msg.event.level === 'alert'); }
     timeline.liveEvent(msg.event);
+    if (S.view === 'perimeter' && ['perimeter', 'door', 'knock', 'motion'].includes(msg.event.kind)) { clearTimeout(S.perT); S.perT = setTimeout(() => perimeterView.refresh(), 800); }
     if (S.tlEvents) S.tlEvents.unshift(msg.event);
     clearTimeout(S.floorT); S.floorT = setTimeout(renderFloor, 400);
     if (['correlation', 'anomaly'].includes(msg.event.kind) && S.view === 'analysis') analysis.refresh();
@@ -706,7 +710,7 @@ function onMsg(msg) {
   else if (msg.t === 'shift') shiftView.refresh();
   else if (msg.t === 'reload') { toast(msg.reason || 'HQ changed — reloading'); setTimeout(() => location.reload(), 1200); }
   else if (msg.t === 'comms') { S.messages = msg.messages; renderComms(); }
-  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); map3d?.setWeather(S.weather?.kind || null); renderPerimeterMini(S); }
+  else if (msg.t === 'weather') { S.weather = msg.weather; renderIntel(); world.update(); map3d?.setWeather(S.weather?.kind || null); renderPerimeterMini(S); perimeterView.weather(); }
   else if (msg.t === 'house') { S.house = msg.house; refreshAgentViews(); renderPlan(); map3d?.setHouse(S.house, true); map3d?.setAgents(S.agents); renderFloorButtons(); world.update(true); }
 }
 let agents3dTimer = null;

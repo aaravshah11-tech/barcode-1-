@@ -863,4 +863,39 @@ input.otp { letter-spacing: .4em; font-size: 1.2rem; }
 .sev { text-transform: uppercase; }
 @media (max-width: 760px) { .gf-grid { grid-template-columns: 1fr 1fr; } }
 .onwatch-btn { white-space: nowrap; padding: 4px 10px; font-size: .7rem; letter-spacing: .06em; align-self: center; }
-@media (max-width: 1600px) { .strip-cells > :nth-child(8) { display: none; } } /* the session timer gives way first */
+@media (max-width: 1600px) { .strip-cells .sb-sess { display: none; } } /* the session timer gives way first… */
+@media (max-width: 1480px) { .strip-cells .sb-utc { display: none; } } /* …then UTC */
+
+/* ---------- v3 phase 6: Perimeter ---------- */
+.per-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr); gap: 12px; align-items: start; }
+.per-zones { display: grid; gap: 12px; }
+.zone-card { padding: 12px 14px; display: grid; gap: 8px; }
+.zstate { display: inline-flex; gap: 6px; align-items: center; font: 600 .62rem var(--sans); letter-spacing: .12em; color: var(--muted); }
+.zstate.z-warn { color: var(--amber); } .zstate.z-alert { color: var(--orange); } .zstate.z-on { color: var(--ok); }
+.zcounts { display: flex; gap: 14px; flex-wrap: wrap; font-size: .72rem; color: var(--muted); }
+.zcounts b { display: block; font-size: 1.3rem; font-weight: 300; color: var(--text); }
+.per-visits, .per-wx { padding: 12px 14px; display: grid; gap: 8px; }
+.visit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.visit { display: grid; grid-template-columns: 48px 1fr; gap: 8px; padding: 6px 8px; border-left: 2px solid var(--line-2); background: rgba(255, 255, 255, .02); }
+.visit small { display: block; color: var(--muted); }
+.visit.v-ok { border-left-color: var(--ok); } .visit.v-warn { border-left-color: var(--amber); }
+.wx-now { display: flex; gap: 14px; align-items: center; }
+.wx-temp { font-size: 3rem; font-weight: 300; line-height: 1; }
+.wx-now small { display: block; color: var(--muted); }
+.wx-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: .8rem; }
+.wx-kv dt { color: var(--muted); font-family: var(--sans); font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; align-self: center; }
+.wx-kv dd { margin: 0; }
+.wx-hours { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 86px; align-items: end; }
+.wx-hours div { display: grid; grid-template-rows: 1fr auto auto; height: 100%; text-align: center; font-size: .62rem; }
+.wx-hours i { align-self: end; background: rgba(111, 168, 220, .45); width: 100%; }
+.wx-hours small { color: var(--dim); }
+.radar-grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); overflow: hidden; aspect-ratio: 1; }
+.radar-grid div { position: relative; aspect-ratio: 1; }
+.radar-grid img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.radar-grid img:first-child { filter: grayscale(1) invert(.92) brightness(.75) contrast(.9); }
+.radar-grid img.rain { opacity: .85; }
+.radar-pin { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid var(--text); border-radius: 50%; background: var(--red); }
+.per-set { margin-top: 12px; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 1100px) { .per-grid { grid-template-columns: 1fr 1fr; } .per-wx { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .per-grid { grid-template-columns: minmax(0, 1fr); } }
+.per-set select { width: auto; display: inline-block; margin-left: 6px; padding: 4px 8px; }

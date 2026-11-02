@@ -5,6 +5,7 @@ import { inQuietHours } from '../../shared/alert-rules.js';
 import { randomToken, sha256, newId, pairCode, normalizeCode, signCommand, pickCodename, agentLabel } from '../../shared/crypto.js';
 import { MISSIONS, missionById, cleanSettings, armable } from '../../shared/missions.js';
 import { Fleet } from './fleet.js';
+import { Perimeter } from './perimeter.js';
 import { sanitizeHouse, emptyHouse, pointInPolygon, siteZoneAt } from '../../shared/house.js';
 import { addDiagSample, batteryAlert } from '../../shared/diag.js';
 import { buildBriefing, dayStart } from '../../shared/briefing.js';
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS = {
   digestOn: true, digestTime: '08:00', // the daily digest
   staleMinutes: 15, // warn when an Agent hasn't reported for this long
   notifyMin: 'ALERT', // browser notifications from this severity up
+  garageOpenMin: 15, // warn when the garage / shed door has been open this long
 };
 const time = (v, d) => (/^\d{2}:\d{2}$/.test(String(v)) ? String(v) : d);
 const THEMES = ['graphite', 'navy'];
@@ -61,6 +63,7 @@ export class HQ extends Emitter {
     this.reports = new Reports({ hq: this, db }); // SITREP, weekly and custom reports
     this.resilience = new Resilience({ hq: this, db }); // retention, backups, evidence, downtime
     this.fleet = new Fleet({ hq: this, db }); // registry health, bulk actions, day/night profiles
+    this.perimeter = new Perimeter({ hq: this, db }); // garage left open, lingering at the front, visits
     this.devicesSeen = new Map(); // device id -> last time it appeared
   }
 
@@ -74,9 +77,10 @@ export class HQ extends Emitter {
     this.reports.start();
     this.resilience.start();
     this.fleet.start();
+    this.perimeter.start();
     return this;
   }
-  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); this.resilience.stop(); this.fleet.stop(); }
+  stop() { this.timers.forEach(clearInterval); this.timers = []; this.analytics.stop(); this.reports.stop(); this.resilience.stop(); this.fleet.stop(); this.perimeter.stop(); }
 
   /** A known phone or device appeared (a linked phone connected, or the network register saw it). */
   deviceSeen({ id, label, type = 'phone', owner = '' }) {
@@ -125,6 +129,7 @@ export class HQ extends Emitter {
     if ('digestOn' in patch) s.digestOn = !!patch.digestOn;
     if ('digestTime' in patch) s.digestTime = time(patch.digestTime, s.digestTime || '08:00');
     if ('staleMinutes' in patch) s.staleMinutes = [5, 15, 30, 60, 120].includes(Number(patch.staleMinutes)) ? Number(patch.staleMinutes) : 15;
+    if ('garageOpenMin' in patch) s.garageOpenMin = [5, 10, 15, 30, 60].includes(Number(patch.garageOpenMin)) ? Number(patch.garageOpenMin) : 15;
     if ('notifyMin' in patch) s.notifyMin = ['ADVISORY', 'ALERT', 'CRITICAL'].includes(patch.notifyMin) ? patch.notifyMin : 'ALERT';
     if ('autoLockMin' in patch) s.autoLockMin = [0, 5, 15, 30, 60].includes(Number(patch.autoLockMin)) ? Number(patch.autoLockMin) : 15;
     this.db.setSetting('hq', s);

@@ -265,6 +265,7 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/digest' && m === 'POST') return hq.ops.digestNow();
     if (p === '/register' && m === 'GET') return hq.fleet.rows();
     if (p === '/fleet/summary' && m === 'GET') return hq.fleet.summary();
+    if (p === '/perimeter' && m === 'GET') return hq.perimeter.view();
     if (p === '/agents/bulk' && m === 'POST') return hq.fleet.bulk(body);
     mm = p.match(/^\/agents\/([\w-]{1,64})\/diag$/);
     if (mm && m === 'GET') { const d = hq.agentDiag(mm[1]); if (!d) throw fail(404, 'No such Agent.'); return d; }

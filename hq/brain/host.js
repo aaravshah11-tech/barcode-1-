@@ -1,6 +1,6 @@
 // HQ's side of the link: waits for Agents and linked phones to call, checks who they are,
 // and passes their messages to HQ's brain. (Same job the old server's WebSocket hub did.)
-import { loadPeerJs, peerOptions, parse, signalOverride } from '../../shared/link.js';
+import { loadPeerJs, peerOptions, parse, signalOverride, sendText, makeJoiner } from '../../shared/link.js';
 import { pairCode } from '../../shared/crypto.js';
 
 const ID_KEY = 'sentinel.hq.id';
@@ -54,7 +54,8 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
     conns.add(conn);
     let role = null, me = null, conn2 = null, lastMsg = Date.now(), dash = null, session = null, rttTimer = null;
     const unlockDash = () => { hq.dashboards.add(dash); send(hq.snapshot()); };
-    const send = (obj) => { if (conn.open) try { conn.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
+    const send = (obj) => { if (conn.open) try { sendText(conn, typeof obj === 'string' ? obj : JSON.stringify(obj)); } catch { /* closing */ } };
+    const join = makeJoiner();
     const close = () => { try { conn.close(); } catch { /* ignore */ } };
     const deny = setTimeout(() => { if (!role) close(); }, 10000);
     const watch = setInterval(() => {
@@ -66,7 +67,7 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
     conn.on('data', async (raw) => {
       lastMsg = Date.now();
       if (typeof raw === 'string' && raw.length > MAX_MSG) return;
-      const msg = parse(raw);
+      const msg = join(parse(raw));
       if (!msg || typeof msg !== 'object') return;
       if (msg.t === 'ping') return send({ t: 'pong' });
 

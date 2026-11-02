@@ -34,6 +34,37 @@ export function loadPeerJs() {
   return loading;
 }
 
+// The connection drops any single message over about 16 KB, so bigger ones (the dashboard snapshot, a house
+// plan) are sent in numbered pieces and joined again on arrival. The link is reliable and in order.
+const PART = 6000, LIMIT = 15000; // LIMIT: the size after the connection's own JSON escaping
+const wire = (t) => JSON.stringify(t).length;
+export function sendText(conn, text) {
+  if (wire(text) <= LIMIT) return conn.send(text);
+  const id = Math.random().toString(36).slice(2, 10), pieces = [];
+  for (let at = 0; at < text.length;) {
+    let size = PART;
+    while (size > 200 && wire(JSON.stringify({ t: '_part', id, i: 99999, n: 99999, d: text.slice(at, at + size) })) > LIMIT) size = Math.floor(size / 2);
+    pieces.push(text.slice(at, at + size));
+    at += size;
+  }
+  pieces.forEach((d, i) => conn.send(JSON.stringify({ t: '_part', id, i, n: pieces.length, d })));
+}
+/** Returns join(msg): the whole message once every piece has arrived (null while waiting); other messages pass straight through. */
+export function makeJoiner(max = 1024 * 1024) {
+  const parts = new Map();
+  return (msg) => {
+    if (msg?.t !== '_part') return msg;
+    const n = Number(msg.n), i = Number(msg.i);
+    if (!(n > 1 && n <= Math.ceil(max / 200) && Number.isInteger(i) && i >= 0 && i < n) || typeof msg.d !== 'string' || msg.d.length > PART) return null;
+    let p = parts.get(msg.id);
+    if (!p) { if (parts.size > 8) parts.clear(); p = { n, got: 0, d: new Array(n) }; parts.set(msg.id, p); }
+    if (p.n !== n) return null;
+    if (p.d[i] == null) { p.d[i] = msg.d; p.got++; }
+    if (p.got < p.n) return null;
+    parts.delete(msg.id);
+    return parse(p.d.join(''));
+  };
+}
 export const parse = (data) => { try { return typeof data === 'string' ? JSON.parse(data) : data; } catch { return null; } };
 
 /**
@@ -63,7 +94,8 @@ export async function dial(hqId, { onOpen, onMessage, onClose, timeout = 15000 }
     if (closed) return;
     conn = client.connect(hqId, { reliable: true, serialization: 'json' });
     conn.on('open', () => { clearTimeout(timer); onOpen?.(); });
-    conn.on('data', (d) => { const m = parse(d); if (m) onMessage?.(m); });
+    const join = makeJoiner();
+    conn.on('data', (d) => { const m = join(parse(d)); if (m) onMessage?.(m); });
     conn.on('close', () => done('Connection closed'));
     conn.on('error', () => done('Connection error'));
     conn.on('iceStateChanged', (s) => { if (s === 'failed' || s === 'closed') done(`Link ${s}`); });
@@ -71,7 +103,7 @@ export async function dial(hqId, { onOpen, onMessage, onClose, timeout = 15000 }
   timer = setTimeout(() => done('HQ didn’t answer in time'), timeout);
   if (client.open) go(); else client.once('open', go);
   return {
-    send(obj) { if (closed || !conn?.open) return false; try { conn.send(JSON.stringify(obj)); return true; } catch { return false; } },
+    send(obj) { if (closed || !conn?.open) return false; try { sendText(conn, JSON.stringify(obj)); return true; } catch { return false; } },
     close() { done('closed'); },
     get open() { return !closed && !!conn?.open; },
   };

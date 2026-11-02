@@ -551,7 +551,7 @@ function findMe() {
   setTimeout(stop, 12000);
 }
 
-window.__agent = { get mission() { return mission; }, get connected() { return connected; }, get standingBy() { return standingBy; }, get lastCmd() { return lastCmd; }, verify, sent: sentLog,
+window.__agent = { get mission() { return mission; }, get connected() { return connected; }, get standingBy() { return standingBy; }, get lastState() { return lastState; }, get lastCmd() { return lastCmd; }, verify, sent: sentLog,
   testTimes(pause, retry) { OFFLINE_PAUSE = pause; OFFLINE_RETRY = retry; }, sleep }; // for the automated tests
 classificationBanners(undefined, { top: false }); // the privacy banner owns the top edge
 init();

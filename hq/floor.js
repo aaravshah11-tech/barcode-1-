@@ -4,23 +4,14 @@ import { esc, $, dayClock } from '../shared/ui.js';
 import { MODE_INFO, ACTIVITY_KINDS } from '../shared/threat.js';
 import { missionById } from '../shared/missions.js';
 import { SEV_RANK, ageText } from '../shared/triage.js';
+import { zoneOf } from '../shared/perimeter.js';
 
 const H = 3600000;
 const SEV_LABEL = { CRITICAL: 'Critical', ALERT: 'Alert', ADVISORY: 'Advisory', INFO: 'Info' };
 export const sevWord = (s) => SEV_LABEL[s] || s;
 const ago = (ms) => { const m = Math.floor(ms / 60000); return m < 1 ? '<1m' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
 
-/** Where an Agent is: a room inside, or an outside zone ('front' | 'garden' | 'garage'). */
-export function zoneOf(agent, house) {
-  const p = agent?.place;
-  if (!p) return null;
-  if (p.zone) return p.zone; // outside zone (set in the house builder / PERIMETER WATCH)
-  for (const f of house?.floors || []) {
-    const r = f.rooms.find((x) => x.id === p.roomId);
-    if (r) return /garage|shed|workshop/i.test(r.name) ? 'garage' : 'inside';
-  }
-  return 'inside';
-}
+export { zoneOf } from '../shared/perimeter.js';
 /** Which Activity Timeline lane an event belongs on. */
 export function laneOf(ev, agents = [], house = null) {
   if (ev.kind === 'device' || ev.kind === 'network' || (ev.kind === 'system' && /^Internet connection/.test(ev.message || ''))) return 'network';
