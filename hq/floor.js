@@ -63,11 +63,11 @@ export function renderPicture(S, override = null) {
   const box = $('[data-picture]');
   if (!box) return;
   const p = pictureSummary({ alerts: S.alerts, events: S.events, agents: S.agents, mode: S.settings.mode, now: Date.now() });
-  const text = override?.text || p.text;
+  const text = (override?.text || p.text).replace(/\s*\[(ALT-\d{6}|INC-\d{4}-\d{4}|EVT-\d+)\]/g, ''); // evidence links live in the Analyst view
   box.innerHTML = `<div class="pic-state m-${esc(S.settings.mode || 'home')}"><span class="kfig">${esc(p.state)}</span><span class="small muted">${esc(MODE_INFO[S.settings.mode || 'home']?.summary || '')}</span></div>
     <p class="pic-text">${esc(text)}</p>
     <div class="pic-foot"><span><span class="lbl">Last significant</span><small>${p.significant ? `${esc(dayClock(p.significant.ts))} · ${esc(p.significant.title)}` : 'None recorded'}</small></span><b class="mono kfig-sm" data-picsince="${p.significant?.ts || ''}">${p.since != null ? ago(p.since) : '—'}</b></div>
-    <div class="lbl pic-src">${override?.text ? `Analyst · ${esc(dayClock(override.at))}` : 'Automatic summary'}</div>`;
+    <div class="lbl pic-src">${override?.text && !override.auto ? `Analyst · ${esc(dayClock(override.at))}` : 'Automatic summary'}</div>`;
 }
 
 export function renderTriageSummary(S) {

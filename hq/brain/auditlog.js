@@ -34,6 +34,7 @@ export function describe(m, p, body = {}, result = null) {
   if (/^\/users\//.test(p)) return R(m === 'DELETE' ? 'User removed' : 'User changed', decodeURIComponent(id(/\/users\/([^/]+)/)), keys(body));
   if (/^\/agents\/[^/]+\/command$/.test(p)) return R('Agent command', id(/\/agents\/([^/]+)/), body.action || '');
   if (/^\/agents\/[^/]+\/(place|facing)$/.test(p)) return R('Agent position changed', id(/\/agents\/([^/]+)/));
+  if (/^\/analyst\/(ask|search)$/.test(p)) return R(p.endsWith('search') ? 'Log searched' : 'Analyst asked', String(body.kind || 'question'), String(body.q || body.ref || '').slice(0, 80));
   if (p === '/graderules/test') return R('Grading rule tested', body.kind || '');
   if (/^\/graderules\//.test(p)) return R(m === 'DELETE' ? 'Grading rule deleted' : 'Grading rule saved', body.name || id(/\/graderules\/([^/]+)/));
   if (p === '/snoozes') return R('Alerts snoozed', body.label || body.value || '', `${body.minutes || 60} min`);

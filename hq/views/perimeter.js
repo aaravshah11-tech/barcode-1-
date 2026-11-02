@@ -34,7 +34,7 @@ export function createPerimeter(ctx) {
     draw();
   }
   function draw() {
-    if (!root?.isConnected || !data) return;
+    if (!root?.isConnected || !data || !$('[data-pzones]', root)) return;
     $('[name=garageOpenMin]', root).value = String(data.garageOpenMin);
     $('[data-pzones]', root).innerHTML = data.zones.map((z) => {
       const open = z.zone === 'garage' ? data.open : [];

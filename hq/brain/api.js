@@ -266,6 +266,15 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/register' && m === 'GET') return hq.fleet.rows();
     if (p === '/fleet/summary' && m === 'GET') return hq.fleet.summary();
     if (p === '/perimeter' && m === 'GET') return hq.perimeter.view();
+    // ----- the Analyst (read-only; it can only propose) -----
+    if (p === '/analyst/status' && m === 'GET') return hq.analyst.status(url.searchParams.get('force') === '1');
+    if (p === '/analyst/notes' && m === 'GET') return hq.analyst.notes(url.searchParams.get('kind'));
+    if (p === '/analyst/search' && m === 'POST') return hq.analyst.plainSearch(String(body.q || '').slice(0, 200));
+    if (p === '/analyst/ask' && m === 'POST') {
+      const kind = ['question', 'picture', 'sitrep', 'incident', 'anomaly', 'tuning'].includes(body.kind) ? body.kind : 'question';
+      const r = await hq.analyst.ask(String(body.q || '').slice(0, 500), { kind, ref: body.ref ? String(body.ref).slice(0, 20) : null });
+      return kind === 'question' ? r : hq.analyst.note(kind, r);
+    }
     if (p === '/agents/bulk' && m === 'POST') return hq.fleet.bulk(body);
     mm = p.match(/^\/agents\/([\w-]{1,64})\/diag$/);
     if (mm && m === 'GET') { const d = hq.agentDiag(mm[1]); if (!d) throw fail(404, 'No such Agent.'); return d; }

@@ -29,6 +29,7 @@ import { createAnalysis } from './views/analysis.js';
 import { createCoverage } from './views/coverage.js';
 import { createRegister } from './views/register.js';
 import { createPerimeter } from './views/perimeter.js';
+import { createAnalyst } from './views/analyst.js';
 import { createNetwork } from './views/network.js';
 import { createReports } from './views/reports.js';
 import { createAccess, twoStepSheet } from './views/access.js';
@@ -203,7 +204,7 @@ function launch() {
 }
 
 function apply(st) {
-  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || []; S.weather = st.weather ?? S.weather ?? null;
+  S.agents = st.agents; S.events = st.events; S.threat = st.threat; S.settings = st.settings; S.missions = st.missions; S.info = st.info || {}; S.house = st.house || S.house; S.net = st.net || S.net; S.messages = st.messages || S.messages || []; S.weather = st.weather ?? S.weather ?? null; if (st.picture) S.analystPicture = { text: st.picture.text, at: st.picture.ts, auto: st.picture.auto };
   S.alerts = st.alerts || S.alerts || []; S.incidents = st.incidents || S.incidents || [];
 }
 
@@ -265,7 +266,8 @@ function showView(id, force = false) {
   const root = $('[data-viewroot]');
   root.dataset.view = v.id;
   root.innerHTML = '';
-  let host = root;
+  // each screen draws into its own box, so a screen you have left knows it is no longer showing
+  let host = root.appendChild(Object.assign(document.createElement('div'), { className: 'viewhost' }));
   if (v.parent) {
     const parent = VIEWS.find((x) => x.id === v.parent);
     root.innerHTML = `<div class="subnav" role="tablist" aria-label="${esc(parent.label)}"><span class="lbl">${esc(parent.label)}</span>${childrenOf(v.parent).map((c) => `<button role="tab" data-view="${c.id}" aria-selected="${c.id === v.id}">${esc(c.label)}</button>`).join('')}</div><div class="subroot" data-subroot></div>`;
@@ -386,6 +388,8 @@ registerView({ id: 'register', label: 'Registry', icon: 'agent', parent: 'agents
 const networkView = createNetwork({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'network', label: 'Network', icon: 'network', order: 7, render: (root) => networkView.render(root) });
 const reportsView = createReports({ S, api: (...a) => T.api(...a) });
+const analystView = createAnalyst({ S, api: (...a) => T.api(...a), openIncident: (id) => openIncident(id), showAlert: (id) => { triage.select(id); showView('triage'); } });
+registerView({ id: 'analyst', label: 'Analyst', icon: 'analyst', order: 8, render: (root) => analystView.render(root) });
 registerView({ id: 'reports', label: 'Briefings', icon: 'doc', order: 9, render: (root) => reportsView.render(root) });
 const shiftView = createShift({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'records', label: 'Records', icon: 'audit', order: 10, tabs: true });
@@ -419,7 +423,7 @@ function scrub(t) {
   scrubbing = 'starting'; S.scrubTo = t;
   timeline.startWindow({ from: Date.now() - 86400000, to: Date.now(), label: 'Timeline' }).then((ok) => { scrubbing = ok ? 'on' : null; if (ok) { timeline.play(false); timeline.seek(S.scrubTo); } });
 }
-function askAnalyst(q) { analystPanel?.(q); }
+function askAnalyst(q) { if (analystPanel) return analystPanel(q); showView('analyst'); setTimeout(() => analystView.ask(q), 50); }
 let analystPanel = null;
 export const setAnalystPanel = (f) => { analystPanel = f; };
 function renderQueue() {
@@ -560,6 +564,7 @@ async function onClick(e) {
   if ('replay' in b.dataset) { if (timeline.replaying) timeline.stopReplay(); else timeline.startReplay(0); return; }
   if ('heat' in b.dataset) { timeline.setHeat(!S.heat.on); return; }
   if ('setloc' in b.dataset) { openSettings(S, { onChange: (s) => { S.settings = s; settingsChanged(); } }); setTimeout(() => $('[data-locsearch] input')?.focus(), 50); return; }
+  if (b.dataset.anask) { showView('analyst'); setTimeout(() => analystView.ask('', b.dataset.anask, b.dataset.anref), 50); return; }
   if ('onwatch' in b.dataset) { S.onWatch = !S.onWatch; setOnWatch(S.onWatch); S.onWatchChanged(); toast(S.onWatch ? 'On Watch — this screen stays awake; notifications from Advisory up' : 'Off watch'); return; }
   if ('mute' in b.dataset) { const p = sfxPrefs(); setSfx({ muted: !(p.muted || !p.volume) ? true : false, volume: p.volume || 0.5 }); return; }
   if ('fullscreen' in b.dataset) { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => toast('Full screen isn’t allowed here.')); return; }
@@ -698,6 +703,10 @@ function onMsg(msg) {
   }
   else if (msg.t === 'threat') { S.threat = msg.threat; renderTop(); renderPeople(); }
   else if (msg.t === 'alert') { upsertBy(S.alerts, msg.alert); renderQueue(); triage.draw(); for (const v of VIEWS) v.badge?.(); if (unlocked) notifyAlert(msg.alert, S); }
+  else if (msg.t === 'analyst') {
+    if (msg.note.kind === 'picture') { S.analystPicture = { text: msg.note.text, at: msg.note.ts, auto: msg.note.auto }; renderPicture(S, S.analystPicture); const l = $('[data-asklast]'); if (l) l.textContent = msg.note.text.replace(/\s*\[[^\]]+\]/g, ''); }
+    analystView.onNote(msg.note);
+  }
   else if (msg.t === 'snoozes') { S.snoozes = msg.snoozes; triage.drawAux?.(); }
   else if (msg.t === 'digest') { toast(`${msg.digest.title}: ${msg.digest.lines[0]}`); notifyDigest(msg.digest); }
   else if (msg.t === 'incident') { upsertBy(S.incidents, msg.incident); incidents.changed(msg.incident); renderQueue(); for (const v of VIEWS) v.badge?.(); }

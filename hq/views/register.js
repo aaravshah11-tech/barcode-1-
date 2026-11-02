@@ -70,7 +70,7 @@ export function createRegister(ctx) {
   const roomName = (place) => { if (place?.zone) return `Outside · ${place.zone}`; for (const f of S.house?.floors || []) { const r = f.rooms.find((x) => x.id === place?.roomId); if (r) return r.name; } return place ? 'On the plan' : 'Not placed'; };
   function showPicked() { const el = $('[data-picked]', root); if (el) el.textContent = `${picked.size} selected`; }
   function draw() {
-    if (!root?.isConnected) return;
+    if (!root?.isConnected || !$('[data-rrows]', root)) return;
     $('[data-fsum]', root).innerHTML = `<span class="lbl">Fleet health · this week</span>
       <div class="fsum-row"><span class="kfig">${summary?.avg ?? '—'}<small>/100</small></span><p>${esc(summary?.headline || '')}</p></div>
       ${summary?.lines?.length ? `<ul class="small fsum-lines">${summary.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}

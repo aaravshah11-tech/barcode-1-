@@ -58,7 +58,7 @@ export function createIncidents(ctx) {
     const { incident: i, alerts, timeline } = st.detail;
     const stepIdx = INCIDENT_STATUS.indexOf(i.status);
     box.innerHTML = `
-      <div class="panel-head"><h2><span class="mono">${esc(i.ref)}</span></h2><span class="sev sev-${i.severity}">${i.severity}</span></div>
+      <div class="panel-head"><h2><span class="mono">${esc(i.ref)}</span></h2><span class="sev sev-${i.severity}">${i.severity}</span><span class="grow"></span><button class="small btn-ghost" data-anask="incident" data-anref="${esc(i.ref)}" title="Ask the Analyst to write a summary for the record">Summarise</button></div>
       <div class="case">
         <form class="case-title-form" data-irename><input name="ititle" value="${esc(i.title)}" maxlength="100" aria-label="Incident title"></form>
         <ol class="stepper" aria-label="Status">${INCIDENT_STATUS.map((s, k) => `<li class="${k < stepIdx ? 'done' : k === stepIdx ? 'now' : ''}">${INCIDENT_LABEL[s]}</li>`).join('')}</ol>

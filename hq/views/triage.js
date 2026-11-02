@@ -97,7 +97,7 @@ export function createTriage(ctx) {
   }
 
   function draw() {
-    if (!root?.isConnected) return;
+    if (!root?.isConnected || !$('[data-sevsum]', root)) return; // another screen is showing
     const list = visible(), now = Date.now();
     const counts = Object.fromEntries(SEVERITIES.map((s) => [s, (S.alerts || []).filter((a) => a.status === 'new' && a.severity === s).length]));
     $('[data-sevsum]', root).innerHTML = SEVERITIES.slice().reverse().map((s) => `<span class="sev-count sc-${s}"><b class="mono" ${counts[s] ? "" : "data-zero"}>${counts[s]}</b> ${SEV_LABEL[s]}</span>`).join('') + '<span class="small muted">unhandled</span>';
@@ -116,7 +116,7 @@ export function createTriage(ctx) {
         <td class="mono small" title="${new Date(a.ts).toLocaleString('en-GB')}">${dayClock(a.ts)}</td>
         <td class="mono small ${a.status === 'new' ? age(now - a.ts) : 'muted'}" data-age="${a.status === 'new' ? a.ts : ''}">${a.status === 'new' ? ageText(now - a.ts) : '—'}</td>
         <td class="small">${a.status === 'incident' ? `<button class="linkish" data-topeninc="${a.incidentId}">${esc(a.incidentRef || 'Incident')}</button>` : `<span class="st st-${a.status}">${ALERT_STATUS[a.status]}</span>`}</td>
-        <td class="c-actions">${open ? `<button class="small" data-tact="acknowledge" title="Acknowledge (A)" ${a.status === 'acknowledged' ? 'disabled' : ''}>Ack</button><button class="small" data-tact="escalate" title="Escalate (E)" ${a.severity === 'CRITICAL' && a.status === 'escalated' ? 'disabled' : ''}>Escalate</button><button class="small" data-tact="dismiss" title="Dismiss with a reason (D)">Dismiss</button><button class="small" data-tact="incident" title="Convert to incident (I)">Incident</button><button class="small btn-ghost" data-tact="snooze" title="Snooze repeats (S)">Snooze</button>`
+        <td class="c-actions">${open ? `<button class="small" data-tact="acknowledge" title="Acknowledge (A)" ${a.status === 'acknowledged' ? 'disabled' : ''}>Ack</button><button class="small" data-tact="escalate" title="Escalate (E)" ${a.severity === 'CRITICAL' && a.status === 'escalated' ? 'disabled' : ''}>Escalate</button><button class="small" data-tact="dismiss" title="Dismiss with a reason (D)">Dismiss</button><button class="small" data-tact="incident" title="Convert to incident (I)">Incident</button><button class="small btn-ghost" data-tact="snooze" title="Snooze repeats (S)">Snooze</button>${a.source === 'anomaly' ? `<button class="small btn-ghost" data-anask="anomaly" data-anref="${a.id}" title="Ask the Analyst why this was unusual">Explain</button>` : ''}`
           : a.status === 'dismissed' ? '<button class="small btn-ghost" data-tact="reopen">Reopen</button>' : ''}</td></tr>`;
     }).join('') : `<tr class="empty"><td colspan="10">${st.filter === 'new' ? 'No unhandled alerts. The queue is clear.' : 'Nothing to show for this filter.'}</td></tr>`;
     drawPicked();
@@ -212,5 +212,5 @@ export function createTriage(ctx) {
     return false;
   }
 
-  return { render, draw, drawAux, tick, key, convert, setFilter(f) { st.filter = f; draw(); }, select(id) { st.sel = id; st.filter = 'new'; } };
+  return { render, draw, drawAux, tick, key, convert, setFilter(f) { st.filter = f; draw(); }, select(id) { st.sel = id; const a = (S.alerts || []).find((x) => x.id === id); st.filter = !a || a.status === 'new' ? 'new' : 'all'; } };
 }
