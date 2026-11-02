@@ -243,6 +243,12 @@ export class HQ extends Emitter {
     const role = this.db.usePairCode(sha256(normalizeCode(code)), this.now());
     if (!role) return null;
     const token = randomToken();
+    if (role === 'wall') {
+      const v = this.db.addViewer({ id: newId(), tokenHash: sha256(token), wall: true, label: String(label || 'Wall Display').replace(/[<>]/g, '').slice(0, 40), createdAt: this.now(), lastSeen: this.now() });
+      this.logEvent({ kind: 'system', message: `Wall Display “${v.label}” linked (read-only)` });
+      this.broadcast({ t: 'viewers', viewers: this.viewers() });
+      return { role, viewerId: v.id, token, label: v.label };
+    }
     if (role === 'viewer') {
       const v = this.db.addViewer({ id: newId(), tokenHash: sha256(token), label: String(label || deviceName(ua)).slice(0, 40), createdAt: this.now(), lastSeen: this.now() });
       this.logEvent({ kind: 'system', message: `Phone “${v.label}” linked to HQ` });
@@ -260,12 +266,14 @@ export class HQ extends Emitter {
   agentByToken(token) { return token ? this.db.agentByTokenHash(sha256(token)) : null; }
   viewerByToken(token) { return token ? this.db.viewerByTokenHash(sha256(token)) : null; }
   viewers() { return this.db.viewers().map(({ tokenHash, ...v }) => v); }
+  /** What a Wall Display receives: the picture, not the keys (no HQ codes, no messages). */
+  wallSnapshot() { const { info, messages, ...rest } = this.snapshot(); return { ...rest, wall: true }; }
   removeViewer(id) {
     const v = this.db.viewers().find((x) => x.id === id);
     if (!v) return false;
     this.db.removeViewer(id);
     this.emit('viewerRemoved', id);
-    this.logEvent({ kind: 'system', level: 'warn', message: `Phone “${v.label}” unlinked` });
+    this.logEvent({ kind: 'system', level: 'warn', message: `${v.wall ? 'Wall Display' : 'Phone'} “${v.label}” unlinked` });
     this.broadcast({ t: 'viewers', viewers: this.viewers() });
     return true;
   }

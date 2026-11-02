@@ -59,6 +59,16 @@ export function makeApi({ hq, db, auth }) {
     }
     // the HQ page's own watchdog reports in even while the screen is locked
     if (p === '/watchdog' && m === 'POST' && !who.remote) return hq.resilience.watchdog(body) || { ok: true };
+    // a WALL DISPLAY reads these four things and nothing else
+    if (who.wall) {
+      actor.who = who.label || 'Wall Display'; actor.role = 'WALL';
+      if (m !== 'GET') throw fail(403, 'The Wall Display is read-only.');
+      if (p === '/perimeter') return hq.perimeter.view();
+      if (p === '/fleet/summary') return hq.fleet.summary();
+      if (p === '/analyst/notes') return hq.analyst.notes(url.searchParams.get('kind'));
+      if (p === '/log') return db.events({ since: Number(url.searchParams.get('since')) || null, limit: Math.min(5000, Number(url.searchParams.get('limit')) || 500) });
+      throw fail(403, 'The Wall Display is read-only.');
+    }
     if (who.remote && !auth.valid(who.session)) throw fail(401, 'Locked — log in with your codename and PIN.');
     if (!who.remote && hq.localSession && !auth.valid(hq.localSession)) { hq.localRole = null; hq.localSession = null; }
 
@@ -219,7 +229,7 @@ export function makeApi({ hq, db, auth }) {
       return db.events({ before, since, limit: Math.min(since ? 20000 : 500, Number(url.searchParams.get('limit')) || 100), kind: url.searchParams.get('kind') || null });
     }
     if (p === '/pair' && m === 'POST') {
-      const role = body.role === 'viewer' ? 'viewer' : 'agent';
+      const role = ['viewer', 'wall'].includes(body.role) ? body.role : 'agent';
       return hq.newPairCode(role);
     }
     let mm = p.match(/^\/agents\/([\w-]{1,64})$/);

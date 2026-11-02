@@ -105,6 +105,13 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
           clearTimeout(deny);
           role = 'viewer'; me = v;
           hq.db.updateViewer(v.id, { lastSeen: Date.now() });
+          if (v.wall) {
+            // a WALL DISPLAY: no sign-in, read-only, and it never gets HQ's codes
+            role = 'wall'; dash = { send: (text) => send(text), viewerId: v.id, wall: true };
+            hq.dashboards.add(dash);
+            send(hq.wallSnapshot());
+            return;
+          }
           hq.deviceSeen({ id: `viewer:${v.id}`, label: v.label, type: 'phone', owner: v.owner || '' });
           dash = { send: (text) => send(text), viewerId: v.id };
           // Nothing is shown until the codename + PIN are entered (or a recent login is still valid).
@@ -122,6 +129,12 @@ export async function startHost({ hq, api, auth, onStatus = () => {} }) {
         else if (msg.t === 'ack') hq.agentAck(me.id, String(msg.id || ''));
         else if (msg.t === 'hqpong' && typeof msg.ts === 'number') hq.agentStatus(me.id, { rtt: Date.now() - msg.ts });
         // (camera pictures are never accepted: there is no live view)
+      } else if (role === 'wall' && msg.t === 'api') {
+        const path = String(msg.path || ''), method = String(msg.method || 'GET').toUpperCase();
+        const ok = method === 'GET' && /^\/(perimeter|fleet\/summary|analyst\/notes(\?kind=\w+)?|log\?since=\d+(&limit=\d+)?)$/.test(path);
+        if (!ok) return send({ t: 'res', id: msg.id, ok: false, status: 403, error: 'The Wall Display is read-only.' });
+        try { send({ t: 'res', id: msg.id, ok: true, data: await api('GET', path, null, { remote: true, wall: true, label: me?.label }) }); }
+        catch (e) { send({ t: 'res', id: msg.id, ok: false, status: e.status || 500, error: e.message }); }
       } else if (role === 'viewer' && msg.t === 'api') {
         const path = String(msg.path || '');
         try {

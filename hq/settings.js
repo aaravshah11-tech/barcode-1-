@@ -208,8 +208,11 @@ function phones(body, S) {
       <p style="margin-top:0">Link your own phone to see the Command Centre (and get alerts) when you’re out. It’s a private, encrypted link straight to this computer.</p>
       <button class="btn-primary" data-linkphone>＋ Link a phone</button>
       <div data-linkbox></div>
-      ${hr}<h2 style="margin-bottom:8px">Linked phones</h2>
-      <div>${viewers.map((v) => `<div class="row recon-row" data-viewer="${esc(v.id)}"><b class="grow">${esc(v.label)}</b><span class="small muted">linked ${esc(ago(v.createdAt))} · last opened ${esc(ago(v.lastSeen))}</span><button class="btn-ghost small" data-unlinkv aria-label="Unlink ${esc(v.label)}">Unlink</button></div>`).join('') || '<p class="small muted">None yet.</p>'}</div>`;
+      ${hr}<h2 style="margin-bottom:8px">Wall Display (iPad)</h2>
+      <p class="small" style="margin-top:0">A read-only screen for the wall: it rotates through Situation, Perimeter, Agents and Timeline, and stays on Situation while an Alert is waiting. No sign-in, and nothing can be changed from it.</p>
+      <button data-linkwall>＋ Add a Wall Display</button><div data-wallbox></div>
+      ${hr}<h2 style="margin-bottom:8px">Linked phones and displays</h2>
+      <div>${viewers.map((v) => `<div class="row recon-row" data-viewer="${esc(v.id)}"><b class="grow">${esc(v.label)}${v.wall ? ' <span class="tag">WALL · READ ONLY</span>' : ''}</b><span class="small muted">linked ${esc(ago(v.createdAt))} · last opened ${esc(ago(v.lastSeen))}</span><button class="btn-ghost small" data-unlinkv aria-label="Unlink ${esc(v.label)}">Unlink</button></div>`).join('') || '<p class="small muted">None yet.</p>'}</div>`;
     $('[data-linkphone]', body).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
@@ -217,6 +220,23 @@ function phones(body, S) {
         const link = S.joinLink('./remote.html', { hq: S.info.hqId, link: p.code });
         const box = $('[data-linkbox]', body);
         box.innerHTML = `<div class="recruit" style="margin-top:14px"><div class="qr" data-qr></div><div><ol><li>On <b>your</b> phone, open the Camera and scan this code.</li><li>Tap the link, give the phone a name, press <b>Link this phone</b>.</li><li>Then add it to your Home Screen (Share → Add to Home Screen).</li></ol><p class="small muted">The code works once, for 10 minutes.</p></div></div>`;
+        const qr = $('[data-qr]', box);
+        qr.innerHTML = await qrSvg(link);
+        qr.dataset.link = link;
+      } catch (x) { toast(x.message, { kind: 'err' }); e.target.disabled = false; }
+    });
+    $('[data-linkwall]', body).addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
+        const p = await S.api('/pair', { method: 'POST', body: { role: 'wall' } });
+        const link = S.joinLink('./wall.html', { hq: S.info.hqId, pair: p.code });
+        const box = $('[data-wallbox]', body);
+        box.innerHTML = `<div class="recruit" style="margin-top:14px"><div class="qr" data-qr></div><div><ol>
+            <li>On the iPad, open the <b>Camera</b> and scan this code. Tap the link, name the display, press <b>Link this display</b>.</li>
+            <li>In Safari tap <b>Share › Add to Home Screen</b>, then open SENTINEL Wall from the Home Screen (full screen).</li>
+            <li>Keep it on: <b>Settings › Display &amp; Brightness › Auto-Lock › Never</b>, and leave it on its charger.</li>
+            <li>Lock it to SENTINEL with <b>Guided Access</b>: Settings › Accessibility › Guided Access › turn on, set a passcode. Open SENTINEL Wall and <b>triple-click</b> the top (or Home) button › <b>Start</b>. Triple-click again and enter the passcode to leave.</li></ol>
+            <p class="small muted">The code works once, for 10 minutes. Tap the display to go to the next screen.</p></div></div>`;
         const qr = $('[data-qr]', box);
         qr.innerHTML = await qrSvg(link);
         qr.dataset.link = link;
