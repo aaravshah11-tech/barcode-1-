@@ -921,3 +921,18 @@ input.otp { letter-spacing: .4em; font-size: 1.2rem; }
 .an-help pre { background: var(--bg-2); border: 1px solid var(--line); padding: 6px 10px; margin: 6px 0; font: .8rem var(--mono); white-space: pre-wrap; user-select: all; }
 @media (max-width: 1000px) { .an-grid { grid-template-columns: minmax(0, 1fr); } }
 .viewhost { display: contents; }
+
+/* ---------- v3 phase 9: Records search, case links ---------- */
+.rec-find { padding: 12px 14px; display: grid; gap: 10px; margin-bottom: 12px; }
+.rec-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.rec-form .field { margin: 0; }
+.rec-form .grow { min-width: 200px; }
+[data-rplain] input { flex: 1; }
+.rec-saved { gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-2); padding: 0 2px 0 8px; }
+.rec-results { padding: 12px 14px; display: grid; gap: 8px; }
+.case-links { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.case-links li { display: flex; gap: 8px; align-items: center; }
+.case-linkform { gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.case-linkform input { flex: 1; min-width: 120px; }
+.sev-CRITICAL { background: #b8322f; border-color: #b8322f; } /* white text needs at least 4.5:1 */

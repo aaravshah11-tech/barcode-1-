@@ -253,6 +253,58 @@ export class Ops {
     inc.updatedAt = t;
     return this.saveIncident(inc);
   }
+  // ---------- case links and attachments ----------
+  /** Link another incident (INC-…) or an outside reference (e.g. a police crime number, an insurer's claim, a web link). */
+  addLink(id, { kind = 'external', ref = '', label = '', url = '' } = {}, { by = 'HQ' } = {}) {
+    const inc = this.incident(id), t = this.now();
+    let link;
+    if (kind === 'incident') {
+      const other = this.db.docs('incidents').find((x) => x.ref === clean(ref, 20).toUpperCase() || x.id === ref);
+      if (!other || other.id === inc.id) throw fail(400, 'No other incident with that reference.');
+      link = { kind, ref: other.ref, id: other.id, label: other.title };
+    } else {
+      const u = clean(url, 300);
+      if (u && !/^https:\/\//.test(u)) throw fail(400, 'Web links must start with https://');
+      link = { kind: 'external', ref: clean(ref, 60), label: clean(label, 80), url: u };
+      if (!link.ref && !link.label) throw fail(400, 'Give the reference or a description.');
+    }
+    inc.links = [...(inc.links || []), { ...link, ts: t, by }].slice(-20);
+    inc.timeline.push({ ts: t, by, text: `Linked ${link.kind === 'incident' ? link.ref : `outside reference ${link.ref || link.label}`}` });
+    inc.updatedAt = t;
+    return this.saveIncident(inc);
+  }
+  removeLink(id, index, { by = 'HQ' } = {}) {
+    const inc = this.incident(id), l = (inc.links || [])[index];
+    if (!l) throw fail(404, 'No such link.');
+    inc.links.splice(index, 1);
+    inc.timeline.push({ ts: this.now(), by, text: `Link removed: ${l.ref || l.label}` });
+    return this.saveIncident(inc);
+  }
+  /** Documents only (PDF or plain text, up to 1 MB, 5 per incident). SENTINEL never stores pictures, video or sound. */
+  addAttachment(id, { name = '', type = '', data = '' } = {}, { by = 'HQ' } = {}) {
+    const inc = this.incident(id);
+    if (!['application/pdf', 'text/plain'].includes(type)) throw fail(400, 'Only PDF or plain-text documents can be attached (no photos, video or sound).');
+    if (typeof data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(data)) throw fail(400, 'That file couldn’t be read.');
+    const size = Math.floor((data.length * 3) / 4);
+    if (size > 1024 * 1024) throw fail(413, 'Attachments can be up to 1 MB.');
+    if (type === 'application/pdf' && !data.startsWith('JVBER')) throw fail(400, 'That isn’t a PDF.');
+    if ((inc.attachments || []).length >= 5) throw fail(400, 'Up to 5 attachments per incident.');
+    const t = this.now(), att = { id: `att-${t.toString(36)}${Math.random().toString(36).slice(2, 5)}`, incidentId: inc.id, name: clean(name, 80) || 'document', type, size, data, by, ts: t };
+    this.db.putDoc('attachments', att, 500);
+    inc.attachments = [...(inc.attachments || []), { id: att.id, name: att.name, type, size, by, ts: t }];
+    inc.timeline.push({ ts: t, by, text: `Attached “${att.name}”` });
+    inc.updatedAt = t;
+    this.hq.logEvent({ kind: 'triage', message: `${inc.ref}: “${att.name}” attached by ${by}` });
+    return this.saveIncident(inc);
+  }
+  attachment(id, aid) { const a = this.db.doc('attachments', aid); if (!a || a.incidentId !== this.incident(id).id) throw fail(404, 'No such attachment.'); return a; }
+  removeAttachment(id, aid, { by = 'HQ' } = {}) {
+    const inc = this.incident(id), a = this.attachment(id, aid);
+    this.db.removeDocs('attachments', (x) => x.id === aid);
+    inc.attachments = (inc.attachments || []).filter((x) => x.id !== aid);
+    inc.timeline.push({ ts: this.now(), by, text: `Attachment removed: “${a.name}”` });
+    return this.saveIncident(inc);
+  }
   /** Everything that happened, in order: the incident's own history plus the linked alerts' events. */
   incidentDetail(id) {
     const inc = this.incident(id);

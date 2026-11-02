@@ -24,8 +24,8 @@ export function createReports(ctx) {
   function render(el) {
     root = el;
     root.innerHTML = `<div class="view-pad reports">
-      <header class="view-head"><div class="filters" role="tablist" aria-label="Reports">
-        <button role="tab" data-rtab="sitrep">SITREP</button><button role="tab" data-rtab="list">Reports</button><button role="tab" data-rtab="build">Report builder</button></div>
+      <header class="view-head"><div class="filters" role="group" aria-label="Reports">
+        <button data-rtab="sitrep">SITREP</button><button data-rtab="list">Reports</button><button data-rtab="build">Report builder</button></div>
         <span class="grow"></span><span data-rtools></span></header><div data-rbody></div></div>`;
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);

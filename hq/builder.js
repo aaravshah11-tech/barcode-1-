@@ -43,7 +43,7 @@ export function openBuilder(S, { files, onClose } = {}) {
   el.innerHTML = `
     <header class="b-top">
       <b class="mono">HOUSE BUILDER</b>
-      <div class="b-floors" data-floors role="tablist" aria-label="Floors"></div>
+      <div class="b-floors" data-floors role="group" aria-label="Floors"></div>
       <span class="spacer"></span>
       <button class="small" data-history title="Earlier versions of the plan">History</button>
       <span class="small muted mono" data-saved>SAVED</span>
@@ -129,7 +129,7 @@ export function openBuilder(S, { files, onClose } = {}) {
       b.querySelector('small').textContent = label; b.title = label; b.setAttribute('aria-label', label);
     });
     $('[data-hint]', el).textContent = scaleClicks ? (scaleClicks.length ? 'Now click the other end of something you know the length of.' : 'SET SCALE: click one end of a wall you know the length of.') : (outside() && OUT_HINT[tool]) || TOOLS.find(([k]) => k === tool)[3];
-    $('[data-floors]', el).innerHTML = house.floors.map((x, i) => `<button role="tab" data-floor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('') + '<button data-addfloor title="Add a floor" aria-label="Add a floor">＋</button>' + `<button role="tab" data-floor="-1" class="b-outside" aria-pressed="${fi < 0}" title="Driveway, gardens, garage, fences, gates and trees">Outside</button>`;
+    $('[data-floors]', el).innerHTML = house.floors.map((x, i) => `<button data-floor="${i}" aria-pressed="${i === fi}">${esc(x.name)}</button>`).join('') + '<button data-addfloor title="Add a floor" aria-label="Add a floor">＋</button>' + `<button data-floor="-1" class="b-outside" aria-pressed="${fi < 0}" title="Driveway, gardens, garage, fences, gates and trees">Outside</button>`;
   }
   const rectPts = (a, b) => [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
 

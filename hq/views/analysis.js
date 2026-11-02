@@ -20,10 +20,10 @@ export function createAnalysis(ctx) {
   function render(el) {
     root = el;
     root.innerHTML = `<div class="view-pad analysis">
-      <header class="view-head"><div class="filters" role="tablist" aria-label="Analysis">
-        <button role="tab" data-atab="rules" aria-pressed="${st.tab === 'rules'}">Correlation rules</button>
-        <button role="tab" data-atab="grading" aria-pressed="${st.tab === 'grading'}">Grading rules</button>
-        <button role="tab" data-atab="pattern" aria-pressed="${st.tab === 'pattern'}">Pattern of life</button></div>
+      <header class="view-head"><div class="filters" role="group" aria-label="Analysis">
+        <button data-atab="rules" aria-pressed="${st.tab === 'rules'}">Correlation rules</button>
+        <button data-atab="grading" aria-pressed="${st.tab === 'grading'}">Grading rules</button>
+        <button data-atab="pattern" aria-pressed="${st.tab === 'pattern'}">Pattern of life</button></div>
         <span class="grow"></span><span data-atools></span></header>
       <div data-abody></div></div>`;
     root.addEventListener('click', onClick);

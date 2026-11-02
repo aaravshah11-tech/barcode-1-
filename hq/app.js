@@ -3,7 +3,7 @@ import { esc, $, $$, toast, sheet, confirmBox, clock, dayClock, ago, qrSvg, LOGO
 import { classification } from '../shared/brand.js';
 import { Radar } from '../shared/radar.js';
 import { missionById, hqEditable } from '../shared/missions.js';
-import { openSettings } from './settings.js';
+import { openSettings, renderSettings } from './settings.js';
 import { startLocal, startRemote, linkPhone, viewerCreds } from './transport.js';
 import { notifyAlert, criticalRepeat, notifyDigest, onWatch, setOnWatch } from './alerts.js';
 import { lockScreen } from './lock.js';
@@ -30,6 +30,7 @@ import { createCoverage } from './views/coverage.js';
 import { createRegister } from './views/register.js';
 import { createPerimeter } from './views/perimeter.js';
 import { createAnalyst } from './views/analyst.js';
+import { createRecords } from './views/records.js';
 import { createNetwork } from './views/network.js';
 import { createReports } from './views/reports.js';
 import { createAccess, twoStepSheet } from './views/access.js';
@@ -285,7 +286,7 @@ function mapHtml(full) {
       <button class="small" data-replay aria-pressed="false" title="Play back the day’s events on the map">${icon('play')}Replay</button>
       <button class="small" data-heat aria-pressed="${!!S.heat?.on}" title="Show which rooms were busiest">${icon('heat')}Heatmap</button>
       ${MODE === 'hq' ? `<button class="small" data-build title="Edit floor plan">${icon('house')}<span class="hide-narrow">Floor plan</span></button>` : ''}</div>
-    <div class="radar-wrap"><canvas data-radar role="img" hidden></canvas><div class="plan" data-plan hidden></div>
+    <div class="radar-wrap"><canvas data-radar role="img" aria-label="Radar view of the Agents" hidden></canvas><div class="plan" data-plan hidden></div>
       <div class="map3d" data-map3d hidden></div>
       <div class="map3d-ui" data-map3dui hidden><div class="filters" data-floorbtns></div><span class="world-chip mono" data-worldchip hidden></span><span class="grow"></span>${full ? `<div class="filters" role="group" aria-label="Camera">${[['overview', 'Overview'], ['top', 'Plan'], ['front', 'Front'], ['garden', 'Garden'], ['garage', 'Garage']].map(([k, l]) => `<button data-preset="${k}">${l}</button>`).join('')}</div><button class="small" data-roof aria-pressed="false" title="Show the roof">Roof</button><button class="small" data-xray aria-pressed="false" title="See through the walls">X-ray</button><button class="small" data-coverage aria-pressed="false" title="What the Agents can see">Coverage</button>` : ''}<button class="small" data-iso aria-pressed="${!!S.iso}" title="Isometric view">Iso</button><button class="small" data-explode aria-pressed="false" title="Pull the floors apart">${icon('layers')}Explode</button><button class="small" data-fit3d title="Show the whole house" aria-label="Show the whole house">${icon('fit')}</button></div>
       <div class="map-hint" data-maphint hidden></div>
@@ -393,9 +394,12 @@ registerView({ id: 'analyst', label: 'Analyst', icon: 'analyst', order: 8, rende
 registerView({ id: 'reports', label: 'Briefings', icon: 'doc', order: 9, render: (root) => reportsView.render(root) });
 const shiftView = createShift({ S, api: (...a) => T.api(...a) });
 registerView({ id: 'records', label: 'Records', icon: 'audit', order: 10, tabs: true });
+const recordsView = createRecords({ S, api: (...a) => T.api(...a) });
+registerView({ id: 'logsearch', label: 'Search', icon: 'search', parent: 'records', order: 1, render: (root) => recordsView.render(root) });
 registerView({ id: 'shift', label: 'Operator notes', icon: 'doc', parent: 'records', order: 2, render: (root) => shiftView.render(root) });
 const accessView = createAccess({ S, api: (...a) => T.api(...a), only: 'sessions' });
 registerView({ id: 'admin', label: 'Administration', icon: 'key', order: 11, tabs: true });
+registerView({ id: 'settings', label: 'Settings', icon: 'settings', parent: 'admin', order: 1, render: (root) => { root.innerHTML = '<div class="view-pad" data-adminsettings></div>'; renderSettings(root.firstChild, S, { onChange: (x) => { S.settings = x; settingsChanged(); } }); } });
 registerView({ id: 'access', label: 'Security', icon: 'key', roles: ['DIRECTOR'], parent: 'admin', order: 3, render: (root) => accessView.render(root) });
 const auditView = createAccess({ S, api: (...a) => T.api(...a), only: 'audit' });
 registerView({ id: 'audit', label: 'Audit log', icon: 'audit', roles: ['DIRECTOR'], parent: 'records', order: 3, render: (root) => auditView.render(root) });

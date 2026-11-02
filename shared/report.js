@@ -92,8 +92,9 @@ export function sitrepText(d, { state = 'HOME', threat = 'GREEN', agentsOnline =
 }
 
 // ---------------- PDF ----------------
-const C = { ink: '#1b2430', muted: '#5b6672', line: '#c9d0d8', light: '#eef1f4', accent: '#3f6d93', amber: '#b07a12', red: '#b3261e', band: '#233329', bandText: '#e1ecdf' };
-const SEV_C = { CRITICAL: C.red, ALERT: C.red, ADVISORY: C.amber, INFO: C.muted };
+// Ops Floor colours, darkened for paper: navy bands, steel-blue accent, amber / orange / red only for severity
+const C = { ink: '#141b26', muted: '#5f6e80', line: '#c6cfd9', light: '#eef2f6', accent: '#2f5f8a', amber: '#a07f12', orange: '#b8661c', red: '#b3261e', band: '#0c121c', bandText: '#e6ecf3' };
+const SEV_C = { CRITICAL: C.red, ALERT: C.orange, ADVISORY: C.amber, INFO: C.muted };
 
 /** Build the PDF for a stored report: { ref, title, kind, from, to, generatedAt, generatedBy, sections, data, sitrep } */
 export function reportPdf(rep) {

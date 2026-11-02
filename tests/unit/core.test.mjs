@@ -205,7 +205,7 @@ test('API: what the Command Centre can do (and what linked phones can’t)', asy
   assert.match((await api('GET', '/export?format=csv')).text, /recruited/);
   assert.ok(!(await api('GET', '/export?format=json')).text.includes('tokenHash'), 'export never includes keys');
   await assert.rejects(api('GET', '/backup', {}, { remote: true }), /Locked/, 'linked phones must log in first');
-  assert.ok((await api('GET', '/backup')).text.includes('hq-backup'));
+  await assert.rejects(api('GET', '/backup'), /encrypted now/, 'no unencrypted backups any more');
   await assert.rejects(api('GET', '/nope'), /Not found/);
 });
 

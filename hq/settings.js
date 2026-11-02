@@ -32,8 +32,15 @@ export function download({ filename, type, text }) {
 }
 
 export function openSettings(S, { tab = 'general', onChange } = {}) {
-  const s = sheet(`<div class="filters" role="tablist" style="margin-bottom:14px">${TABS.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-pressed="${k === tab}">${l}</button>`).join('')}</div><div data-tabbody></div>`, { title: 'Settings', wide: true, onClose: () => { S.onViewers = null; } });
-  const body = s.body.querySelector('[data-tabbody]');
+  const s = sheet('<div data-settingsroot></div>', { title: 'Settings', wide: true, onClose: () => { S.onViewers = null; } });
+  renderSettings(s.body.querySelector('[data-settingsroot]'), S, { tab, onChange });
+  return s;
+}
+/** The same settings, drawn into any box (Administration › Settings uses this). */
+export function renderSettings(host, S, { tab = 'general', onChange } = {}) {
+  host.innerHTML = `<div class="filters" role="group" style="margin-bottom:14px">${TABS.map(([k, l]) => `<button data-tab="${k}" aria-pressed="${k === tab}">${l}</button>`).join('')}</div><div data-tabbody></div>`;
+  const s = { body: host };
+  const body = host.querySelector('[data-tabbody]');
   const show = async (t) => {
     S.onViewers = null;
     s.body.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === t)));
@@ -91,8 +98,8 @@ function general(body, S, onChange) {
     ${local ? `${hr}<h2 style="margin-bottom:8px">This HQ</h2>
     <p class="small">HQ code: <b class="mono c-green" data-hqcodeshow>${esc(S.hqCode())}</b></p>
     <p class="small muted">Everything HQ knows is stored in <b>this browser on this computer</b>. Keep this page open (and the computer plugged in and awake) — Agents can only report while it’s open.
-      Moving to another computer or browser? Make a backup here and restore it there.</p>
-    <div class="row"><button data-backup>⇩ Back up HQ</button><label class="btn" style="cursor:pointer">⇧ Restore a backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>` : ''}`;
+      Moving to another computer or browser? Download an <b>encrypted</b> backup in <b>Administration › Data and backups</b> and restore it there.</p>
+    <div class="row"><button data-goto-data>Open Data and backups</button><label class="btn btn-ghost" style="cursor:pointer" title="For a backup file made before backups were encrypted">⇧ Restore an old (unencrypted) backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>` : ''}`;
   $('[data-general]', body).addEventListener('submit', async (e) => {
     e.preventDefault();
     try { const s = await S.api('/settings', { method: 'PATCH', body: { retentionDays: Number(e.target.retentionDays.value), autoLockMin: Number(e.target.autoLockMin.value) } }); onChange?.(s); toast('Settings saved'); } catch (x) { toast(x.message, { kind: 'err' }); }
@@ -144,7 +151,7 @@ function general(body, S, onChange) {
   body.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', async () => {
     try { download(await S.api(`/export?format=${b.dataset.export}`)); } catch (x) { toast(x.message, { kind: 'err' }); }
   }));
-  $('[data-backup]', body)?.addEventListener('click', async () => { try { download(await S.api('/backup')); toast('Backup saved — keep the file somewhere safe (it holds your Agents’ keys).'); } catch (x) { toast(x.message, { kind: 'err' }); } });
+  $('[data-goto-data]', body)?.addEventListener('click', () => { document.querySelector('.sheet-backdrop')?.remove(); window.__go?.('data'); });
   $('[data-restore]', body)?.addEventListener('change', async (e) => {
     const f = e.target.files[0];
     if (!f) return;

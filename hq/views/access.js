@@ -45,8 +45,8 @@ export function createAccess(ctx) {
   function render(el) {
     root = el;
     root.innerHTML = `<div class="view-pad access">
-      <header class="view-head"><div class="filters" role="tablist" aria-label="Access">
-        ${ctx.only ? '' : '<button role="tab" data-atab2="users">Users and roles</button><button role="tab" data-atab2="sessions">Sessions</button><button role="tab" data-atab2="audit">Audit log</button>'}</div>
+      <header class="view-head"><div class="filters" role="group" aria-label="Access">
+        ${ctx.only ? '' : '<button data-atab2="users">Users and roles</button><button data-atab2="sessions">Sessions</button><button data-atab2="audit">Audit log</button>'}</div>
         <span class="grow"></span><span data-atools2></span></header><div data-abody2></div></div>`;
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);

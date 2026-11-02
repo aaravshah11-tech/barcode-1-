@@ -27,8 +27,8 @@ export function createNetwork(ctx) {
   function render(el) {
     root = el;
     root.innerHTML = `<div class="view-pad network">
-      <header class="view-head"><div class="filters" role="tablist" aria-label="Network">
-        <button role="tab" data-ntab="assets">Asset register</button><button role="tab" data-ntab="health">Health check</button><button role="tab" data-ntab="history">Internet history</button></div>
+      <header class="view-head"><div class="filters" role="group" aria-label="Network">
+        <button data-ntab="assets">Asset register</button><button data-ntab="health">Health check</button><button data-ntab="history">Internet history</button></div>
         <span class="grow"></span><span data-ntools></span></header>
       <p class="scope-note small"><b>Your home network only.</b> SENTINEL never scans anything. Devices are listed from SENTINEL itself (HQ, Agents, linked phones), from ones you add, and from a device list you copy out of your own router.</p>
       <div data-nbody></div></div>`;

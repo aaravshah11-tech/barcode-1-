@@ -195,6 +195,13 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/patterns/rebuild' && m === 'POST') { an.rebuild(); return an.patterns(); }
     if (p === '/incidents' && m === 'GET') return ops.incidents();
     if (p === '/incidents' && m === 'POST') return ops.createIncident({ title: body.title, severity: body.severity, alertIds: (Array.isArray(body.alertIds) ? body.alertIds : []).slice(0, 100).map(String), assignee: body.assignee, note: body.note, by });
+    am = p.match(/^\/incidents\/([\w-]{1,64})\/links(?:\/(\d+))?$/);
+    if (am && m === 'POST') return ops.addLink(am[1], body, { by });
+    if (am && m === 'DELETE' && am[2] != null) return ops.removeLink(am[1], Number(am[2]), { by });
+    am = p.match(/^\/incidents\/([\w-]{1,64})\/attachments(?:\/([\w-]{1,40}))?$/);
+    if (am && m === 'POST') return ops.addAttachment(am[1], body, { by });
+    if (am && m === 'GET' && am[2]) return ops.attachment(am[1], am[2]);
+    if (am && m === 'DELETE' && am[2]) return ops.removeAttachment(am[1], am[2], { by });
     am = p.match(/^\/incidents\/([\w-]{1,64})$/);
     if (am && m === 'GET') return ops.incidentDetail(am[1]);
     if (am && m === 'PATCH') return ops.updateIncident(am[1], body, { by });
@@ -276,6 +283,15 @@ export function makeApi({ hq, db, auth }) {
     if (p === '/register' && m === 'GET') return hq.fleet.rows();
     if (p === '/fleet/summary' && m === 'GET') return hq.fleet.summary();
     if (p === '/perimeter' && m === 'GET') return hq.perimeter.view();
+    // ----- Records: saved searches -----
+    if (p === '/savedsearches' && m === 'GET') return db.docs('savedsearches').sort((a, b) => a.name.localeCompare(b.name));
+    if (p === '/savedsearches' && m === 'POST') {
+      const q = body.query || {}, s = (v, n) => String(v ?? '').replace(/[<>]/g, '').slice(0, n);
+      const doc = { id: `ss-${hq.now().toString(36)}`, name: s(body.name, 40) || 'Search', query: { text: s(q.text, 80), kind: s(q.kind, 20), level: s(q.level, 10), zone: s(q.zone, 10), days: Math.min(400, Math.max(1, Math.round(Number(q.days) || 7))) }, by, ts: hq.now() };
+      return db.putDoc('savedsearches', doc, 50);
+    }
+    mm = p.match(/^\/savedsearches\/([\w-]{1,40})$/);
+    if (mm && m === 'DELETE') { db.removeDocs('savedsearches', (x) => x.id === mm[1]); return { ok: true }; }
     // ----- the Analyst (read-only; it can only propose) -----
     if (p === '/analyst/status' && m === 'GET') return hq.analyst.status(url.searchParams.get('force') === '1');
     if (p === '/analyst/notes' && m === 'GET') return hq.analyst.notes(url.searchParams.get('kind'));
@@ -301,10 +317,8 @@ export function makeApi({ hq, db, auth }) {
         ? { filename: `sentinel-mission-log-${day}.json`, type: 'application/json', text: JSON.stringify({ exportedAt: new Date().toISOString(), agents: [...agents.values()].map(({ tokenHash, ...a }) => a), events }, null, 2) }
         : { filename: `sentinel-mission-log-${day}.csv`, type: 'text/csv', text: toCsv(events, agents) };
     }
-    if (p === '/backup' && m === 'GET') {
-      if (who.remote) throw fail(403, 'Backups can only be made on the HQ computer.');
-      return { filename: `sentinel-hq-backup-${new Date().toISOString().slice(0, 10)}.json`, type: 'application/json', text: JSON.stringify(db.backup()) };
-    }
+    // plain (unencrypted) backups were removed: every backup file is now sealed with a password (Administration › Data)
+    if (p === '/backup' && m === 'GET') throw fail(410, 'Backups are encrypted now: Administration › Data and backups › Download encrypted backup file.');
     if (p === '/restore' && m === 'POST') {
       if (who.remote) throw fail(403, 'Restore on the HQ computer itself.');
       db.restore(body);

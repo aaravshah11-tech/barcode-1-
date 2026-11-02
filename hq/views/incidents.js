@@ -72,6 +72,12 @@ export function createIncidents(ctx) {
         </dl>
         <h3 class="sub">Linked alerts (${alerts.length})</h3>
         ${alerts.length ? `<table class="grid-table compact"><thead><tr><th>Reference</th><th>Severity</th><th>Alert</th><th>Time</th><th>Status</th></tr></thead><tbody>${alerts.map((a) => `<tr><td class="mono small">${a.id}</td><td><span class="sev sev-${a.severity}">${a.severity}</span></td><td>${esc(a.title)}${a.count > 1 ? ` <span class="tag">×${a.count}</span>` : ''}</td><td class="mono small">${dayClock(a.ts)}</td><td class="small">${ALERT_STATUS[a.status]}</td></tr>`).join('')}</tbody></table>` : '<p class="small muted">No alerts linked. Use “Incident” on an alert in the Triage queue to add it here.</p>'}
+        <h3 class="sub">Links</h3>
+        <ul class="case-links">${(i.links || []).map((l, k) => `<li>${l.kind === 'incident' ? `<button class="linkish" data-iopen="${esc(l.id)}">${esc(l.ref)}</button> ${esc(l.label)}` : `<span class="mono">${esc(l.ref)}</span> ${esc(l.label)}${l.url ? ` <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">open ↗</a>` : ''}`}<span class="grow"></span>${i.status !== 'closed' ? `<button class="icon-btn small" data-iunlink="${k}" aria-label="Remove link">×</button>` : ''}</li>`).join('') || '<li class="small muted">No links. Link a related incident, or an outside reference such as a police crime number.</li>'}</ul>
+        ${i.status !== 'closed' ? `<form class="row case-linkform" data-ilink><select name="kind" aria-label="Link to"><option value="external">Outside reference</option><option value="incident">Another incident</option></select><input name="ref" maxlength="60" placeholder="e.g. Police CAD 4512 or INC-2026-0003" aria-label="Reference"><input name="label" maxlength="80" placeholder="Description (optional)" aria-label="Description"><input name="url" maxlength="300" placeholder="https:// (optional)" aria-label="Web link"><button class="small">Add link</button></form>` : ''}
+        <h3 class="sub">Attachments</h3>
+        <ul class="case-links">${(i.attachments || []).map((a) => `<li><button class="linkish" data-iatt="${esc(a.id)}">${esc(a.name)}</button><span class="small muted mono">${Math.max(1, Math.round(a.size / 1024))} KB · ${esc(a.by)}</span><span class="grow"></span>${i.status !== 'closed' ? `<button class="icon-btn small" data-iattdel="${esc(a.id)}" aria-label="Remove ${esc(a.name)}">×</button>` : ''}</li>`).join('') || '<li class="small muted">None. You can attach PDF or text documents (up to 1 MB) — for example a police report or an insurance letter. No photos, video or sound.</li>'}</ul>
+        ${i.status !== 'closed' && (i.attachments || []).length < 5 ? '<label class="btn small">Attach a document…<input type="file" accept="application/pdf,text/plain,.pdf,.txt" data-iattach hidden></label>' : ''}
         <h3 class="sub">Notes</h3>
         <ol class="notes">${i.notes.map((n) => `<li><div class="small muted"><b>${esc(n.by)}</b> · <span class="mono">${when(n.ts)}</span></div><p>${esc(n.text)}</p></li>`).join('') || '<li class="small muted">No notes yet.</li>'}</ol>
         ${i.status !== 'closed' ? `<form data-inote class="note-form"><textarea name="text" rows="2" maxlength="1000" placeholder="Add a note — what you checked, what you found" aria-label="New note"></textarea><button class="small">Add note</button></form>` : ''}
@@ -89,6 +95,17 @@ export function createIncidents(ctx) {
     if (b.dataset.ifilter) { st.filter = b.dataset.ifilter; drawList(); }
     else if (b.dataset.iopen) { st.sel = b.dataset.iopen; drawList(); load(); }
     else if (b.dataset.imove) patch({ status: b.dataset.imove });
+    else if (b.dataset.iunlink) { try { await ctx.api(`/incidents/${st.sel}/links/${b.dataset.iunlink}`, { method: 'DELETE' }); await load(); } catch (x) { toast(x.message, { kind: 'err' }); } }
+    else if (b.dataset.iattdel) { try { await ctx.api(`/incidents/${st.sel}/attachments/${b.dataset.iattdel}`, { method: 'DELETE' }); await load(); } catch (x) { toast(x.message, { kind: 'err' }); } }
+    else if (b.dataset.iatt) {
+      try {
+        const a = await ctx.api(`/incidents/${st.sel}/attachments/${b.dataset.iatt}`);
+        const bytes = Uint8Array.from(atob(a.data), (c) => c.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: a.type }));
+        const link = Object.assign(document.createElement('a'), { href: url, download: a.name });
+        document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (x) { toast(x.message, { kind: 'err' }); }
+    }
     else if ('ievidence' in b.dataset && st.sel) { try { await exportEvidence(ctx, st.sel); } catch (x) { toast(x.message, { kind: 'err' }); } }
     else if ('iplay' in b.dataset && st.detail) ctx.playback({ ...st.detail.window, label: st.detail.incident.ref });
     else if ('inew' in b.dataset) {
@@ -98,13 +115,28 @@ export function createIncidents(ctx) {
   async function onSubmit(e) {
     e.preventDefault();
     if (e.target.matches('[data-irename]')) { patch({ title: e.target.elements.ititle.value }); return; }
+    if (e.target.matches('[data-ilink]')) {
+      const f = e.target.elements;
+      try { await ctx.api(`/incidents/${st.sel}/links`, { method: 'POST', body: { kind: f.kind.value, ref: f.ref.value, label: f.label.value, url: f.url.value } }); await load(); } catch (x) { toast(x.message, { kind: 'err' }); }
+      return;
+    }
     if (e.target.matches('[data-inote]')) {
       const text = e.target.elements.text.value.trim();
       if (!text) return;
       try { await ctx.api(`/incidents/${st.sel}/notes`, { method: 'POST', body: { text } }); await load(); } catch (x) { toast(x.message, { kind: 'err' }); }
     }
   }
-  function onChange(e) {
+  async function onChange(e) {
+    if (e.target.matches('[data-iattach]')) {
+      const f = e.target.files[0];
+      if (!f) return;
+      if (f.size > 1024 * 1024) return toast('Attachments can be up to 1 MB.', { kind: 'err' });
+      const type = f.type || (/\.txt$/i.test(f.name) ? 'text/plain' : /\.pdf$/i.test(f.name) ? 'application/pdf' : '');
+      const buf = new Uint8Array(await f.arrayBuffer());
+      let bin = ''; for (let k = 0; k < buf.length; k += 0x8000) bin += String.fromCharCode(...buf.subarray(k, k + 0x8000));
+      try { await ctx.api(`/incidents/${st.sel}/attachments`, { method: 'POST', body: { name: f.name, type, data: btoa(bin) } }); toast(`“${f.name}” attached`); await load(); } catch (x) { toast(x.message, { kind: 'err' }); }
+      return;
+    }
     if (e.target.matches('[data-iassign]')) patch({ assignee: e.target.value });
     else if (e.target.matches('[data-isev]')) patch({ severity: e.target.value });
     else if (e.target.matches('[name=ititle]')) patch({ title: e.target.value });

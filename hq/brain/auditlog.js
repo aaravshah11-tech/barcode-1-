@@ -29,6 +29,9 @@ export function describe(m, p, body = {}, result = null) {
   if (p === '/incidents') return R('Incident opened', result?.ref || '', (body.alertIds || []).join(', '));
   if (/^\/incidents\/[^/]+\/notes$/.test(p)) return R('Incident note added', id(/\/incidents\/([^/]+)/));
   if (/^\/incidents\/[^/]+\/alerts$/.test(p)) return R('Alerts linked to incident', id(/\/incidents\/([^/]+)/), (body.alertIds || []).join(', '));
+  if (/^\/incidents\/[^/]+\/links/.test(p)) return R(m === 'DELETE' ? 'Incident link removed' : 'Incident linked', id(/\/incidents\/([^/]+)/), body.ref || body.label || '');
+  if (/^\/incidents\/[^/]+\/attachments/.test(p)) return R(m === 'DELETE' ? 'Attachment removed' : 'Document attached', id(/\/incidents\/([^/]+)/), body.name || '');
+  if (p === '/savedsearches' || /^\/savedsearches\//.test(p)) return R(m === 'DELETE' ? 'Saved search deleted' : 'Search saved', body.name || '');
   if (/^\/incidents\//.test(p)) return R('Incident updated', result?.ref || id(/\/incidents\/([^/]+)/), keys(body));
   if (p === '/users') return R('User added', String(body.username || '').toUpperCase(), body.role || '');
   if (/^\/users\//.test(p)) return R(m === 'DELETE' ? 'User removed' : 'User changed', decodeURIComponent(id(/\/users\/([^/]+)/)), keys(body));
