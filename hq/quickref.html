@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SENTINEL // Operator's Quick Reference</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+  /* One A4 page. Prints in black on white; on screen it follows the Ops Floor look. */
+  @page { size: A4; margin: 9mm; }
+  :root { --ink: #E6ECF3; --muted: #9AA8B8; --line: rgba(140,170,210,.18); --bg: #070B12; --panel: #111927; --accent: #6FA8DC; --amber: #C9A227; --orange: #D9822B; --red: #D64545; --ok: #4FA37A; }
+  @media print { body { font-size: 8pt; } .sub { margin-bottom: 4px; } .page { max-width: none; padding: 0; } h1 { margin-top: 4px; } :root { --ink: #111; --muted: #444; --line: #bbb; --bg: #fff; --panel: #fff; --accent: #1f4e79; --amber: #7a5d00; --orange: #8a4500; --red: #8b1a1a; --ok: #1f6b46; } .noprint { display: none; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 8.9pt/1.3 "IBM Plex Sans", system-ui, sans-serif; }
+  .page { max-width: 190mm; margin: 0 auto; padding: 8px 10px; }
+  .bar { text-align: center; font: 600 7pt monospace; letter-spacing: .18em; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 3px; color: var(--muted); }
+  h1 { font: 600 14pt/1.1 system-ui, sans-serif; letter-spacing: .14em; margin: 8px 0 2px; text-transform: uppercase; }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+  section { border: 1px solid var(--line); background: var(--panel); padding: 5px 8px; break-inside: avoid; }
+  h2 { font: 600 7.6pt system-ui, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
+  ul, ol { margin: 0; padding-left: 15px; } li { margin: 1px 0; }
+  table { width: 100%; border-collapse: collapse; } td { padding: 1px 4px 1px 0; vertical-align: top; }
+  kbd, .m { font: 8.4pt monospace; } kbd { border: 1px solid var(--line); padding: 0 3px; }
+  .sev { font: 600 7pt system-ui; letter-spacing: .1em; padding: 0 4px; border: 1px solid; }
+  .i { color: var(--muted); } .a { color: var(--amber); } .al { color: var(--orange); } .c { color: var(--red); }
+  .wide { grid-column: 1 / -1; }
+  .rules li { margin: 0; } .two { columns: 2; column-gap: 18px; }
+  .noprint { margin: 8px 0; text-align: center; } .noprint button { font: inherit; padding: 4px 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="bar">SENTINEL // OFFICIAL – HOUSEHOLD // FIRST DESK</div>
+  <h1>Operator’s Quick Reference</h1>
+  <p class="sub">SENTINEL 4.0 · HQ = the HQ page open in Chrome on your Mac · keep this page by the desk.</p>
+  <div class="grid">
+    <section><h2>Every day</h2><ol>
+      <li>Open HQ in Chrome, sign in (codename + PIN, then the 6-digit code if 2FA is on).</li>
+      <li>Read the <b>Current Picture</b> (top left of the Operations Floor).</li>
+      <li>Set the <b>Alert State</b> in the top bar when it changes (SENTINEL suggests it).</li>
+      <li>Clear <b>Triage</b> (<kbd>3</kbd>): every alert gets Acknowledge, Dismiss with a reason, or an Incident.</li>
+      <li>Leave HQ open, the Mac plugged in and awake. Agents only report while HQ is open.</li></ol></section>
+    <section><h2>Alert States</h2><table>
+      <tr><td><b>HOME</b></td><td>Someone in. Activity is logged; nothing alarms.</td></tr>
+      <tr><td><b>AWAY</b></td><td>Nobody in. Any activity is an intrusion.</td></tr>
+      <tr><td><b>NIGHT</b></td><td>Asleep. Agents marked “armed at night” alarm; bedrooms don’t.</td></tr>
+      <tr><td><b>LOCKDOWN</b></td><td>Everything armed; Agents may sound the alarm. <b>Panic</b> = LOCKDOWN at once.</td></tr></table></section>
+    <section><h2>How serious is it?</h2><table>
+      <tr><td><span class="sev i">INFO</span></td><td>For the record. No sound, doesn’t count as waiting.</td></tr>
+      <tr><td><span class="sev a">ADVISORY</span></td><td>Worth a look. One soft tone.</td></tr>
+      <tr><td><span class="sev al">ALERT</span></td><td>Act now. Two-tone and a notification.</td></tr>
+      <tr><td><span class="sev c">CRITICAL</span></td><td>Emergency. Repeats until acknowledged — even in quiet hours.</td></tr></table>
+      <p style="margin:3px 0 0">Graded by context: what was seen, where, the Alert State, the wind and what is normal at that hour. Your own rules: Administration › Rules and patterns › Grading rules.</p></section>
+    <section><h2>Handling an alert (Triage)</h2><table>
+      <tr><td><kbd>↑</kbd><kbd>↓</kbd></td><td>choose</td><td><kbd>A</kbd></td><td>acknowledge</td></tr>
+      <tr><td><kbd>E</kbd></td><td>escalate</td><td><kbd>D</kbd></td><td>dismiss (reason)</td></tr>
+      <tr><td><kbd>I</kbd></td><td>open an incident</td><td><kbd>S</kbd></td><td>snooze repeats</td></tr></table>
+      <p style="margin:3px 0 0">Incidents (Casework, <kbd>4</kbd>): notes, links (e.g. a police crime number), PDF documents, <b>Play back on map</b>, <b>Export evidence</b>.</p></section>
+    <section><h2>Screens · keys</h2><table>
+      <tr><td><kbd>1</kbd> Operations Floor</td><td><kbd>6</kbd> Agents</td></tr>
+      <tr><td><kbd>2</kbd> Situation Room (3D)</td><td><kbd>7</kbd> Network</td></tr>
+      <tr><td><kbd>3</kbd> Triage</td><td><kbd>8</kbd> Analyst</td></tr>
+      <tr><td><kbd>4</kbd> Casework</td><td><kbd>9</kbd> Briefings</td></tr>
+      <tr><td><kbd>5</kbd> Perimeter</td><td>Records · Administration: rail</td></tr></table>
+      <p style="margin:3px 0 0"><kbd>Ctrl</kbd>+<kbd>K</kbd> find / do anything · <kbd>?</kbd> all keys · <kbd>Shift</kbd>+<kbd>L</kbd> lock.</p></section>
+    <section><h2>Agents (old phones)</h2><ul>
+      <li><b>Recruit</b> (top bar) → scan the QR with the phone → pick its mission.</li>
+      <li>Keep it on a charger. The screen goes near-black after a minute; tap to wake.</li>
+      <li>The <b>SENTINEL AGENT ACTIVE</b> banner is always on screen.</li>
+      <li>“HQ OFFLINE – STANDING BY” = HQ is closed or the Wi-Fi dropped. It resumes by itself.</li>
+      <li>Outside / window phones: <b>PERIMETER WATCH</b>. Finish its setup wizard and mask anything that isn’t yours — it can’t alert until you do.</li>
+      <li>Find a phone: Agents › Registry › tick it › <b>Identify</b>.</li></ul></section>
+    <section><h2>The Analyst</h2><ul>
+      <li>Ask in plain English (<kbd>8</kbd>, or “Ask the Analyst” on the floor).</li>
+      <li>Every fact has a reference (ALT-…, INC-…, EVT-…): click it to see the evidence.</li>
+      <li>It can only <b>suggest</b>. Nothing happens until you press the button.</li>
+      <li>Not set up? You still get automatic summaries. Set up: Analyst › Set up.</li></ul></section>
+    <section><h2>When something’s wrong</h2><table>
+      <tr><td>Agent OFFLINE</td><td>Charger, Wi-Fi, Agent page still open on the phone.</td></tr>
+      <tr><td>Alerts too often</td><td>Triage › Alert load card — follow its advice, or snooze / add a grading rule.</td></tr>
+      <tr><td>Phone can’t reach HQ</td><td>HQ page closed or Mac asleep.</td></tr>
+      <tr><td>Analyst not reachable</td><td>Ollama open? Run the <span class="m">launchctl</span> line again after a restart.</td></tr>
+      <tr><td>Before a big change</td><td>Administration › Data and backups › Back up now.</td></tr></table></section>
+    <section class="wide"><h2>Rules SENTINEL always keeps</h2><ol class="rules two">
+      <li>Camera and microphone data stays on the Agent — only events and numbers leave it.</li>
+      <li>Every active Agent shows the “SENTINEL AGENT ACTIVE” banner.</li>
+      <li>Outside Agents need privacy masks before they can be armed.</li>
+      <li>The network check only looks at your own home network.</li>
+      <li>The Analyst runs locally, only reads, cites evidence, changes nothing without you.</li>
+      <li>All data stays on HQ, encrypted, deleted by the retention policy.</li>
+      <li>No real agency or TV-show names or branding.</li></ol></section>
+  </div>
+  <div class="noprint"><button onclick="print()">Print this page</button></div>
+  <div class="bar">SENTINEL // OFFICIAL – HOUSEHOLD // FIRST DESK</div>
+</div>
+</body>
+</html>

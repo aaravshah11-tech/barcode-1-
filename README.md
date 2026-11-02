@@ -1,277 +1,231 @@
 # SENTINEL
 
-**A household security operations console that runs in your web browser.** Your computer is **HQ**. Old phones and tablets become **Agents** that watch for motion, guard a door, listen for loud noises, act as a door panel or a wall display. HQ brings it all together the way a professional security operations centre would: an alert triage queue, incidents with reference numbers, correlation rules, coverage maps, reports, access control and an audit trail.
+**A private household security operations console that runs in your web browser.** Your Mac is **HQ**. Old phones and tablets become **Agents** that watch a room, look out of a window, guard a door or listen for loud noises. HQ brings it together like a professional operations floor: graded alerts, cases with reference numbers, a live 3D map of the house and grounds, a perimeter screen and weather station, a local AI Analyst, briefings, records and an audit trail.
 
-Open it here: **<https://aaravshah11-tech.github.io/barcode-1-/hq/>**
+Open it here: **<https://aaravshah11-tech.github.io/barcode-1-/hq/>** · one-page cheat sheet: **[Operator’s Quick Reference](https://aaravshah11-tech.github.io/barcode-1-/hq/quickref.html)** (print it and keep it by the desk).
 
-- **Nothing to install.** HQ, Agents and your phone are all web pages.
-- **Everything stays at home.** HQ keeps its data in your computer's browser, **encrypted**. No cloud account, no subscription.
-- **Private by design.** Cameras and microphones are used *on the Agent only*. HQ receives events like "Motion detected" — never pictures, video or audio.
-- **Yours only.** Nobody can see anything without signing in, and every sign-in and change is written to a tamper-evident audit log.
+- **Nothing to install.** HQ, Agents, your phone and the Wall Display are all web pages.
+- **Everything stays at home,** encrypted, in your Mac’s browser. No cloud account, no subscription.
+- **Only for you.** One operator (callsign **FIRST DESK**), PIN plus optional 2-step code, auto-lock, and every change written to a tamper-evident audit log.
 
-> SENTINEL takes its *style* from professional security operations software. It does not use the name, crest or branding of any real agency.
+> SENTINEL’s look is inspired by real operations rooms. It uses no real agency’s or TV show’s name, crest or branding.
+
+---
+
+## The rules SENTINEL always keeps
+
+1. Camera and microphone data is processed on the Agent only. Never recorded, saved, streamed or sent — only events and numbers (e.g. “Person detected”, “62 dB”) leave a device. *(There is no live view.)*
+2. Every active Agent shows a visible **SENTINEL AGENT ACTIVE** banner. No hidden or disguised modes.
+3. Outside Agents must have privacy masks covering anything beyond your property before they can be armed.
+4. The network health check only ever looks at your own home network.
+5. The AI Analyst runs locally, uses read-only tools, cites evidence, and can’t change anything without your confirmation.
+6. All data stays on HQ, encrypted at rest, and is deleted according to the retention policy.
+7. No real agency or TV show names, logos or branding anywhere.
 
 ---
 
 ## Contents
 
-1. [The screens at a glance](#1-the-screens-at-a-glance)
-2. [First start](#2-first-start)
-3. [Recruiting Agents](#3-recruiting-agents)
-4. [Operations: the main screen](#4-operations-the-main-screen)
-5. [Triage and incidents](#5-triage-and-incidents)
-6. [Analysis: correlation rules and pattern of life](#6-analysis-correlation-rules-and-pattern-of-life)
-7. [Coverage, tamper detection and the Agent register](#7-coverage-tamper-detection-and-the-agent-register)
-8. [Network security](#8-network-security)
-9. [Reports](#9-reports)
-10. [Access control, audit log and shift log](#10-access-control-audit-log-and-shift-log)
-11. [Data and resilience](#11-data-and-resilience)
-12. [Your phone](#12-your-phone)
-13. [Keyboard shortcuts](#13-keyboard-shortcuts)
-14. [Privacy rules](#14-privacy-rules)
-15. [What a browser can't do (honest limits)](#15-what-a-browser-cant-do-honest-limits)
-16. [Troubleshooting](#16-troubleshooting)
-17. [For tinkerers](#17-for-tinkerers)
+1. [First start](#1-first-start)
+2. [The screens](#2-the-screens)
+3. [Agents](#3-agents)
+4. [Alerts: how serious, and what to do](#4-alerts-how-serious-and-what-to-do)
+5. [Perimeter and weather](#5-perimeter-and-weather)
+6. [The Analyst](#6-the-analyst)
+7. [Wall Display (iPad)](#7-wall-display-ipad)
+8. [Your phone](#8-your-phone)
+9. [Casework, Briefings and Records](#9-casework-briefings-and-records)
+10. [Data, backups and privacy](#10-data-backups-and-privacy)
+11. [Keyboard shortcuts](#11-keyboard-shortcuts)
+12. [Honest limits](#12-honest-limits)
+13. [Troubleshooting](#13-troubleshooting)
+14. [For tinkerers](#14-for-tinkerers)
 
-**What's new?** Open **Settings › What's new** in HQ for the changelog of every update.
+**What changed?** In HQ: **Administration › Settings › What’s new**.
 
 ---
 
-## 1. The screens at a glance
+## 1. First start
 
-Every screen has a classification banner at the top and bottom (**SENTINEL // RESTRICTED – HOUSEHOLD**) and a status bar along the bottom: who is signed in, their role, session time, the alert state, UTC and local time, HQ health and how many Agents are online.
-
-The rail on the left switches between screens (or press **1–9**):
-
-| Screen | What it's for |
-|---|---|
-| **Operations** | The live picture: 3D site map, alert state, Agents, alert queue, event log, messages, network, situation. Panels can be moved, resized and saved as layouts. |
-| **Triage** | Every alert that needs a decision. Acknowledge, escalate, dismiss (with a reason) or turn it into an incident. |
-| **Incidents** | Cases with reference numbers (INC-2026-0042), status, assignee, notes, linked alerts, a timeline and playback on the map. |
-| **Analysis** | Correlation rules and the household's pattern of life. |
-| **Coverage** | What each Agent can see, blind spots, and outside doors/windows with no sensor. |
-| **Agents** | The Agent register: hardware, mission history, uptime, calibration, tamper history, notes. |
-| **Network** | Asset register of your home network, the health check, and internet history. |
-| **Reports** | Today's SITREP, the report archive (PDF) and the report builder. |
-| **Shift log** | Notes and handover notes for whoever takes over. |
-| **Access** *(Director)* | Users and roles, sessions, two-step sign-in, the audit log. |
-| **Data** *(Director)* | Encryption, backups, retention, evidence export, HQ downtime record. |
+1. On your Mac, open the link above in **Chrome** (best for the Analyst and notifications).
+2. SENTINEL runs its start-up checks, then asks you to **create the operator account**: your callsign (e.g. FIRST DESK) and a PIN. Write the PIN down somewhere safe.
+3. Recommended: **Administration › Security › Turn on two-step sign-in** with an authenticator app.
+4. **Administration › Settings › General › Location**: type your town (for weather, sunrise and sunset; only a rough position is used).
+5. On the map press **Floor plan** (or `Ctrl K` › “Edit floor plan”): draw your rooms, then the **Outside** tab for the driveway, garden, garage and gates.
+6. Press **Recruit** (top bar) to add your first Agent — see [Agents](#3-agents).
+7. Keep HQ open, the Mac plugged in and awake. Agents only report while HQ is open. Turn on **On Watch** (top bar) when you want the screen kept awake and notifications from Advisory up.
 
 ---
 
-## 2. First start
+## 2. The screens
 
-1. On the computer that will be HQ (it should stay on at home), open **<https://aaravshah11-tech.github.io/barcode-1-/hq/>** in Chrome, Edge, Safari or Firefox.
-2. **Create the Director account**: a username and a PIN or password (at least 4 characters; 6 or more is better). Only a salted hash is stored.
-3. You're in. Keep this tab open — while it is open, HQ is guarding the house. Closing the screen lock (**Shift+L**) doesn't stop it.
+| Key | Screen | What it’s for |
+|---|---|---|
+| 1 | **Operations Floor** | Current Picture, Triage summary, 3D map, Agent fleet, Perimeter, 24-hour Activity Timeline (drag to replay), Ask the Analyst. Layouts: Day, Night watch, Wall. |
+| 2 | **Situation Room** | The full 3D house and grounds: camera presets, roof and X-ray views, coverage cones, a suggestion for your next Agent. |
+| 3 | **Triage** | Every alert that needs a decision. Alert load card, snoozes and the daily digest at the top. |
+| 4 | **Casework** | Incidents (INC-2026-0001): status, notes, links, documents, timeline, playback on the map, evidence export. |
+| 5 | **Perimeter** | Front / garden / garage today, front-door visits, doors left open, weather station and rain radar. |
+| 6 | **Agents** | Registry (health, battery, signal, version, bulk actions, day/night profiles) and Coverage. |
+| 7 | **Network** | Your own devices, health check, internet history. |
+| 8 | **Analyst** | Ask questions, Current Picture, morning SITREP, plain-English log search, model set-up. |
+| 9 | **Briefings** | SITREP, weekly PDF report, report builder. |
+| — | **Records** | Search (saved searches, export), Operator notes, Audit log. |
+| — | **Administration** | Settings, Rules and patterns (correlation, grading, pattern of life), Security, Data and backups. |
 
-**Try it:** press **Ctrl+K** (⌘K on a Mac) and type "away". The command palette finds *Set AWAY*. Press **?** to see every shortcut.
-
-**Recommended next:** Settings › General › set your town (for weather and sunrise), then **Ctrl+K › Two-step sign-in** to protect your account with an authenticator app.
-
----
-
-## 3. Recruiting Agents
-
-1. On HQ press **Recruit** (top right). A QR code appears.
-2. On the old phone, scan it with the camera. The Agent page opens and joins HQ in a couple of seconds.
-3. The Agent appears in **Operations › Agents**. Click it to give it a mission:
-
-| Mission | What it does |
-|---|---|
-| **Motion watch** | Spots movement with the camera. You can mark *ignore zones* (TVs, windows). |
-| **Door tripwire** | Stick the phone on a door: it reports opened/closed using its motion sensor. |
-| **Sound level** | Reports loud noises (as a number of decibels — no audio). |
-| **Light check** | Notices lights being switched on or off. |
-| **Door panel** | A big button visitors can press. |
-| **Intel screen** | A read-only wall display of the situation. |
-
-Drag an Agent from the list onto the **3D map** to place it in a room (draw your house first with **Floor plan**).
-
-Every Agent always shows the banner **SENTINEL AGENT ACTIVE – [mission]** at the top of its screen. There is no hidden mode.
+The top strip always shows your callsign, the **Alert State**, HQ health, Agents online, unread alerts and the time. The bars at the very top and bottom change colour with the Alert State.
 
 ---
 
-## 4. Operations: the main screen
+## 3. Agents
 
-- **Alert states** (top bar): **HOME** (activity is only logged), **AWAY** (any activity is an intrusion), **NIGHT** (Agents armed for night raise alerts) and **LOCKDOWN** (everything armed; Agents can sound an alarm). Every change is logged as *"Alert state: AWAY (by MUM) — reason"*.
-- **3D map:** flat-shaded architectural model; rooms change colour only to show status. **Iso** gives an isometric view; **Replay** plays the day back; **Heatmap** shows the busiest rooms.
-- **Edit layout:** drag a panel by its title bar, resize from its corner, **Save as…** to keep it (e.g. "Night watch"). Presets: *Standard*, *Map focus*, *Event review*. On a phone, panels stack in one column.
-- Sounds only play for real alerts. **Panic** is always one hold away.
+**Recruit:** top bar › **Recruit** › scan the QR code with the old phone › tap the link › allow camera/microphone if asked. It appears in Agents a few seconds later; pick its mission. Keep it on a charger.
 
----
+| Mission | Uses | Reports |
+|---|---|---|
+| **MOTION WATCH** | camera (indoors) | “Motion detected” |
+| **PERIMETER WATCH** | camera, looking out of a window | “Person / Vehicle / Animal detected (front)” |
+| **DOOR TRIPWIRE** | motion sensors (stick it to a door) | “Door opened / closed” |
+| **SOUND LEVEL** | microphone | “Loud sound: 82 dB” |
+| **LIGHT CHECK** | camera brightness | “Lights on / off” |
+| **DOOR PANEL** | a big button | “Door panel pressed” |
+| **INTEL SCREEN** | — | turns the phone into a small wall screen |
+| **STANDBY** | — | nothing |
 
-## 5. Triage and incidents
+**On the Agent:** after a minute the screen goes near-black (it moves now and then so nothing burns in) with the codename, mission, battery, signal and clock. **Tap to wake** for the last reports and **Identify**. The **SENTINEL AGENT ACTIVE** banner is always shown. If HQ can’t be reached for a minute it shows **HQ OFFLINE – STANDING BY**, switches its camera/microphone off, retries every 30 seconds and carries on by itself when HQ is back.
 
-Alerts are raised when something needs a decision: activity while AWAY or at NIGHT, Panic, a failed sign-in, tamper, a new device on the network, an anomaly, a correlation rule. Each has a **severity** (LOW, MEDIUM, HIGH, CRITICAL), its source Agent, room, time, a plain-English reason, and how long it has been waiting. Repeats within a minute are merged (×2, ×3…).
+**PERIMETER WATCH setup wizard** (runs on the phone): window tips → mounting → which area it watches → **privacy masks** (tap every square that isn’t yours — they are blacked out before anything looks at the picture; tick “Everything that isn’t masked is my own property”) → walk test → **Arm**. Until you arm it, it can’t raise any alert, and HQ can’t arm it for you. Object recognition runs on the phone (bundled COCO-SSD); on a phone too slow for it, it falls back to “movement only” and says so.
 
-**Try it:** set AWAY, wave at a Motion-watch Agent, then open **Triage**:
-
-- **↑ ↓** choose, **A** acknowledge, **E** escalate, **D** dismiss (pick a reason: false alarm, household member, test…), **I** convert to an incident.
-- In **Incidents**, move the case through **Open → Investigating → Resolved → Closed**, set the assignee, add notes, read the full timeline, and press **Play back on map** to watch just those minutes again.
-
----
-
-## 6. Analysis: correlation rules and pattern of life
-
-**Correlation rules** turn several signals into one conclusion. Example (included): *front door opens → hall motion → a known phone appears, within 60 s = **ARRIVAL (likely: Mum)***. Build your own with **New rule**: choose signals, rooms or Agents, a time window, which alert states it runs in, and whether the result is just logged or sent to Triage. **Test on last 7 days** shows how often it would have fired.
-
-**Pattern of life** learns, over two weeks, when each room is normally active (weekdays and weekends separately). After a week it flags *unusual activity* (e.g. the kitchen at 03:00), *unusually busy* hours and *usual activity missing* — each with a reason and a **confidence %**, straight into Triage.
+**Registry** (Agents › Registry): tick Agents for **bulk** mission changes, **Identify** (flash and beep) or **Update** (reload the newest version). Open an Agent for battery history, recent reports, notes and a **day/night profile** (e.g. PERIMETER WATCH after sunset, STANDBY by day). SENTINEL warns when an Agent hasn’t reported for 15 minutes and writes a weekly fleet health summary.
 
 ---
 
-## 7. Coverage, tamper detection and the Agent register
+## 4. Alerts: how serious, and what to do
 
-- **Coverage:** each camera's field of view is drawn on the floor plan, with the % of every room watched. Rooms under 15% are **blind spots**; outside doors and windows with no sensor are listed as **not watched**. Turn a camera with ⟲ ⟳ and watch the numbers change.
-- **Tamper detection:** an Agent reports if its phone is **moved** (picked up or turned) or its **camera is covered**; HQ notices if it's **unplugged**, its **battery drains fast**, or it goes **offline unexpectedly**. Each goes to Triage with an explanation (HIGH when the house is AWAY/NIGHT/LOCKDOWN).
-- **Agents** (register): hardware (e.g. *Pixel 7 · Android 14 · Chrome*), mission history, location, uptime over 7 and 30 days, last calibration, last tamper and maintenance notes. **Mark calibrated now** records a check.
+| Grade | Means | Sound / notification |
+|---|---|---|
+| **Info** | For the record | none; doesn’t count as waiting |
+| **Advisory** | Worth a look | one soft tone |
+| **Alert** | Act now | two-tone + notification |
+| **Critical** | Emergency (PANIC, LOCKDOWN) | repeats until acknowledged, even in quiet hours |
 
----
+**Alert States:** HOME (activity is logged), AWAY (any activity is an intrusion), NIGHT (Agents “armed at night” alarm, bedrooms don’t), LOCKDOWN (everything armed). SENTINEL suggests a change when it fits (late evening → NIGHT).
 
-## 8. Network security
+**Grading:** before an alert reaches Triage, SENTINEL grades it by context — what was seen (an animal is Info; someone at the front while you’re home is an Advisory “probably a visitor”; a person in the garden at night is an Alert), the wind (outside movement in a gale is lowered), and what is normal for that hour. Add your own rules in **Administration › Rules and patterns › Grading rules** (e.g. “Animal · Garden · NIGHT → log only”) and try them out with **Try it**. Critical alerts can never be lowered.
 
-**SENTINEL never scans anything outside your home network — or inside it.** A web page can't look at your Wi-Fi, so the **asset register** is built from:
+**In Triage:** `A` acknowledge · `E` escalate · `D` dismiss (with a reason) · `I` open an incident · `S` snooze repeats (Agent, alert or kind; 15 min to 07:00). The **Alert load** card shows alerts a day, the false-alarm rate and which source is noisiest, with advice. A **daily digest** arrives at 08:00 (change it in Settings › Alerts). **Quiet hours** (default 23:00–07:00): only Critical makes a sound or notification.
 
-1. SENTINEL's own devices (HQ, Agents, linked phones) — listed automatically;
-2. devices you add by hand;
-3. **Import from router:** open your router's admin page (often `192.168.1.1`), copy its *attached devices* table and paste it. Names, IP and MAC addresses are read; the maker is looked up from the MAC; private (randomised) addresses are recognised.
-
-New devices start **untrusted** and raise *New device on your network* alerts. Mark the ones you know as trusted, give them an owner (your phone's owner feeds the ARRIVAL rule). HQ also flags an Agent dropping from Wi-Fi to mobile data, and a linked phone used at an unusual hour.
-
-The **health check** gives a score and plain-English advice (https, PIN length, two-step sign-in, auto-lock, unused phones, untrusted devices, smart-home gadgets) plus a short router checklist (WPA2/3, admin password, firmware, WPS, remote admin, UPnP, guest network). **Internet history** shows 30 days of uptime and response time, every outage and every speed test.
+**Notifications:** Settings › Alerts › Turn on notifications. They appear while SENTINEL is open (a background tab is fine on the Mac).
 
 ---
 
-## 9. Reports
+## 5. Perimeter and weather
 
-- **SITREP** (situation report): the last 24 hours in numbered paragraphs — situation, activity, alerts and incidents, analysis, equipment and network, actions. **Download PDF** or **Save to reports**.
-- **Weekly report** (RPT-2026-W44): made automatically every Monday at 07:00 while HQ is open (and a SITREP every morning at 07:00), or press **Weekly report now**.
-- **Report builder:** choose the period, sections, minimum severity, rooms and Agents → **Create report and download PDF** (RPT-2026-0001…).
+The **Perimeter** screen shows the front / driveway, garden and garage / shed: today’s people, vehicles, animals and door openings, which Agents watch each area, and whether they are armed. **Front door · today** groups people seen at the front into visits: *Visitor* (the door was answered), *Caller* (rang the door panel, no answer), *Possible delivery or passer-by*, or *Lingering* (5 minutes or more — raises an Advisory). A garage or shed door left open for 15 minutes (you choose) raises an Advisory, or an Alert after dark or when AWAY/NIGHT.
 
-Every PDF has the classification banner on every page, the reference and *Page X of Y*, key figures, charts (events per day, by room, alerts by severity) and tables. The PDF is made in your browser — nothing is uploaded.
+The **weather station** (Open-Meteo): temperature, wind and gusts with direction, rain due, humidity, sunrise/sunset, a 12-hour outlook and a **RainViewer** rain radar on an OpenStreetMap map. UK weather warnings: the Met Office’s feed can’t be read by a web page, so there is a link to their warnings page.
 
 ---
 
-## 10. Access control, audit log and shift log
+## 6. The Analyst
 
-**Roles** — checked by HQ on every request, from the HQ computer and from phones (never just a hidden button):
+A language model on **your own Mac** (Ollama) that reads SENTINEL’s records and answers in plain British English. It only has read-only tools, every fact ends with its evidence (ALT-000412, INC-2026-0003, EVT-5531 — click to see it), unknown references are marked *unverified*, and anything it suggests (“Switch to NIGHT”) is a button **you** press. It writes the **Current Picture** every 15 minutes and a **morning SITREP**, explains unusual-activity alerts (Triage › Explain), summarises cases (Casework › Summarise) and gives tuning advice.
 
-| Role | Can |
-|---|---|
-| **DIRECTOR** (you) | Everything: users, the audit log, backups, recruiting, data. |
-| **OPERATOR** | Handle alerts and incidents, change the alert state, send messages, run Agents, make reports. |
-| **OBSERVER** | Look at everything allowed, change nothing. |
+**Set up once** (Analyst › Set up shows the same steps):
 
-SENTINEL is for your household only — you decide whether anyone else gets an account (**Access › Add user**).
+1. Install **Ollama** from ollama.com and open it once.
+2. In **Terminal**: `ollama pull llama3.1:8b` (8 GB Mac: `llama3.2:3b`), then
+   `launchctl setenv OLLAMA_ORIGINS "https://aaravshah11-tech.github.io"` and restart Ollama.
+3. Use **Chrome**; if it asks to let the site reach this device / the local network, choose **Allow**.
+4. In the Analyst screen tick **Use the local Analyst model**, **Save**, **Check connection**.
 
-- **Two-step sign-in:** **Ctrl+K › Two-step sign-in**, scan the QR code with any authenticator app, enter the 6-digit code. From then on sign-in asks for a code after the PIN. Each code works once.
-- **Sessions:** **Access › Sessions** shows who is signed in and from where (*HQ computer*, *Phone "Mum's iPhone"*). End one, or all others. Idle sessions end after the auto-lock time; a phone is signed out the moment its session ends.
-- **Audit log:** **Access › Audit log** lists every sign-in, change and *refused* attempt. Entries are chained by fingerprints (SHA-256), so if anyone edits or deletes one, the screen says **Audit log altered** and which entry. **Export with checksum** saves a CSV plus its SHA-256. PINs and codes are never written to it.
-- **Shift log:** notes, and **handover notes** with an automatic summary (alert state, unhandled alerts, open incidents, offline Agents). The next person to sign in sees it and acknowledges it.
+After a Mac restart run the `launchctl` line again. Without a model, SENTINEL still writes clearly-marked **automatic** summaries, and the plain-English **log search** (“people at the front yesterday”) always works.
 
 ---
 
-## 11. Data and resilience
+## 7. Wall Display (iPad)
 
-*(Data screen, Director only)*
+**Administration › Settings › Phones › Add a Wall Display** › scan the QR with the iPad › name it › **Link this display**. Then: Safari › Share › **Add to Home Screen** and open it from there; **Settings › Display & Brightness › Auto-Lock › Never**; and lock the iPad to SENTINEL with **Guided Access** (Settings › Accessibility › Guided Access; triple-click to start/stop). It rotates Situation → Perimeter → Agents → Timeline (tap to skip), stays on Situation while an Alert is waiting, needs no PIN, can’t change anything, and never receives HQ’s codes. Unlink it in the same place.
 
-- **Encrypted at rest:** everything HQ saves — settings, event log, audit log, floor plans, backups — is sealed with **AES-256-GCM** using a key the browser keeps and won't let anyone copy out. Older data is converted automatically. Links to Agents and phones are encrypted too (HTTPS page, encrypted peer-to-peer connections).
-- **Backups:** made automatically every night after 03:00 (the last 7 are kept) and **test-restored** straight away into a throw-away HQ to prove they work. **Back up now**, **Test again**, **Restore** (recorded in the audit log). **Download encrypted backup file…** seals a copy with a backup password you choose — keep it somewhere else; restore it on any computer with **Restore from a file…**.
-- **Retention:** how long each kind of record is kept. Open alerts and anything in an active incident are always kept; the audit log is kept at least a year.
-- **Evidence:** **Export evidence** (on an incident, or here) saves everything about it as one file with a SHA-256 fingerprint that is also written into the audit log. **Check an evidence file…** proves later that it hasn't been changed.
-- **Watchdog:** HQ records every gap — closed, the computer asleep, a crash or power cut, or a freeze — and restarts itself if it freezes, loses its link for 10 minutes, or hits a burst of errors. Nothing is lost: everything is saved first.
+## 8. Your phone
+
+**Settings › Phones › Link a phone**, scan, name it, sign in with your callsign and PIN. You get the full console (and alerts while it’s open on screen) from anywhere with internet.
 
 ---
 
-## 12. Your phone
+## 9. Casework, Briefings and Records
 
-**Settings › Phones › Link a phone**, scan the QR code with your phone, then sign in with your username and PIN (and code, if two-step is on). Your phone sees the same console as HQ. If HQ can't be reached for about a minute, the phone shows **HQ UNREACHABLE since 21:14** with a sound and vibration (while the page is open).
-
-Away from home it works over the internet by itself. If your network blocks that, a free [Tailscale](https://tailscale.com) link between your phone and the HQ computer works too.
-
----
-
-## 13. Keyboard shortcuts
-
-| Keys | Does |
-|---|---|
-| **Ctrl K** / **⌘K** | Command palette — jump anywhere, run anything |
-| **1 – 9** | Switch screen |
-| **?** | All shortcuts |
-| **G** | Global intel (ISS, aircraft, earthquakes, ships) |
-| **M** | Map: 3D / plan |
-| **Shift E** | Edit the workspace layout |
-| **Shift L** | Lock the console |
-| **`** | Terminal |
-| **V** (hold) | Push-to-talk voice command (if switched on) |
-| **↑ ↓ / J K, A, E, D, I** | Triage: choose, acknowledge, escalate, dismiss, incident |
-| **Esc** | Close a window |
-
-Buttons show their shortcut when you hover over them.
+- **Casework:** each incident has a status (Open → Investigating → Resolved → Closed), notes, **links** (another incident, or an outside reference such as a police crime number or an https link), **documents** (PDF or text, up to 1 MB, 5 per case — no photos, video or sound), a timeline, **Play back on map** and **Export evidence** (with a SHA-256 fingerprint).
+- **Briefings:** the daily SITREP, a weekly PDF report and a report builder.
+- **Records › Search:** words, kind, level, area and dates — or plain English. **Save this search** keeps it (dates move with today); export results as CSV or JSON. **Operator notes** and the **Audit log** are next to it.
 
 ---
 
-## 14. Privacy rules
+## 10. Data, backups and privacy
 
-These are built in and covered by the automated tests:
-
-1. **Camera and microphone data is processed on the Agent only.** No images, video or audio are recorded, saved or sent — only events such as "motion detected" or "72 dB". HQ throws away any long piece of data an Agent sends.
-2. **Live view only on demand**, opened from HQ, logged, and the Agent shows a red **LIVE VIEW – HQ IS WATCHING THIS CAMERA** banner the whole time. Nothing is recorded.
-3. **Every active Agent shows "SENTINEL AGENT ACTIVE – [mission]".** There is no hidden mode.
-4. **Your data stays on your HQ computer**, encrypted. Network features never scan anything; they only use what SENTINEL sees, what you add, and what you copy from your own router.
-
-Please only point cameras at your own home, and tell the people who live with you that SENTINEL is running.
+Everything HQ saves is encrypted (AES-256) in this browser on this Mac. **Administration › Data and backups**: nightly encrypted backups (each one test-restored), **Back up now**, and **Download encrypted backup file** (sealed with your own password — needed to move to another computer). How long things are kept: **Retention** on the same screen. Unencrypted backups are no longer offered.
 
 ---
 
-## 15. What a browser can't do (honest limits)
+## 11. Keyboard shortcuts
 
-- **No Wi-Fi or port scanning.** Web pages aren't allowed to, so the asset register uses SENTINEL's own devices, your entries and your router's device list.
-- **HQ guards only while its tab is open** on a computer that's awake. The watchdog records every gap and phones warn you, but it can't wake a sleeping computer — set the computer to stay awake.
-- **Encryption at rest** stops anyone reading HQ's stored data or backups, but the key lives in this browser on this computer. Use your computer's disk encryption (FileVault / BitLocker) and a computer password as well.
-- **The audit log is tamper-*evident*:** it shows that something was changed, and where. Keep exported copies (with their checksum) somewhere else for proof.
-- **Tamper "camera covered"** looks for a completely dark, flat picture — a fully dark room with no light at all can look the same.
+`1`–`9` screens · `Ctrl K` / `⌘K` find or do anything · `?` all shortcuts · `Shift L` lock · `` ` `` terminal · `M` map 3D/plan · `Shift E` edit the layout · `↑ ↓` / `J K` choose an alert · `A E D I S` acknowledge / escalate / dismiss / incident / snooze · `Esc` close.
 
 ---
 
-## 16. Troubleshooting
+## 12. Honest limits
+
+You asked for SENTINEL to stay **web-only** (no program installed on the Mac). That means:
+
+- **HQ guards only while its tab is open** on a Mac that’s awake. On Watch keeps the *screen* awake; a web page can’t stop the Mac sleeping by itself — set macOS to keep the display on and leave the lid open.
+- **No push notifications** to your phone when SENTINEL isn’t open on it, and no macOS notifications with the browser closed (both need a server).
+- **No Wi-Fi / port scanning** — the network register uses SENTINEL’s own devices, your entries and your router’s device list.
+- Agents and phones find HQ through PeerJS’s free matchmaking server (it never sees your data, which is encrypted end to end).
+- Built as plain JavaScript modules with Three.js — not React/TypeScript/React Three Fiber — because GitHub Pages serves files as they are, with no build step.
+- The house builder draws rooms as shapes (not individual walls) plus an Outside tab and version history.
+- The Analyst needs Ollama and Chrome on the Mac; Safari blocks a website from talking to a program on the same computer.
+- Met Office warnings are a link (their feed can’t be read by a web page). Rain radar depends on RainViewer’s free service.
+- Object recognition on very old phones may be too slow; PERIMETER WATCH then reports “movement only”.
+- “Camera covered” tamper detection can mistake a completely dark room for a covered lens.
+
+---
+
+## 13. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| **"HQ is already open in another tab"** | Only one HQ per browser. Use the other tab, or close it and reload. |
-| **Agent says it can't reach HQ** | Is the HQ tab open and the computer awake? The Agent retries by itself. |
-| **Camera / microphone / motion "blocked"** | Allow it for this site in the phone's browser settings, then press **Reload** on the Agent's card in HQ. |
-| **"Turn on move alerts" button on an iPhone Agent** | Tap it once to allow the motion sensor (needed for tamper "moved"). |
-| **Two-step code refused** | Check the phone's clock is set automatically. Each code works once — wait for the next one. |
-| **Too many motion alerts** | Lower the sensitivity, raise the cooldown, add ignore zones; or write a correlation rule and dismiss single motions as "expected activity". |
-| **Forgot the PIN** | Without the PIN (and with no other Director) HQ can't be unlocked. Restore an encrypted backup file on a fresh browser with your backup password, or start fresh by clearing this site's data in the browser. |
+| Agent OFFLINE / “HQ OFFLINE – STANDING BY” | Is HQ open and the Mac awake? Agent on Wi-Fi and charging? It reconnects by itself. |
+| Camera / microphone / motion “blocked” | Allow it for this site in the phone’s browser settings, then **Update** the Agent in Agents › Registry. |
+| PERIMETER WATCH “NOT ARMED” | Finish the setup wizard on the phone (privacy masks + Arm). |
+| Too many alerts | Triage › Alert load card advice; snooze; a grading rule; lower sensitivity or add ignore zones. |
+| No notifications | Settings › Alerts › Turn on notifications; check quiet hours. |
+| Analyst “not reachable” | Ollama open? `OLLAMA_ORIGINS` set (again after a restart)? Using Chrome? |
+| Wall Display “isn’t linked” | It was unlinked at HQ — add it again with a new QR code. |
+| 2-step code refused | Set the phone’s clock to automatic; each code works once. |
+| Forgot the PIN | Restore an encrypted backup file with its password on a fresh browser, or clear this site’s data and start again. |
 
 ---
 
-## 17. For tinkerers
+## 14. For tinkerers
 
 ```
-hq/                the HQ console (index.html) and the linked-phone console (remote.html)
-  brain/           HQ's "server", running inside the HQ page:
-    hq.js          Agents, events, alert states, signed orders      api.js     every request + role checks + audit
-    auth.js        users, roles, sessions, two-step sign-in          store.js   encrypted storage
-    ops.js         triage + incidents        analytics.js  rules + pattern of life     tamper.js
-    network.js     asset register, health    reports.js    SITREP / weekly / custom    resilience.js
-    host.js        PeerJS link to Agents and phones                  netmon.js / weather.js
-  views/           Triage, Incidents, Analysis, Coverage, Agents, Network, Reports, Shift log, Access, Data
-  app.js           the console frame: rail, workspace, status bar, palette
-agent/             the Agent page and its missions/
-shared/            logic shared by HQ, phones and Agents (pure functions, unit tested):
-                   triage, correlate, baseline, coverage, assets, report + pdf, roles, totp, audit, vault…
-vendor/            Three.js, PeerJS, QR code, IBM Plex fonts (no build step, no CDN)
-tests/unit/        npm test           tests/e2e/   npm run test:e2e (real Chromium with fake camera, mic and sensors)
+hq/                HQ console (index.html), phone console (remote.html), wall.html, quickref.html
+  brain/           HQ's "server", running inside the HQ page
+    hq.js  api.js  auth.js  store.js  host.js           Agents, requests + audit, sign-in, encrypted storage, links
+    ops.js         triage, grading, snooze, digest, incidents, links, attachments
+    analytics.js   correlation rules, pattern of life    tamper.js  network.js  reports.js  resilience.js
+    fleet.js       registry health, bulk actions, day/night profiles
+    perimeter.js   garage left open, lingering, visits   analyst.js  the local Analyst (Ollama)   weather.js
+  views/           Triage, Casework, Perimeter, Registry, Coverage, Network, Analyst, Briefings, Records, Admin…
+  app.js  floor.js map3d.js builder.js  alerts.js  wall.js
+agent/             Agent page, missions/ (perimeter.js …), lib/ (camera, motion, tamper, perimeter-core, detector)
+shared/            pure logic, unit tested: triage, grading, fatigue, correlate, baseline, coverage, perimeter,
+                   fleet, analyst, weather, missions, report + pdf, link (message chunking) …
+vendor/            Three.js, PeerJS, QR, IBM Plex, TensorFlow.js + COCO-SSD model (no CDN, no build step)
+tests/unit/        npm test          tests/e2e/   npm run test:e2e (real Chromium, fake camera/mic/sensors)
+DESIGN.md · docs/AUDIT.md · docs/mockups/
 ```
 
-- `npm ci` once, then `npm test` (unit) and `npm run test:e2e` (browser tests; uses Playwright's Chromium).
-- Add a changelog entry in `shared/changelog.js` for every update — it appears in **Settings › What's new**.
+`npm ci` once, then `npm test` and `npm run test:e2e`. Add a changelog entry in `shared/changelog.js` for every update.
 
----
-
-## HomeBase (the old app)
-
-HomeBase was retired when SENTINEL arrived. Its full code is on the **`homebase-archive`** branch (`git checkout homebase-archive`).
+**Rollback to before v3:** commit `56b55fe` (see DESIGN.md › Rollback). **HomeBase** (the old app) is on the `homebase-archive` branch.

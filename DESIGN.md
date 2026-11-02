@@ -1,6 +1,6 @@
 # SENTINEL v3 — design document: "The Ops Floor"
 
-Status: **draft for approval** (Phase 0). Nothing below is built yet.
+Status: **built** (SENTINEL 4.0, phases 1–10). Decisions taken: emblem **C Meridian**; architecture **web-only** (see §8 — the operator chose to keep everything in the browser).
 Mockups: `docs/mockups/ops-floor.html` (+ `.png`) and `docs/mockups/logos.html` (+ `.png`). Audit: `docs/AUDIT.md`.
 
 ---
@@ -79,7 +79,11 @@ Layouts saved per device: **Day**, **Night watch**, **Wall**. Laptop: the side c
 
 Shell (rail, classification bar, status strip, palette, shortcut overlay) · GlassPanel · Button (primary / secondary / ghost / danger) · Badge (severity + state, always with text) · StatusDot (+ label) · DataTable (sortable, sticky header, keyboard rows, virtualised for months of events) · KeyFigure (count-up once) · Timeline (lanes, scrubber) · Charts (bar, line, sparkline — one axis per chart, styled to match) · Modal / Sheet · Tabs / Segmented · Form fields · Toast · Empty states · Skeleton loading.
 
-## 8. Architecture decision (needs your OK)
+## 8. Architecture decision — outcome: web-only
+
+The operator chose **“keep this only on the web”**. HQ stays a browser page (no Mac service, no React build). On Watch keeps the screen awake with the Wake Lock API; notifications work while a SENTINEL tab is open; the Analyst talks to Ollama directly from Chrome (`OLLAMA_ORIGINS`). The options below were the proposal at the time.
+
+### The original proposal
 
 The brief asks to "keep the existing Node.js HQ server, SQLite and WebSockets", but HQ currently runs as a web page (see AUDIT.md). Several v3 features **cannot** work from a browser tab:
 

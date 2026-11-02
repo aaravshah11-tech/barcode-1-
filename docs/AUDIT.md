@@ -55,3 +55,10 @@ This matters because several v3 features need something running **on the Mac its
 12. **Analyst, Records, Perimeter, Wall Display, PERIMETER WATCH, object classification** don't exist yet (new in v3).
 
 None of these put your data at risk today; items 1–5 are the ones worth fixing as part of v3.
+
+## Outcome in v4.0 (web-only)
+
+- **Fixed:** 3 (unencrypted backup removed — only password-sealed backup files), 10 (classification text now lives in `shared/brand.js`), 12 (Analyst, Records search, Perimeter, Wall Display, PERIMETER WATCH and object recognition built). Single-operator model in place.
+- **Also fixed:** messages over ~16 KB were silently dropped by the connection library (it broke the INTEL SCREEN); big messages are now sent in pieces. LIVE VIEW removed (it streamed camera pictures, against rule 1).
+- **Accepted because HQ stays in the browser:** 1, 2, 4, 5, 6 (partly — On Watch keeps the screen awake), 7. See README › Honest limits.
+- **Unchanged:** 8 (dark-room “covered”), 9 (the old `fx` setting is still passed around, harmlessly) and 11 (slow data test).
